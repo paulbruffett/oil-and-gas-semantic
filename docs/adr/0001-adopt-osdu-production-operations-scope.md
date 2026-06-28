@@ -1,0 +1,7 @@
+# Adopt OSDU as the foundational data model; scope v1 to OSDU-native production operations
+
+**Context.** The base collateral must be a vendor-neutral, cloud-agnostic foundation so the same artifacts can be instantiated across Fabric / Snowflake / Databricks and their semantic/ontology tooling (Axis A) and implemented by multiple coding assistants (Axis B).
+
+**Decision.** Adopt **OSDU** as the foundation — specifically the **Production Data Model (PDM 1.0, based on PPDM 3.9, aligned with PRODML)** plus the well/reservoir **master data** and **reference data** (Well-Known Schemas). Scope **v1 to OSDU-native production operations**: reported volumes (oil/gas/water), down-time/deferment events, well tests, fluid analysis, allocation, facilities, and the asset hierarchy. Commercial/financial concepts (lease operating expense, revenue, working-interest/JIB ownership) are **out of OSDU scope and deferred to an optional, explicitly-non-OSDU financial overlay**.
+
+**Why.** OSDU is the open energy-data standard with managed implementations on all major clouds, making it the natural neutral substrate for both axes. Keeping v1 purely OSDU-native keeps the reference architecture clean, the synthetic-data generation tractable, and the cross-platform/cross-assistant comparisons fair. Caveat: PDM 1.0 is newer than OSDU's subsurface core, so production-model fidelity may vary across vendor implementations.

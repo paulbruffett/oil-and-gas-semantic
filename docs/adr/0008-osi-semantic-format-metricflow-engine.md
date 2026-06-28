@@ -1,0 +1,7 @@
+# Adopt Open Semantic Interchange (OSI) v1.0 as the neutral semantic-layer format; MetricFlow as reference engine
+
+**Context.** The semantic/metrics layer (layer 3) needs a neutral, portable format that maps to Fabric, Snowflake, and Databricks. The earlier inclination was a minimal custom YAML schema. But **OSI v1.0 was finalized January 2026** — a vendor-neutral open standard (governance moving to the Apache Software Foundation) backed by Snowflake, dbt Labs, Salesforce/Tableau, Cube, ThoughtSpot, Sigma, and others — and **MetricFlow was relicensed to Apache 2.0** as OSI's initial reference implementation.
+
+**Decision.** Adopt **OSI v1.0 as the canonical semantic-layer format** for the base collateral. Use **MetricFlow (Apache 2.0)** as the reference engine to author, validate, and compile metrics to SQL. Ship explicit mappings from the OSI metrics to **Power BI/DAX** (Fabric) and **Databricks Metric Views**, since native OSI consumption is still maturing across platforms in 2026 (Snowflake is the most direct). Do **not** maintain a bespoke schema.
+
+**Why.** Adopting a finalized open standard plus an open reference engine avoids maintaining a custom format, maximizes portability and future-proofing, and aligns with where all three target platforms are converging. Risk: native cross-platform OSI support is still rolling out, hence the explicit DAX / Metric-View mappings as a bridge.

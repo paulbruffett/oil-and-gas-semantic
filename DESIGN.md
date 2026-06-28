@@ -1,0 +1,336 @@
+# oil-and-gas-semantic — Functional Design & Requirements
+
+> **Single source of truth.** This one document is both the **requirements** for the project and the
+> **operating manual** for building it. It is deliberately tool-agnostic: any coding assistant (Claude
+> Code, Codex, Cursor, Antigravity, opencode, …) or human should be able to read this file alone and know
+> what we are building, how the pieces fit, how to decompose and test the work, and where the live backlog
+> is. Decisions are recorded as ADRs in `docs/adr/` and indexed in §9.
+
+---
+
+## 1. Purpose & Problem
+
+**Problem.** Organizations evaluating data-and-AI platforms for oil & gas production analytics ("AI over
+BI") have no common, realistic, vendor-neutral reference against which to compare their options. Two very
+different comparisons get conflated and are usually done apples-to-oranges:
+- *Which data-warehouse + semantic/ontology stack* (Fabric, Snowflake, Databricks, …) best supports an
+  end-to-end production-analytics platform?
+- *Which coding assistant* (Codex, Claude Code, Antigravity, Cursor, …) best implements such a platform
+  from a given design?
+
+**Solution.** A **base set of platform- and assistant-agnostic collateral** — an OSDU-grounded data model,
+a deterministic data generator, governed KPI/semantic specs (OSI), a lightweight knowledge graph, and a
+catalog of business-user use cases with gold answers — that can be **instantiated across stacks** and
+**built by different assistants**. Because the substrate is shared and the data is deterministic, the two
+comparisons become fair.
+
+**Headline objective.** Build reference design artifacts solid enough that parallel implementations can be
+done with best practices in any target stack or assistant, and the results compared on a common footing.
+
+### The two orthogonal axes
+- **Axis A — data platform + semantic/ontology tooling.** Instantiate the base on Fabric / Snowflake /
+  Databricks (+ their semantic/ontology layers) and pair with agents for AI-over-BI. Assessment =
+  *demonstrate the pattern and exercise the reference architecture* end-to-end (capability demonstration,
+  not a graded benchmark).
+- **Axis B — coding assistant.** Multiple assistants each build a parallel implementation from this design;
+  assessment = *agentic code-quality review* of the competing outputs across a defined rubric (§7).
+
+The axes are orthogonal: the same use cases and base specs let you swap the platform **or** the assistant
+independently. Comparing the *generation of the design itself* is out of scope; producing a **per-assistant
+implementation plan** is in scope.
+
+---
+
+## 2. Working Method (portable operating manual)
+
+This is how every contributor — human or AI, in any tool — works in this repo. It encodes the same
+discipline as the Claude Code skills under `/Users/paul/code/skills` so the method survives outside that
+tool.
+
+### 2.1 Ubiquitous language is authoritative
+Use the exact terms from the **Glossary (§3)**. When several words mean the same thing, the Glossary picks
+one and lists the rest under *Avoid*. Don't invent synonyms in code, issues, or docs. Sharpen the Glossary
+first, then the code.
+
+### 2.2 Record decisions as ADRs
+Architecturally significant, hard-to-reverse decisions go in `docs/adr/` as `NNNN-slug.md` (sequential). An
+ADR is 1–3 sentences: context, decision, why. Only record a decision when **all three** hold: hard to
+reverse, surprising without context, the result of a real trade-off. Index them in §9.
+
+### 2.3 Decompose into vertical-slice tracer bullets
+Break work into issues that are **thin vertical slices cutting end-to-end through every layer** (generator
+→ OSDU canonical → semantic/OSI → knowledge graph → agent → assessment), not horizontal slices of one
+layer. Each slice delivers a narrow but **complete** path, is **demoable on its own**, and declares what it
+is **blocked by**. Do **prefactoring first**.
+
+### 2.4 Test external behavior at the highest seam
+A **seam** is a boundary where you can substitute one implementation for another without touching callers.
+Prefer **existing** seams; place any new one at the **highest** point; aim for the **fewest** (ideally one
+per feature). Tests drive the system through its **public interface** and assert on **observable
+behavior**, never private state. Build deep modules: small interface, substantial implementation.
+
+### 2.5 Keep the two kinds of "test" separate
+- **Axis-A / Axis-B assessment (the product purpose):** demonstrating platform capability and reviewing
+  competing implementations. Specified in §6–§7.
+- **Engineering tests (our TDD):** unit/integration tests that verify *our own* base-collateral code (the
+  generator, gold-answer computation, mapping validators). Specified in §8.
+
+A change to the assessment approach is a product change; a change to engineering tests is an implementation
+detail. Don't let one masquerade as the other.
+
+### 2.6 The pipeline: design → PRD → issues → implement
+Sharpen this document → publish a PRD (problem/solution + extensive user stories + seams) as a GitHub issue
+→ break it into vertical-slice tracer-bullet issues on `paulbruffett/oil-and-gas-semantic` in dependency
+order, labeled `ready-for-agent` → implement with TDD at the agreed seams. `DESIGN.md` stays the portable
+source of truth; GitHub issues are the execution surface derived from it. Conventions:
+`docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`.
+
+---
+
+## 3. Domain Glossary / Ubiquitous Language
+
+Terms specific to this project. Tight definitions; rejected synonyms under *Avoid*.
+
+### Domain & data
+**OSDU**: the Open Subsurface Data Universe — the open energy-data standard adopted here as the foundational
+data model (ADR 0001). _Avoid_: "the data lake".
+**PDM**: OSDU's Production Data Model (v1.0, PPDM-3.9-based) — the production-operations subset we use.
+**Well**: a single producing entity; geolocated. **Wellbore** is its drilled path (subsurface side).
+**Field**: a producing asset grouping wells/reservoirs. **Facility**: surface equipment (battery, station).
+**Reported Volume**: measured oil/gas/water volume for a well/facility over a period. _Avoid_: "production"
+(too vague).
+**Down Time Event**: a period a well/facility was off-stream, with a cause. _Avoid_: "outage".
+**Deferment / Deferred Volume**: forecast minus actual volume during downtime, attributed by cause.
+**Well Test**: a periodic measurement establishing a well's rates. **Allocation**: apportioning measured
+volumes back to wells.
+**Expected (forecast) rate**: the generator-emitted decline-curve forecast per well/period; the baseline
+for variance and deferment (ADR 0006). _Avoid_: "target", "budget", "type curve" (reserved meanings).
+
+### Platform layers
+**Canonical layer**: the OSDU/PDM system-of-record data (Parquet primary; OSDU JSON secondary — ADR 0007).
+**Semantic / metrics layer**: governed measures, dimensions, grain, and KPIs over the canonical layer,
+authored in **OSI** (ADR 0008). _Avoid_: "the cube", "BI model".
+**OSI**: Open Semantic Interchange v1.0 — the neutral semantic-layer format. **MetricFlow**: its Apache-2.0
+reference engine, used to author/validate/compile metrics to SQL.
+**Knowledge layer**: a Labeled Property Graph of entities, typed relationships, and business vocabulary
+used by agents for entity resolution and relationship navigation (ADR 0004). _Avoid_: "the ontology"
+unless referring to the optional RDF/OWL track.
+**Agent**: a system that answers an NL business question over the platform. A **semantic baseline** answers
+via deterministic metric selection; an **agentic variant** uses an LLM tool-use loop. The agent design is
+open (ADR 0005).
+
+### Evaluation & comparison
+**Use case / Question**: a business-user analytical question the agent must answer (§6).
+**Gold answer**: the deterministic correct answer to a question, co-generated with the data.
+**Answer-submission schema**: the minimal structured output an implementation returns (NL answer + key
+values + optional provenance) so answers can be graded.
+**Instantiation**: one concrete build of the base on a specific platform (Axis A) or by a specific
+assistant (Axis B).
+**Base collateral**: the platform-/assistant-neutral artifacts in this repo (§5). **Axis A / Axis B**: the
+two comparison dimensions (§1).
+
+---
+
+## 4. Architecture & Bounded Contexts
+
+Six neutral layers (ADR 0003); each platform/assistant maps them to its own technology.
+
+1. **Synthetic source data** — a deterministic Python generator (ADR 0002) emitting PDM-shaped Parquet
+   (primary) + OSDU JSON manifests (secondary) + co-generated gold answers.
+2. **Canonical layer — OSDU/PDM** — the system-of-record model; faithful to OSDU PDM, ingestible by any
+   warehouse.
+3. **Semantic / metrics layer — OSI** — governed measures/dimensions/KPIs authored in OSI v1.0, validated
+   by MetricFlow, with DAX / Databricks-Metric-View mappings.
+4. **Knowledge layer — LPG** — entities, typed relationships, hierarchy, and business vocabulary; optional
+   RDF/OWL track for reasoning-tool comparisons.
+5. **Agent / reasoning layer** — AI-over-BI: NL question → consult semantic + knowledge layers → query/tool
+   calls → answer + provenance. Orchestration left open.
+6. **Governance / metadata** (cross-cutting) — catalog, lineage, security.
+
+**Key seams.**
+- **The data seam** (layer 1 → everything): deterministic generator output is the single substrate; gold
+  answers are computed here. This is the highest engineering-test seam.
+- **The semantic seam** (OSI spec): metric definitions live once and compile down per platform — agents
+  *select* governed metrics rather than author SQL/DAX, so a correct selection yields a correct query.
+- **The answer seam** (answer-submission schema): the only thing every agent implementation must honor,
+  enabling grading without constraining agent design.
+
+---
+
+## 5. Functional Requirements & User Stories
+
+### Synthetic data & OSDU canonical
+1. As a builder, I want a deterministic generator (fixed seed) so every instantiation uses identical data.
+2. As a builder, I want it configurable (fields, wells, date range) via YAML so I can scale reproducibly.
+3. As a builder, I want PDM-shaped Parquet output so any warehouse ingests it directly.
+4. As an OSDU adopter, I want a secondary OSDU-conformant JSON manifest export so I can load into OSDU/ADME.
+5. As a builder, I want decline/watercut/GOR profiles calibrated to Volve so the data behaves realistically.
+6. As an evaluator, I want gold answers co-emitted with the data so the two never drift.
+7. As a builder, I want each dataset stamped with a config hash so instantiations are provably comparable.
+
+### Semantic / metrics layer (OSI)
+8. As a builder, I want the KPI set defined once in OSI v1.0 so each platform translates rather than reinvents.
+9. As a builder, I want a MetricFlow reference build that compiles the metrics to SQL so I can validate them.
+10. As a Fabric builder, I want an OSI→DAX measure mapping so I can implement the Power BI semantic model.
+11. As a Databricks builder, I want an OSI→Unity Catalog Metric View mapping.
+12. As a Snowflake builder, I want to consume OSI into Semantic Views / Cortex Analyst.
+13. As an analyst, I want governed KPI definitions (water cut, uptime, deferred volume, variance, …) so all tools agree on the numbers.
+
+### Knowledge layer (LPG)
+14. As an agent builder, I want an LPG of entities/relationships/vocabulary (well→facility→field→operator, synonyms) so the agent can resolve entities and navigate rollups.
+15. As an agent, I want to map business terms ("watering out" → watercut) via the vocabulary so NL maps to governed metrics.
+16. As an advanced user, I want an optional RDF/OWL ontology track so I can exercise reasoning tooling.
+
+### Agent / AI-over-BI
+17. As a business user, I want to ask production questions in natural language and get correct answers with provenance.
+18. As an agent builder, I want freedom to choose orchestration (native NL service or custom loop) while honoring the answer-submission schema, so I can show my platform's best approach.
+19. As an evaluator, I want answers to include the metric/dimensions/filters/entities used, so I can grade and explain them.
+
+### The six use cases (see §6 for detail)
+20. As a pumper, I want wells producing below expected oil rate flagged (production surveillance).
+21. As a production engineer, I want deferred volume and top downtime causes for a period (deferment attribution).
+22. As a reservoir engineer, I want decline vs forecast by well/field, flagging fast decliners (decline & trend).
+23. As a production engineer, I want stale well tests and anomalous allocation factors surfaced (well-test/allocation validation).
+24. As an analyst, I want a watchlist of wells down, watering out, or with GOR change (operational exceptions).
+25. As an analyst, I want oil/gas/water by field & operator vs prior period with biggest movers (asset rollups).
+
+### Axis A — platform demonstration
+26. As an architect, I want to instantiate the base end-to-end on Fabric/Snowflake/Databricks so I can demonstrate the pattern's capability on each.
+27. As an architect, I want a per-platform instantiation guide so the demonstration is reproducible.
+
+### Axis B — assistant comparison
+28. As an evaluator, I want a per-assistant implementation plan derived from this design so each assistant builds from the same spec.
+29. As an evaluator, I want competing implementations scored on the §7 rubric so I can compare assistants.
+30. As an evaluator, I want functional correctness computed objectively from gold answers so one dimension is unbiased.
+31. As an evaluator, I want a multi-LLM assessor panel for qualitative dimensions so scores are defensible and disagreement is visible.
+32. As an evaluator, I want effort-to-build metered (tokens/cost/time) with one pricing table so effort is comparable across assistants.
+
+### Cross-cutting
+33. As any contributor, I want one portable `DESIGN.md` as source of truth so any assistant/human works consistently.
+34. As a maintainer, I want decisions recorded as ADRs so rationale persists.
+
+---
+
+## 6. Base collateral & the use-case suite
+
+### 6.1 Base collateral inventory (the deliverables)
+- **Data generator** (runnable, Python) → Parquet (canonical) + OSDU JSON (secondary) + gold answers.
+- **OSDU/PDM data-model spec** — the entity subset and table shapes.
+- **Semantic layer** — KPI/metric definitions in OSI v1.0 (+ MetricFlow reference + DAX/Metric-View mappings).
+- **Knowledge layer** — the LPG (entities, relationships, vocabulary); optional RDF/OWL track.
+- **Use-case / question catalog** — the six themes below, with gold answers.
+- **Per-assistant implementation plans** — the build plan tuned to each assistant's workflow.
+- **Assessment harness** — rubric + assessor-panel method + effort-metering recipe (§7).
+
+### 6.2 The six use-case themes (hero = #1)
+| # | Theme | Example question | KPIs | OSDU entities |
+|---|---|---|---|---|
+| 1 ★ | **Production surveillance** | "Which wells produce below expected oil rate this week, and by how much?" | expected rate, variance/efficiency | Reported Volume, Well, Well Test |
+| 2 | **Deferment & downtime attribution** | "What did we defer last month and the top downtime causes?" | deferred volume, uptime % | Down Time Event, Reported Volume |
+| 3 | **Decline & trend** | "12-month oil decline for Field X; flag wells declining faster than forecast." | decline rate, cumulative | Reported Volume, Well, Field |
+| 4 | **Well-test & allocation validation** | "Which wells have stale tests or anomalous allocation?" | days-since-test, allocation variance | Well Test, Allocation |
+| 5 | **Operational exceptions / watchlist** | "Which wells are down, watering out, or showing GOR change?" | water cut, GOR, days-down | Reported Volume, Well Test, Down Time Event |
+| 6 | **Asset rollups** | "Oil/gas/water by field & operator this month vs last, biggest movers." | period-over-period Δ, contribution % | Reported Volume, Facility, Hierarchy |
+
+### 6.3 Canonical KPI definitions
+Volumes (oil/gas/water, Σ reported volume); **BOE** = oil + gas ÷ 6; rates = phase volume ÷ on-stream
+hours; **water cut** = water ÷ (oil + water); **GOR** = gas ÷ oil; **uptime %** = on-stream ÷ calendar
+hours; **downtime hours** = Σ event duration; **deferred volume** = forecast − actual by cause; **expected
+rate** = generator forecast (ADR 0006); **variance/efficiency** = actual ÷ expected; **wells/days down**;
+**cumulative production**; **decline rate** vs forecast; **days since last well test**; **allocation
+variance** = allocated ÷ measured; **period-over-period Δ + contribution %**.
+
+### 6.4 Answer & gold schema
+Each question has a deterministic **gold answer** computed from the same generator run. Every implementation
+returns the **answer-submission schema**: natural-language answer + key numeric value(s) + optional
+provenance (metric/dimensions/filters/entities used). Functional correctness = submitted values vs gold.
+
+> The formal *quantitative LLM-answer benchmark* (graded accuracy across many models) is **parked**; the
+> question set + gold answers exist primarily to demonstrate Axis-A capability and to provide the objective
+> functional-correctness dimension of Axis-B. It can be promoted to a full benchmark later.
+
+---
+
+## 7. The two comparison axes — assessment
+
+### Axis A — platform capability demonstration
+For each platform, instantiate all six layers end-to-end and **exercise** the reference architecture with
+the use-case suite. The deliverable is a working demonstration + a reproducible instantiation guide, not a
+score. Success = the pattern works natively on the platform and answers the use cases.
+
+### Axis B — competing-implementation code review
+Each coding assistant implements the design (from its per-assistant plan); outputs are scored on a rubric:
+
+1. **Functional correctness** — answers vs the deterministic gold set (objective; not voted).
+2. **Spec fidelity** — OSDU conformance, six-layer architecture, OSI semantic layer + LPG as specified.
+3. **Use-case coverage** — how many themes are implemented end-to-end.
+4. **Code quality / maintainability** — structure, idiomatic platform use, readability.
+5. **Test quality** — meaningful engineering tests at the right seams.
+6. **Security & governance** — secrets handling, access control, lineage.
+7. **Documentation / runnability** — reproducible from what was produced.
+
+**Method.** A **multi-LLM assessor panel** scores dimensions 2–7 (averages + spread surface disagreement)
+using review/assessment skills; dimension 1 is computed objectively. **Effort-to-build** is captured as a
+**reported (not scored) signal**.
+
+**Effort-metering recipe.** Report tokens broken out (input / output / cacheRead / cacheCreation) and a
+**notional cost = tokens × public API price** (Max is flat-rate; this is a modeled ROM). For Claude Code on
+Max use native **OpenTelemetry** (`claude_code.token.usage` / `cost.usage`) or **ccusage** over its session
+JSONL; for opencode/Codex/Cursor use **tokscale** (or ccusage) with one LiteLLM pricing table. Note: thinking
+tokens are billed inside `output` and aren't separately isolable in Claude Code; report cache tokens
+separately (cache-hit rates differ across harnesses and skew cost). Also capture wall-clock time and
+#turns/human-interventions.
+
+---
+
+## 8. Test Seams & Testing Strategy (engineering)
+
+Engineering tests verify *our* base-collateral code (distinct from §6–§7 assessment).
+- **Highest seam — generator output.** Run the generator on a fixed seed; assert gold-answer computations
+  match the KPI definitions (§6.3) and that outputs are byte-stable across runs.
+- **Semantic seam — MetricFlow compile.** Assert compiled SQL for each KPI returns expected values on the
+  synthetic data; validate the DAX / Metric-View mappings against the same expected values.
+- **Knowledge seam — LPG.** Assert entity resolution and relationship traversal return known results on a
+  fixed graph.
+- **What makes a good test here:** drive each module through its public interface against deterministic
+  fixtures; assert on observable outputs, never internal state. Prior art: standard `pytest` over fixed-seed
+  fixtures.
+
+---
+
+## 9. Decisions Log (ADR index)
+
+- [0001 — Adopt OSDU as foundational data model; scope v1 to OSDU-native production operations](docs/adr/0001-adopt-osdu-production-operations-scope.md)
+- [0002 — Hybrid data strategy: deterministic PDM-conformant generator, calibrated to real distributions](docs/adr/0002-hybrid-synthetic-data-generator.md)
+- [0003 — Six-layer platform-neutral reference architecture; specification-level base collateral](docs/adr/0003-six-layer-neutral-reference-architecture.md)
+- [0004 — Knowledge layer as a Labeled Property Graph (not RDF/OWL); metrics as neutral YAML](docs/adr/0004-lpg-knowledge-layer-yaml-metrics.md)
+- [0005 — Agent/reasoning layer left open; base fixes questions, gold answers, and a minimal answer schema](docs/adr/0005-open-agent-layer-question-answer-contract.md)
+- [0006 — Deterministic gold answers: "expected" is a generator-emitted forecast](docs/adr/0006-deterministic-gold-expected-forecast.md)
+- [0007 — Parquet (PDM-shaped tables) is the canonical generator output; OSDU JSON manifests are secondary](docs/adr/0007-parquet-canonical-osdu-json-secondary.md)
+- [0008 — Adopt OSI v1.0 as the semantic-layer format; MetricFlow as reference engine](docs/adr/0008-osi-semantic-format-metricflow-engine.md)
+
+---
+
+## 10. Out of Scope & Open Questions
+
+**Out of scope (v1):**
+- Commercial/financial concepts — lease operating expense, revenue, working-interest/JIB (non-OSDU; ADR 0001).
+- Midstream/downstream, drilling & completions, deep reservoir simulation.
+- A full quantitative multi-model answer benchmark (parked; §6.4).
+- Comparing the *generation of the design itself* across assistants.
+
+**Open questions / flagged items:**
+- Exact OSDU PDM entity subset and table shapes for v1 (authoring detail).
+- OSI v1.0 coverage of our specific constructs (time grain, composed metrics) — validate against the spec
+  while authoring; native cross-platform OSI support is still maturing in 2026.
+- Generator config defaults (field/well counts, date range) and the Volve calibration parameters.
+- Whether the optional RDF/OWL track is built in v1 or deferred.
+- Confirm the `skills` engineering plugin (`to-prd`, `to-issues`, `implement`) is enabled in this project,
+  or replicate those steps manually.
+
+---
+
+## 11. Backlog pointer
+
+Live backlog: GitHub issues on `paulbruffett/oil-and-gas-semantic` (filter `--label ready-for-agent`),
+created from this design via the PRD → issues step. See `docs/agents/issue-tracker.md`.

@@ -1,0 +1,24 @@
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Python (provisional — confirm stack during domain modeling)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build / data artifacts
+dist/
+build/
+*.egg-info/
