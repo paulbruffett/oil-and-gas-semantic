@@ -325,8 +325,9 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
   while authoring; native cross-platform OSI support is still maturing in 2026.
 - Generator config defaults (field/well counts, date range) and the Volve calibration parameters.
 - Whether the optional RDF/OWL track is built in v1 or deferred.
-- Confirm the `skills` engineering plugin (`to-prd`, `to-issues`, `implement`) is enabled in this project,
-  or replicate those steps manually.
+- The `skills@paul-skills` plugin is installed and enabled (user scope); `to-prd` / `to-issues` /
+  `implement` / `grill-with-docs` are present but **user-invocation-only** — invoke them as slash commands
+  in an interactive Claude Code session (they don't auto-surface in headless/SDK runs).
 
 ---
 
