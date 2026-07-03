@@ -1,0 +1,33 @@
+[project]
+name = "oag-generator"
+version = "0.1.0"
+description = "Deterministic OSDU/PDM-shaped synthetic data generator + co-generated gold answers for the oil-and-gas-semantic reference base collateral (slice #2)."
+readme = "README.md"
+# Pinned to a stable interpreter range: determinism is the whole point of this
+# generator, so we avoid the moving target of the newest interpreter/wheel set.
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy>=1.26,<3",
+    # Parquet footers embed the pyarrow version, so byte-stable output is guaranteed
+    # only within a pyarrow major. Pinned narrowly; uv.lock is the exact-version anchor.
+    "pyarrow>=20,<21",
+    "pyyaml>=6,<7",
+]
+
+[project.scripts]
+oag-generate = "oag_generator.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oag_generator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
