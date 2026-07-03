@@ -312,6 +312,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0007 — Parquet (PDM-shaped tables) is the canonical generator output; OSDU JSON manifests are secondary](docs/adr/0007-parquet-canonical-osdu-json-secondary.md)
 - [0008 — Adopt OSI v1.0 as the semantic-layer format; MetricFlow as reference engine](docs/adr/0008-osi-semantic-format-metricflow-engine.md)
 - [0009 — Two-population well performance; surveillance flags on a materiality band](docs/adr/0009-two-population-performance-surveillance-materiality.md)
+- [0010 — Source the canonical schema from OSDU-published models (OSDU PDM data dictionary + WKS), not hand-authored names](docs/adr/0010-source-canonical-schema-from-osdu-published-models.md)
 
 ---
 
@@ -324,7 +325,9 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - Comparing the *generation of the design itself* across assistants.
 
 **Open questions / flagged items:**
-- Exact OSDU PDM entity subset and table shapes for v1 (authoring detail).
+- Exact OSDU PDM entity subset and table shapes for v1: the **sourcing method** is settled (ADR 0010 —
+  names come from the OSDU PDM v1.0 published Data Dictionary, vendored in `spec/osdu/`); the specific
+  per-table field profiles are selected per slice as each use case is built.
 - OSI v1.0 coverage of our specific constructs (time grain, composed metrics) — validate against the spec
   while authoring; native cross-platform OSI support is still maturing in 2026.
 - Generator config defaults (field/well counts, date range) and the Volve calibration parameters. The
