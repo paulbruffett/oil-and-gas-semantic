@@ -224,6 +224,9 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
 - **Use-case / question catalog** — the six themes below, with gold answers.
 - **Per-assistant implementation plans** — the build plan tuned to each assistant's workflow.
 - **Assessment harness** — rubric + assessor-panel method + effort-metering recipe (§7).
+- **Hero reference implementation** — the production-surveillance slice built end-to-end in-repo as
+  validated scaffolding (proves the gold/OSI/answer seams, gives contestants a common skeleton); it is
+  **not graded** and is excluded from Axis-B (ADR 0012).
 
 ### 6.2 The six use-case themes (hero = #1)
 | # | Theme | Example question | KPIs | OSDU entities |
@@ -262,7 +265,9 @@ the use-case suite. The deliverable is a working demonstration + a reproducible 
 score. Success = the pattern works natively on the platform and answers the use cases.
 
 ### Axis B — competing-implementation code review
-Each coding assistant implements the design (from its per-assistant plan); outputs are scored on a rubric:
+Each coding assistant implements the design (from its per-assistant plan), building the open
+`axis-b-contest` issues in its **own fork** from the tagged, dataset-frozen fork point (ADR 0012);
+outputs are scored on a rubric:
 
 1. **Functional correctness** — answers vs the deterministic gold set (objective; not voted).
 2. **Spec fidelity** — OSDU conformance, six-layer architecture, OSI semantic layer + LPG as specified.
@@ -313,6 +318,8 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0008 — Adopt OSI v1.0 as the semantic-layer format; MetricFlow as reference engine](docs/adr/0008-osi-semantic-format-metricflow-engine.md)
 - [0009 — Two-population well performance; surveillance flags on a materiality band](docs/adr/0009-two-population-performance-surveillance-materiality.md)
 - [0010 — Source the canonical schema from OSDU-published models (OSDU PDM data dictionary + WKS), not hand-authored names](docs/adr/0010-source-canonical-schema-from-osdu-published-models.md)
+- [0011 — MetricFlow validates the OSI manifest; DuckDB is the neutral reference-compile engine (refines 0008)](docs/adr/0011-metricflow-validates-manifest-duckdb-reference-compile.md)
+- [0012 — Shell/contest boundary: hero built in-repo as scaffolding; use cases 2–6 split at the data seam; Axis-B work built in forks from a frozen tag](docs/adr/0012-shell-contest-boundary-axis-b.md)
 
 ---
 
@@ -342,5 +349,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 
 ## 11. Backlog pointer
 
-Live backlog: GitHub issues on `paulbruffett/oil-and-gas-semantic` (filter `--label ready-for-agent`),
-created from this design via the PRD → issues step. See `docs/agents/issue-tracker.md`.
+Live backlog: GitHub issues on `paulbruffett/oil-and-gas-semantic`, created from this design via the
+PRD → issues step. Two labels partition the work (ADR 0012): `ready-for-agent` = **shell** work built
+in this repo; `axis-b-contest` = the **contest** work spec, built by each competing assistant in its
+own fork from the tagged fork point. See `docs/agents/issue-tracker.md`.

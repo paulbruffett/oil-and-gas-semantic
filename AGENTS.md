@@ -14,3 +14,5 @@ update `DESIGN.md` instead.
 - **Domain language:** see the Glossary in `DESIGN.md` (and `CONTEXT-MAP.md` once contexts are split out).
 - **Decisions:** recorded as ADRs in `docs/adr/`.
 - **Backlog:** GitHub issues on `paulbruffett/oil-and-gas-semantic` (see `docs/agents/issue-tracker.md`).
+- **How this project is built:** the developer flow (ideate → design → PRD → slices → implement) is
+  documented as a replicable playbook in [`docs/WORKFLOW.md`](./docs/WORKFLOW.md).
