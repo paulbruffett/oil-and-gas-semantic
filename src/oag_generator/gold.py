@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from oag_generator import schema
-from oag_generator.config import Config
+from oag_generator.config import Config, surveillance_window
 
 QUESTION_ID = "surveillance-below-expected-oil"
 
@@ -29,11 +29,13 @@ def compute_surveillance_gold(cols: dict[str, dict[str, list]], config: Config) 
     Operates on the *same* rounded column dicts that get written to Parquet, so an
     independent recomputation from the Parquet files reproduces these values exactly.
     """
-    end = date.fromisoformat(config.end_date)
-    # Clamp the trailing window to the dataset's own start so a window wider than the
-    # generated range doesn't report days that were never evaluated.
-    data_start = date.fromisoformat(config.start_date)
-    start = max(data_start, end - timedelta(days=config.surveillance_window_days - 1))
+    # Trailing window, clamped to the dataset's own start so a window wider than the generated
+    # range doesn't report days that were never evaluated (shared with the reference compile).
+    start_iso, end_iso, _ = surveillance_window(
+        config.start_date, config.end_date, config.surveillance_window_days
+    )
+    start = date.fromisoformat(start_iso)
+    end = date.fromisoformat(end_iso)
     window = {
         (start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)
     }

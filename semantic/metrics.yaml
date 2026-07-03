@@ -1,0 +1,39 @@
+# OSI governed metrics for production surveillance (slice #3, DESIGN.md §6.3).
+#
+# The KPIs are defined once here and translated per platform (ADR 0008). The reference compile
+# (ADR 0011) executes them over the canonical Parquet and the result is graded against the
+# co-generated gold answers (ADR 0006).
+---
+metric:
+  name: actual_oil
+  description: Total measured oil produced over the window (bbl).
+  type: simple
+  type_params:
+    measure: actual_oil_volume
+---
+metric:
+  name: expected_oil
+  description: Total forecast (expected) oil over the window (bbl) -- the decline-curve baseline.
+  type: simple
+  type_params:
+    measure: expected_oil_volume
+---
+metric:
+  name: production_efficiency
+  description: actual oil / expected oil; the surveillance signal ("below expected" = below the materiality band).
+  type: ratio
+  type_params:
+    numerator:
+      name: actual_oil
+    denominator:
+      name: expected_oil
+---
+metric:
+  name: oil_shortfall
+  description: expected oil - actual oil (bbl); how much a well missed by.
+  type: derived
+  type_params:
+    expr: expected_oil - actual_oil
+    metrics:
+      - name: expected_oil
+      - name: actual_oil

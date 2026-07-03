@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -132,6 +132,19 @@ def load_config(source: str | Path | dict[str, Any] | Config) -> Config:
     if not isinstance(data, dict):
         raise ValueError(f"Config file {source} must contain a YAML mapping")
     return Config(**data)
+
+
+def surveillance_window(start_date: str, end_date: str, window_days: int) -> tuple[str, str, int]:
+    """The trailing surveillance window ending at ``end_date``, clamped to the data start.
+
+    Single source of truth for the window shared by the gold computation and the semantic-layer
+    reference compile, so the two never derive different date ranges. Returns
+    ``(start_iso, end_iso, n_days)`` where ``n_days`` is the effective (clamped) day count.
+    """
+    end = date.fromisoformat(end_date)
+    data_start = date.fromisoformat(start_date)
+    start = max(data_start, end - timedelta(days=window_days - 1))
+    return start.isoformat(), end.isoformat(), (end - start).days + 1
 
 
 def hash_canonical_config(canonical: dict[str, Any]) -> str:
