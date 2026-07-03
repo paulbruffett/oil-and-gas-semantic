@@ -85,6 +85,9 @@ order, labeled `ready-for-agent` → implement with TDD at the agreed seams. `DE
 source of truth; GitHub issues are the execution surface derived from it. Conventions:
 `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`.
 
+The **operational playbook** for this pipeline — the exact skills, commands, and per-slice branch/worktree
+mechanics — is [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+
 ---
 
 ## 3. Domain Glossary / Ubiquitous Language
@@ -308,6 +311,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0006 — Deterministic gold answers: "expected" is a generator-emitted forecast](docs/adr/0006-deterministic-gold-expected-forecast.md)
 - [0007 — Parquet (PDM-shaped tables) is the canonical generator output; OSDU JSON manifests are secondary](docs/adr/0007-parquet-canonical-osdu-json-secondary.md)
 - [0008 — Adopt OSI v1.0 as the semantic-layer format; MetricFlow as reference engine](docs/adr/0008-osi-semantic-format-metricflow-engine.md)
+- [0009 — Two-population well performance; surveillance flags on a materiality band](docs/adr/0009-two-population-performance-surveillance-materiality.md)
 
 ---
 
@@ -323,7 +327,9 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - Exact OSDU PDM entity subset and table shapes for v1 (authoring detail).
 - OSI v1.0 coverage of our specific constructs (time grain, composed metrics) — validate against the spec
   while authoring; native cross-platform OSI support is still maturing in 2026.
-- Generator config defaults (field/well counts, date range) and the Volve calibration parameters.
+- Generator config defaults (field/well counts, date range) and the Volve calibration parameters. The
+  performance-model *shape* (unbiased forecast + impaired minority + surveillance materiality band) is
+  settled in ADR 0009; the specific numeric defaults remain open.
 - Whether the optional RDF/OWL track is built in v1 or deferred.
 - The `skills@paul-skills` plugin is installed and enabled (user scope); `to-prd` / `to-issues` /
   `implement` / `grill-with-docs` are present but **user-invocation-only** — invoke them as slash commands
