@@ -1,0 +1,129 @@
+# OSI semantic models for production surveillance (slice #3, ADR 0008/0011).
+#
+# Every `node_relation.alias`, entity `expr`, dimension `expr`, and measure `expr` below is a
+# canonical OSDU PDM table/column name sourced from spec/osdu/pdm_profile.json (ADR 0010). This is
+# what makes the semantic layer OSDU-conformant (issue #3 AC #6): measures and dimensions map onto
+# canonical columns, and tests/test_semantic_conformance.py fails if any referenced column drifts
+# away from the vendored OSDU profile.
+#
+# node_relation.schema_name is `main` -- the DuckDB schema the reference compile (ADR 0011) attaches
+# the canonical Parquet under; it is not part of the OSDU model.
+---
+semantic_model:
+  name: well_vol_daily
+  description: OSDU PDM WELL_VOL_DAILY -- measured daily well volumes (the actuals).
+  node_relation:
+    schema_name: main
+    alias: well_vol_daily
+  defaults:
+    agg_time_dimension: volume_date
+  entities:
+    - name: well_volume_daily
+      type: primary
+      expr: WELL_VOLUME_DAILY_ID
+    - name: well
+      type: foreign
+      expr: WELL_ID
+  dimensions:
+    - name: volume_date
+      type: time
+      expr: VOLUME_DATE
+      type_params:
+        time_granularity: day
+  measures:
+    - name: actual_oil_volume
+      description: Measured oil volume (bbl).
+      agg: sum
+      expr: OIL_VOLUME
+      agg_time_dimension: volume_date
+---
+semantic_model:
+  name: product_volume_summary
+  description: OSDU PDM PRODUCT_VOLUME_SUMMARY -- the forecast (expected) oil series, QUANTITY_METHOD='Forecast'.
+  node_relation:
+    schema_name: main
+    alias: product_volume_summary
+  defaults:
+    agg_time_dimension: forecast_date
+  entities:
+    - name: product_volume_summary
+      type: primary
+      expr: PRODUCT_VOLUME_SUMMARY_ID
+    - name: reporting_entity
+      type: foreign
+      expr: REPORTING_ENTITY_ID
+  dimensions:
+    - name: forecast_date
+      type: time
+      expr: START_DATE
+      type_params:
+        time_granularity: day
+    - name: product
+      type: categorical
+      expr: PRODUCT
+    - name: quantity_method
+      type: categorical
+      expr: QUANTITY_METHOD
+  measures:
+    - name: expected_oil_volume
+      description: Forecast (expected) oil volume (bbl).
+      agg: sum
+      expr: VOLUME
+      agg_time_dimension: forecast_date
+---
+semantic_model:
+  name: reporting_entity
+  description: OSDU PDM REPORTING_ENTITY -- polymorphic pointer volumes report against; resolves forecast->well.
+  node_relation:
+    schema_name: main
+    alias: reporting_entity
+  entities:
+    - name: reporting_entity
+      type: primary
+      expr: REPORTING_ENTITY_ID
+    - name: well
+      type: foreign
+      expr: ASSOCIATED_OBJECT_ID
+  dimensions:
+    - name: reporting_entity_kind
+      type: categorical
+      expr: REPORTING_ENTITY_KIND
+---
+semantic_model:
+  name: well
+  description: OSDU PDM WELL -- master well entity; rolls up to FIELD.
+  node_relation:
+    schema_name: main
+    alias: well
+  entities:
+    - name: well
+      type: primary
+      expr: WELL_ID
+    - name: field
+      type: foreign
+      expr: FIELD_ID
+  dimensions:
+    - name: uwi
+      type: categorical
+      expr: UWI
+    - name: well_name
+      type: categorical
+      expr: WELL_NAME
+    - name: operator
+      type: categorical
+      expr: OPERATOR
+---
+semantic_model:
+  name: field
+  description: OSDU PDM FIELD -- producing asset grouping wells roll up to.
+  node_relation:
+    schema_name: main
+    alias: field
+  entities:
+    - name: field
+      type: primary
+      expr: FIELD_ID
+  dimensions:
+    - name: field_name
+      type: categorical
+      expr: FIELD_NAME

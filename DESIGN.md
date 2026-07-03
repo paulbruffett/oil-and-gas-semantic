@@ -313,6 +313,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0008 — Adopt OSI v1.0 as the semantic-layer format; MetricFlow as reference engine](docs/adr/0008-osi-semantic-format-metricflow-engine.md)
 - [0009 — Two-population well performance; surveillance flags on a materiality band](docs/adr/0009-two-population-performance-surveillance-materiality.md)
 - [0010 — Source the canonical schema from OSDU-published models (OSDU PDM data dictionary + WKS), not hand-authored names](docs/adr/0010-source-canonical-schema-from-osdu-published-models.md)
+- [0011 — MetricFlow validates the OSI manifest; DuckDB is the neutral reference-compile engine (refines 0008)](docs/adr/0011-metricflow-validates-manifest-duckdb-reference-compile.md)
 
 ---
 

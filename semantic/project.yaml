@@ -1,0 +1,6 @@
+# OSI semantic-layer project configuration (ADR 0008/0011).
+# Authored in MetricFlow's semantic-manifest dialect -- the concrete OSI v1.0 instantiation
+# this project validates against (dbt-semantic-interfaces). No time spine is declared: the
+# surveillance metrics are windowed aggregates, not cumulative/time-offset metrics.
+project_configuration:
+  time_spine_table_configurations: []

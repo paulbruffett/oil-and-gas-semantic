@@ -218,3 +218,19 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         gold={"surveillance": gold_path},
         row_counts=row_counts,
     )
+
+
+def read_dataset_manifest(dataset_dir: str | Path) -> dict:
+    """Load ``dataset.json`` written by :func:`generate_dataset`."""
+    return json.loads((Path(dataset_dir) / "dataset.json").read_text())
+
+
+def canonical_table_paths(dataset_dir: str | Path) -> dict[str, Path]:
+    """Map each canonical table key -> absolute Parquet path for a generated dataset.
+
+    Single source of truth for locating the canonical tables, shared by consumers (the semantic
+    reference compile and the LPG) so table-path derivation isn't re-implemented per module.
+    """
+    dataset_dir = Path(dataset_dir)
+    manifest = read_dataset_manifest(dataset_dir)
+    return {key: dataset_dir / entry["path"] for key, entry in manifest["tables"].items()}

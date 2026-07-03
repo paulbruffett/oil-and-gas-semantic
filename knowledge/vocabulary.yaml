@@ -1,0 +1,28 @@
+# Business vocabulary for the Labeled Property Graph (LPG) knowledge layer (ADR 0004, DESIGN.md §3/§6).
+#
+# The LPG's *instance* graph (well/field nodes and well->field edges) is built from the canonical
+# Parquet at load time; this file holds the *static* schema the graph carries alongside it:
+#   - relationship: typed edges the graph exposes (label + endpoints).
+#   - field_synonyms: alternate names that resolve to a canonical field name (entity resolution).
+#   - terms: business phrases an agent maps onto governed metrics/filters (e.g. "below expected"
+#     -> the production_efficiency signal). This is how NL maps to the semantic layer (§6, story 15).
+relationships:
+  - label: IN_FIELD
+    from: well
+    to: field
+    description: A well rolls up to the field it produces from.
+
+# Alternate/informal field names -> canonical FIELD_NAME emitted by the generator.
+field_synonyms:
+  "volve field": "Volve"
+  "the volve": "Volve"
+  "sleipner ost": "Sleipner"
+
+# Business phrases -> the governed metric + filter they denote (semantic mapping, DESIGN.md §6 story 15).
+terms:
+  below_expected:
+    synonyms: ["below expected", "under-performing", "underperforming", "below forecast", "below plan"]
+    metric: production_efficiency
+    comparison: less_than
+    threshold_ref: surveillance_flag_threshold
+    description: A well whose production efficiency (actual/expected oil) is below the materiality band.
