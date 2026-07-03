@@ -2,8 +2,10 @@
 
 Names are sourced verbatim from the OSDU PDM v1.0 published Data Dictionary (Apache-2.0);
 the pinned subset lives in ``spec/osdu/pdm_profile.json`` and this module must agree with it
-(enforced by tests/test_conformance.py). Generation, gold computation, and the Parquet writer
-all reference these specs so the emitted data cannot drift from the OSDU-conformant names.
+(names, dtypes, and reference values -- enforced by tests/test_conformance.py). Generation,
+gold, and the writer all reference these specs; where generation still spells a column name as
+a dict key, a mismatch fails loudly at ``pa.table(..., schema=spec.arrow_schema())`` and in the
+conformance test rather than drifting silently.
 
 Surveillance subset (5 tables):
 - FIELD, WELL                       -- master entities
@@ -90,7 +92,6 @@ PRODUCT_VOLUME_SUMMARY = TableSpec("PRODUCT_VOLUME_SUMMARY", "product_volume_sum
 
 # Emission order.
 TABLES: tuple[TableSpec, ...] = (FIELD, WELL, REPORTING_ENTITY, WELL_VOL_DAILY, PRODUCT_VOLUME_SUMMARY)
-BY_KEY: dict[str, TableSpec] = {t.key: t for t in TABLES}
 
 # Enumerated OSDU reference-data values we emit (from R_* reference tables).
 KIND_WELL = "Well"

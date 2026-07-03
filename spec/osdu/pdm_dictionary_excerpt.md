@@ -5,6 +5,13 @@ Only the columns this generator populates are listed; each source table has many
 means the column *is* nullable; `Key=P` marks the primary key.
 Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/production/core/dspdm-services/PDM/1.0/data-model-usage-guide/Data-Dictionary.html>
 
+> **Authority:** this file is human-readable provenance. The machine-readable
+> [`pdm_profile.json`](./pdm_profile.json) is authoritative for what the generator emits (names,
+> dtypes, reference values) and is the file the conformance test binds to. The reference-value
+> examples quoted below are OSDU's own comment text, whose casing is *not* standardized across R_
+> tables (e.g. `Forecast`, `DAY`, `measured`, `OIL`); the generator normalizes the values it emits
+> to Title Case — see `pdm_profile.json` `reference_values` for the pinned set.
+
 ## FIELD
 | Column | Nullable | Type | Key | Ref | Comment |
 |---|---|---|---|---|---|

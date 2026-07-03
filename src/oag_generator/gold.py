@@ -42,7 +42,10 @@ def compute_surveillance_gold(cols: dict[str, dict[str, list]], config: Config) 
     well_uwi = dict(zip(well["WELL_ID"], well["UWI"]))
     well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
 
-    # REPORTING_ENTITY_ID -> WELL_ID (entities of kind Well).
+    # OSDU volumes report against a polymorphic REPORTING_ENTITY, not a well directly, so
+    # forecast rows are joined back to wells through it. Slice #2 emits one Well-kind entity per
+    # well (so this is currently 1:1), but later slices add non-well kinds (facility/field
+    # rollups, allocation source→target); resolving via the table keeps the join correct then.
     rentity = cols[schema.REPORTING_ENTITY.key]
     re_to_well = {
         re_id: obj_id
