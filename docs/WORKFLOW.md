@@ -131,3 +131,7 @@ issues are built in per-assistant **forks after the tag**, not in this repo (ADR
   dataset config hash frozen) and implements the open **`axis-b-contest`** issues in its fork — with
   **effort metering on from the first token** — then outputs are compared with the rubric + effort
   metering in `DESIGN.md` §7. Claude Code competes from the same fork point as everyone else.
+  The contest runs in **two rounds** (ADR 0013): round 1 = the `axis-b-contest` builds (including the
+  webapp vertical and the adversarial question tier); round 2 = the **sealed change-request set** is
+  released, each contestant applies it to its own fork, and the harness re-grades (correctness + diff
+  blast radius).

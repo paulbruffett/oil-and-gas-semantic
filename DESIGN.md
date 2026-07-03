@@ -212,6 +212,15 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
 33. As any contributor, I want one portable `DESIGN.md` as source of truth so any assistant/human works consistently.
 34. As a maintainer, I want decisions recorded as ADRs so rationale persists.
 
+### Axis-B discrimination scope (ADR 0013)
+35. As a business user, I want an operations-console webapp (watchlist, NL question box with provenance,
+    deferment pareto, well drill-down) so surveillance is usable day-to-day — specified neutrally in the
+    shell, built by each contestant.
+36. As an evaluator, I want an adversarial question tier (compound, ambiguous, and trap questions) with
+    the expected behavior gold-encoded, so agent reasoning is separable objectively.
+37. As an evaluator, I want a sealed change-request round re-graded by the harness, so maintainability is
+    measured behaviorally (correctness + diff blast radius) rather than only panel-assessed.
+
 ---
 
 ## 6. Base collateral & the use-case suite
@@ -221,7 +230,12 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
 - **OSDU/PDM data-model spec** — the entity subset and table shapes.
 - **Semantic layer** — KPI/metric definitions in OSI v1.0 (+ MetricFlow reference + DAX/Metric-View mappings).
 - **Knowledge layer** — the LPG (entities, relationships, vocabulary); optional RDF/OWL track.
-- **Use-case / question catalog** — the six themes below, with gold answers.
+- **Use-case / question catalog** — the six themes below, with gold answers; includes the **adversarial
+  tier** (compound / ambiguous / trap questions, expected behavior gold-encoded — ADR 0013).
+- **Webapp functional-requirements spec** — platform-neutral screens/interactions/data contract for the
+  operations console, with a gold-anchored acceptance checklist; the *build* is contest work (ADR 0013).
+- **Sealed change-request set + re-grading protocol** — the round-2 maintainability probe; contents stay
+  private until release, integrity provable via a committed hash (ADR 0013).
 - **Per-assistant implementation plans** — the build plan tuned to each assistant's workflow.
 - **Assessment harness** — rubric + assessor-panel method + effort-metering recipe (§7).
 - **Hero reference implementation** — the production-surveillance slice built end-to-end in-repo as
@@ -250,6 +264,9 @@ variance** = allocated ÷ measured; **period-over-period Δ + contribution %**.
 Each question has a deterministic **gold answer** computed from the same generator run. Every implementation
 returns the **answer-submission schema**: natural-language answer + key numeric value(s) + optional
 provenance (metric/dimensions/filters/entities used). Functional correctness = submitted values vs gold.
+For the **adversarial tier** (ADR 0013), gold encodes the *expected behavior* — values, stated
+assumptions, a clarification request, or a data-quality refusal — in schema-compatible form, so these
+questions are graded as objectively as the straight ones.
 
 > The formal *quantitative LLM-answer benchmark* (graded accuracy across many models) is **parked**; the
 > question set + gold answers exist primarily to demonstrate Axis-A capability and to provide the objective
@@ -276,10 +293,15 @@ outputs are scored on a rubric:
 5. **Test quality** — meaningful engineering tests at the right seams.
 6. **Security & governance** — secrets handling, access control, lineage.
 7. **Documentation / runnability** — reproducible from what was produced.
+8. **Change absorption** — correctness + diff blast radius on the sealed change-request set (objective;
+   not voted — ADR 0013).
 
-**Method.** A **multi-LLM assessor panel** scores dimensions 2–7 (averages + spread surface disagreement)
-using review/assessment skills; dimension 1 is computed objectively. **Effort-to-build** is captured as a
-**reported (not scored) signal**.
+**Method.** The contest runs in **two rounds** (ADR 0013): round 1 builds the `axis-b-contest` issues
+(including the webapp vertical, graded against its gold-anchored acceptance checklist plus dimensions
+2–7); round 2 releases the sealed change-request set, which every contestant applies to its own fork and
+the harness re-grades. A **multi-LLM assessor panel** scores dimensions 2–7 (averages + spread surface
+disagreement) using review/assessment skills; dimensions 1 and 8 are computed objectively.
+**Effort-to-build** is captured as a **reported (not scored) signal**.
 
 **Effort-metering recipe.** Report tokens broken out (input / output / cacheRead / cacheCreation) and a
 **notional cost = tokens × public API price** (Max is flat-rate; this is a modeled ROM). For Claude Code on
@@ -320,6 +342,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0010 — Source the canonical schema from OSDU-published models (OSDU PDM data dictionary + WKS), not hand-authored names](docs/adr/0010-source-canonical-schema-from-osdu-published-models.md)
 - [0011 — MetricFlow validates the OSI manifest; DuckDB is the neutral reference-compile engine (refines 0008)](docs/adr/0011-metricflow-validates-manifest-duckdb-reference-compile.md)
 - [0012 — Shell/contest boundary: hero built in-repo as scaffolding; use cases 2–6 split at the data seam; Axis-B work built in forks from a frozen tag](docs/adr/0012-shell-contest-boundary-axis-b.md)
+- [0013 — Axis-B discrimination scope: sealed change-request round, neutral webapp vertical, adversarial question tier — every addition objectively anchored](docs/adr/0013-axis-b-discrimination-scope.md)
 
 ---
 
