@@ -1,0 +1,27 @@
+{
+  "_comment": "Pinned OSDU PDM v1.0 subset used by the generator (ADR 0010). Column names are verbatim from the OSDU PDM Data Dictionary (Apache-2.0). Each entry: canonical OSDU table name -> the exact columns this generator populates. Both src/oag_generator/schema.py and tests/test_conformance.py are checked against this file.",
+  "_source": "https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/production/core/dspdm-services/PDM/1.0/data-model-usage-guide/Data-Dictionary.html",
+  "_retrieved": "2026-07-03",
+  "tables": {
+    "field": {
+      "osdu_table": "FIELD",
+      "columns": ["FIELD_ID", "FIELD_NAME", "FIELD_TYPE_NAME"]
+    },
+    "well": {
+      "osdu_table": "WELL",
+      "columns": ["WELL_ID", "UWI", "WELL_NAME", "FIELD_ID", "FIELD_NAME", "OPERATOR", "X_COORDINATE", "Y_COORDINATE"]
+    },
+    "reporting_entity": {
+      "osdu_table": "REPORTING_ENTITY",
+      "columns": ["REPORTING_ENTITY_ID", "REPORTING_ENTITY_KIND", "ASSOCIATED_OBJECT_ID", "ASSOCIATED_OBJECT_NAME"]
+    },
+    "well_vol_daily": {
+      "osdu_table": "WELL_VOL_DAILY",
+      "columns": ["WELL_VOLUME_DAILY_ID", "WELL_ID", "UWI", "VOLUME_DATE", "HOURS_ON", "OIL_VOLUME", "GAS_VOLUME", "WATER_VOLUME", "VOLUME_METHOD"]
+    },
+    "product_volume_summary": {
+      "osdu_table": "PRODUCT_VOLUME_SUMMARY",
+      "columns": ["PRODUCT_VOLUME_SUMMARY_ID", "REPORTING_ENTITY_ID", "REPORTING_ENTITY_NAME", "START_DATE", "END_DATE", "PERIOD_KIND", "REPORTING_FLOW", "PRODUCT", "QUANTITY_METHOD", "VOLUME", "VOLUME_UOM"]
+    }
+  }
+}
