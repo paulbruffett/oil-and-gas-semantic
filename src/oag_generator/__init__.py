@@ -6,6 +6,7 @@ slice reuses. Public surface is intentionally tiny -- load a config, generate a 
 
 from oag_generator.config import (
     Config,
+    allocation_period,
     config_hash,
     decline_boundary_months,
     decline_months,
@@ -25,6 +26,7 @@ __all__ = [
     "GENERATOR_VERSION",
     "Config",
     "DatasetManifest",
+    "allocation_period",
     "canonical_table_paths",
     "config_hash",
     "decline_boundary_months",

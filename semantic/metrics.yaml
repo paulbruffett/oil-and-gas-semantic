@@ -88,3 +88,29 @@ metric:
 # when its actual decline exceeds its forecast decline (ADR 0018). A log/pow ratio across two period
 # buckets is not expressible as one MetricFlow aggregate, so the reference compile (compile.compute_decline)
 # assembles it from the governed actual_oil_volume + expected_oil_volume measures and reproduces gold.
+---
+# --- Well-test & allocation validation (theme 4, issue #6, DESIGN.md §6.3 / ADR 0019) ---
+metric:
+  name: well_tests_recorded
+  description: Count of well tests (group by well); MAX(test_date) feeds days-since-last-test.
+  type: simple
+  type_params:
+    measure: well_test_count
+---
+metric:
+  name: allocation_factor
+  description: The apportioning factor per to-entity well over the allocation period (share of the field's measured oil).
+  type: simple
+  type_params:
+    measure: allocation_factor_value
+# Days-since-last-test (§6.3 "days since last well test") is a compile-assembled KPI, not a pure
+# aggregate: days_since = as_of_date - MAX(WELL_TEST.TEST_DATE) per well, flagged stale above a
+# threshold (ADR 0019). A date-difference against an as-of parameter is not a MetricFlow aggregate,
+# so OSI governs the WELL_TEST model (its test_date grain + well_test_count) and the reference compile
+# (compile.compute_welltest) assembles the recency from MAX(test_date), reproducing gold.
+#
+# Allocation-variance (§6.3 "allocation variance = allocated / measured") is likewise compile-assembled:
+# allocated = field_measured x ALLOCATION_FACTOR is a row-level product of a measure on
+# RPEN_ALLOCATION_FACTOR and a summed measure on WELL_VOL_DAILY (different models), which -- like deferred
+# volume (ADR 0017) -- is not one aggregate over separate measures. So OSI governs the allocation_factor
+# metric + the actual_oil_volume measure, and compile.compute_welltest assembles the ratio.

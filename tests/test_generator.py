@@ -17,6 +17,7 @@ from oag_generator import generate_dataset
 
 CANONICAL_TABLES = [
     "field", "well", "reporting_entity", "well_vol_daily", "product_volume_summary", "down_time_event",
+    "well_test", "rpen_allocation_factor",
 ]
 
 
@@ -51,7 +52,8 @@ def test_emits_osdu_pdm_tables(tmp_path, small_config):
     n_days = (date(2024, 2, 15) - date(2024, 1, 1)).days + 1
     assert len(field["FIELD_ID"]) == 2
     assert len(well["WELL_ID"]) == 6
-    assert len(rentity["REPORTING_ENTITY_ID"]) == 6
+    # One Well-kind reporting entity per well + one Field-kind (allocation from-entity) per field.
+    assert len(rentity["REPORTING_ENTITY_ID"]) == 6 + 2
     assert len(wvd["WELL_ID"]) == 6 * n_days
     assert len(pvs["REPORTING_ENTITY_ID"]) == 6 * n_days
 
@@ -69,7 +71,16 @@ def test_emits_osdu_pdm_tables(tmp_path, small_config):
     # Referential integrity.
     assert set(well["FIELD_ID"]) <= set(field["FIELD_ID"])
     assert set(wvd["WELL_ID"]) == set(well["WELL_ID"])
-    assert set(rentity["ASSOCIATED_OBJECT_ID"]) == set(well["WELL_ID"])
+    well_re = {
+        obj for kind, obj in zip(rentity["REPORTING_ENTITY_KIND"], rentity["ASSOCIATED_OBJECT_ID"])
+        if kind == "Well"
+    }
+    field_re = {
+        obj for kind, obj in zip(rentity["REPORTING_ENTITY_KIND"], rentity["ASSOCIATED_OBJECT_ID"])
+        if kind == "Field"
+    }
+    assert well_re == set(well["WELL_ID"])       # Well-kind entities map to wells
+    assert field_re == set(field["FIELD_ID"])    # Field-kind entities map to fields
     assert set(pvs["REPORTING_ENTITY_ID"]) <= set(rentity["REPORTING_ENTITY_ID"])
 
     # Manifest records the canonical OSDU table name per emitted table.
@@ -86,7 +97,7 @@ def test_byte_stable_across_runs(tmp_path, small_config):
         assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
             f"table {name} is not byte-stable across identical runs"
         )
-    for artifact in ("surveillance", "deferment", "decline"):
+    for artifact in ("surveillance", "deferment", "decline", "welltest"):
         assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes()
 
 
@@ -335,3 +346,120 @@ def test_decline_gold_matches_kpi_defs(tmp_path, small_config):
     expected_faster.sort(key=lambda r: (-r["gap"], r["well_id"]))
     assert [w["well_id"] for w in gold["wells_declining_faster"]] == [w["well_id"] for w in expected_faster]
     assert gold["n_declining_faster"] == len(expected_faster)
+
+
+# --- well-test & allocation (issue #6) ----------------------------------------------------------
+
+
+def test_emits_well_test_and_allocation_tables(tmp_path, welltest_config):
+    """WELL_TEST + RPEN_ALLOCATION_FACTOR rows exist and are referentially + physically consistent."""
+    m = generate_dataset(welltest_config, tmp_path)
+    well = _read(m.tables["well"])
+    rentity = _read(m.tables["reporting_entity"])
+    wt = _read(m.tables["well_test"])
+    paf = _read(m.tables["rpen_allocation_factor"])
+
+    # Well tests are keyed to real wells; each is a single-day production test with per-value OUOMs.
+    assert len(wt["WELL_TEST_ID"]) > 0
+    assert set(wt["WELL_ID"]) <= set(well["WELL_ID"])
+    assert set(wt["TEST_TYPE"]) == {"Production"}
+    assert set(wt["OIL_RATE_OUOM"]) == {"bbl/d"}
+    assert set(wt["GAS_RATE_OUOM"]) == {"Mscf/d"}
+    assert set(wt["WATER_RATE_OUOM"]) == {"bbl/d"}
+    for dur in wt["DURATION_HOURS"]:
+        assert 0.0 < dur <= 24.0
+    # Every well has at least one test (days-since-last-test is always defined).
+    assert set(wt["WELL_ID"]) == set(well["WELL_ID"])
+
+    # Allocation is a from-entity -> to-entity factor: FROM is a Field-kind entity, TO a Well-kind one.
+    re_kind = dict(zip(rentity["REPORTING_ENTITY_ID"], rentity["REPORTING_ENTITY_KIND"]))
+    assert len(paf["RPEN_ALLOCATION_FACTOR_ID"]) == len(well["WELL_ID"])  # one factor per well/period
+    assert all(re_kind[fr] == "Field" for fr in paf["FROM_REPORTING_ENTITY_ID"])
+    assert all(re_kind[to] == "Well" for to in paf["TO_REPORTING_ENTITY_ID"])
+    assert set(paf["PRODUCT"]) == {"Oil"}
+    assert set(paf["ALLOCATION_FACTOR_OUOM"]) == {"fraction"}
+    assert all(f >= 0.0 for f in paf["ALLOCATION_FACTOR"])
+
+
+def test_welltest_gold_matches_kpi_defs(tmp_path, welltest_config):
+    """Recompute days-since-last-test + allocation-variance (§6.3, ADR 0019) independently.
+
+    days_since = as_of(end_date) - max(TEST_DATE) per well; stale above the threshold.
+    allocation-variance = (field_measured x factor) / well_measured over the allocation period;
+    anomalous when |variance - 1| exceeds the threshold. A well is flagged when stale or anomalous.
+    """
+    m = generate_dataset(welltest_config, tmp_path)
+    well = _read(m.tables["well"])
+    rentity = _read(m.tables["reporting_entity"])
+    wvd = _read(m.tables["well_vol_daily"])
+    wt = _read(m.tables["well_test"])
+    paf = _read(m.tables["rpen_allocation_factor"])
+    gold = json.loads(m.gold["welltest"].read_text())
+
+    as_of = date.fromisoformat(welltest_config["end_date"])
+    stale_threshold = 45  # default welltest.stale_threshold_days
+    anomaly_threshold = 0.10  # default allocation.anomaly_threshold
+
+    # Allocation period = calendar month of end_date, clamped to data start.
+    win_start = max(date.fromisoformat(welltest_config["start_date"]), as_of.replace(day=1))
+    period = {(win_start + timedelta(days=i)).isoformat() for i in range((as_of - win_start).days + 1)}
+    assert gold["allocation_period"] == {
+        "start": win_start.isoformat(), "end": as_of.isoformat(), "days": len(period)
+    }
+    assert gold["as_of"] == as_of.isoformat()
+
+    well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
+    last_test: dict[int, str] = {}
+    for wid, td in zip(wt["WELL_ID"], wt["TEST_DATE"]):
+        if wid not in last_test or td > last_test[wid]:
+            last_test[wid] = td
+
+    measured: dict[int, float] = {}
+    for wid, d, oil in zip(wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["OIL_VOLUME"]):
+        if d in period:
+            measured[wid] = measured.get(wid, 0.0) + oil
+    field_measured: dict[int, float] = {}
+    for wid, meas in measured.items():
+        field_measured[well_field[wid]] = field_measured.get(well_field[wid], 0.0) + meas
+
+    re_to_well = {
+        r: o for r, k, o in zip(
+            rentity["REPORTING_ENTITY_ID"], rentity["REPORTING_ENTITY_KIND"], rentity["ASSOCIATED_OBJECT_ID"]
+        ) if k == "Well"
+    }
+    factor = {
+        re_to_well[to]: fac for to, prod, fac in zip(
+            paf["TO_REPORTING_ENTITY_ID"], paf["PRODUCT"], paf["ALLOCATION_FACTOR"]
+        ) if prod == "Oil"
+    }
+
+    expected_flagged = []
+    n_stale = n_anom = 0
+    for wid in sorted(factor):
+        days = (as_of - date.fromisoformat(last_test[wid])).days
+        is_stale = days > stale_threshold
+        meas = measured.get(wid, 0.0)
+        var = (field_measured[well_field[wid]] * factor[wid]) / meas if meas > 0 else None
+        is_anom = var is not None and abs(var - 1.0) > anomaly_threshold
+        n_stale += is_stale
+        n_anom += is_anom
+        if is_stale or is_anom:
+            expected_flagged.append({"well_id": wid, "days": days, "var": var})
+
+    assert gold["n_stale"] == n_stale
+    assert gold["n_anomalous"] == n_anom
+    assert gold["n_flagged"] == len(expected_flagged)
+    assert {f["well_id"] for f in gold["flagged"]} == {f["well_id"] for f in expected_flagged}
+
+    # Per-flagged values + the "stalest first, then biggest deviation" ordering.
+    exp_by_id = {f["well_id"]: f for f in expected_flagged}
+    for row in gold["flagged"]:
+        e = exp_by_id[row["well_id"]]
+        assert row["days_since_last_test"] == e["days"]
+        if e["var"] is not None:
+            assert row["allocation_variance"] == pytest.approx(e["var"], rel=1e-9)
+    keys = [(-r["days_since_last_test"], -abs((r["allocation_variance"] or 1.0) - 1.0), r["well_id"])
+            for r in gold["flagged"]]
+    assert keys == sorted(keys)
+    # Both signals actually fire in this fixture, so the flagging logic is genuinely exercised.
+    assert n_stale > 0 and n_anom > 0

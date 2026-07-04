@@ -168,3 +168,76 @@ semantic_model:
       agg: sum
       expr: DURATION_HOURS
       agg_time_dimension: event_date
+---
+semantic_model:
+  name: well_test
+  description: OSDU PDM WELL_TEST -- periodic well tests (rates + date) for the well-test use case (#6).
+  node_relation:
+    schema_name: main
+    alias: well_test
+  defaults:
+    agg_time_dimension: test_date
+  entities:
+    - name: well_test
+      type: primary
+      expr: WELL_TEST_ID
+    - name: well
+      type: foreign
+      expr: WELL_ID
+  dimensions:
+    - name: test_date
+      type: time
+      expr: TEST_DATE
+      type_params:
+        time_granularity: day
+    - name: test_type
+      type: categorical
+      expr: TEST_TYPE
+  measures:
+    - name: well_test_count
+      description: Count of well tests; MAX(test_date) gives the last-test date for days-since-test.
+      agg: count
+      expr: WELL_TEST_ID
+      agg_time_dimension: test_date
+    - name: test_oil_rate
+      description: Oil rate measured at test (bbl/d).
+      agg: average
+      expr: OIL_RATE
+      agg_time_dimension: test_date
+---
+semantic_model:
+  name: rpen_allocation_factor
+  description: OSDU PDM RPEN_ALLOCATION_FACTOR -- from->to allocation factors for the allocation use case (#6).
+  node_relation:
+    schema_name: main
+    alias: rpen_allocation_factor
+  defaults:
+    agg_time_dimension: alloc_start_date
+  entities:
+    - name: rpen_allocation_factor
+      type: primary
+      expr: RPEN_ALLOCATION_FACTOR_ID
+    - name: from_reporting_entity
+      type: foreign
+      expr: FROM_REPORTING_ENTITY_ID
+    - name: to_reporting_entity
+      type: foreign
+      expr: TO_REPORTING_ENTITY_ID
+  dimensions:
+    - name: alloc_start_date
+      type: time
+      expr: START_DATE
+      type_params:
+        time_granularity: day
+    - name: alloc_end_date
+      type: categorical
+      expr: END_DATE
+    - name: product
+      type: categorical
+      expr: PRODUCT
+  measures:
+    - name: allocation_factor_value
+      description: The apportioning factor (share of the from-entity's measured volume); one row per well/period.
+      agg: sum
+      expr: ALLOCATION_FACTOR
+      agg_time_dimension: alloc_start_date

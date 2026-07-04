@@ -4,6 +4,10 @@ Theme 1 -- production surveillance (hero, DESIGN.md §6), slices #2/#3:
     "Which wells produced below expected oil rate this week, and by how much?"
 Theme 2 -- deferment & downtime attribution (DESIGN.md §6), issue #4:
     "What did we defer last month, and what were the top downtime causes?"
+Theme 3 -- decline & trend (DESIGN.md §6), issue #5:
+    "What is the 12-month oil decline for Field X, and which wells decline faster than forecast?"
+Theme 4 -- well-test & allocation validation (DESIGN.md §6), issue #6:
+    "Which wells have stale tests or anomalous allocation?"
 
 KPI definitions (§6.3) applied here, over OSDU PDM tables (ADR 0010):
     expected oil = PRODUCT_VOLUME_SUMMARY.VOLUME where QUANTITY_METHOD='Forecast', PRODUCT='Oil'
@@ -23,6 +27,7 @@ from datetime import date, timedelta
 from oag_generator import schema
 from oag_generator.config import (
     Config,
+    allocation_period,
     decline_boundary_months,
     decline_months,
     deferment_window,
@@ -32,6 +37,7 @@ from oag_generator.questions import (
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
+    WELLTEST_QUESTION_ID,
 )
 
 # Single source for the question id: the catalog (spec/questions/catalog.yaml). Keeping the gold
@@ -496,4 +502,175 @@ def _deferment_narrative(
         f"~{total_deferred:.0f} bbl of oil was deferred during {start.isoformat()}..{end.isoformat()} "
         f"at {uptime_pct:.1f}% fleet uptime; the top downtime cause was {top['cause']} "
         f"({top['deferred_oil_bbl']:.0f} bbl over {top['downtime_hours']:.1f} h)."
+    )
+
+
+def compute_welltest_gold(cols: dict[str, dict[str, list]], config: Config) -> dict:
+    """Deterministic gold for the well-test & allocation question (theme 4, issue #6 / ADR 0019).
+
+    Two data-quality signals, evaluated **as of** ``end_date``:
+      * ``days_since_last_test`` = ``end_date - max(TEST_DATE)`` per well; a test is **stale** when
+        this exceeds ``welltest.stale_threshold_days``.
+      * ``allocation_variance`` = ``allocated / measured`` where ``allocated =
+        field_measured x ALLOCATION_FACTOR`` over the allocation period (the calendar month of
+        ``end_date``); an allocation is **anomalous** when ``|variance - 1|`` exceeds
+        ``allocation.anomaly_threshold``.
+    A well is flagged when it is stale **or** anomalous. Operates on the *same* rounded columns the
+    generator writes to Parquet, so the reference compile reproduces these values exactly.
+    """
+    as_of = date.fromisoformat(config.end_date)
+    stale_threshold = config.welltest["stale_threshold_days"]
+    anomaly_threshold = config.allocation["anomaly_threshold"]
+    alloc_start, alloc_end, alloc_days = allocation_period(config.start_date, config.end_date)
+
+    well = cols[schema.WELL.key]
+    well_uwi = dict(zip(well["WELL_ID"], well["UWI"]))
+    well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
+
+    # Most recent test per well (WELL_TEST is keyed to the WELL directly). ISO dates sort as strings.
+    wtbl = cols[schema.WELL_TEST.key]
+    last_test: dict[int, str] = {}
+    for well_id, tdate in zip(wtbl["WELL_ID"], wtbl["TEST_DATE"]):
+        cur = last_test.get(well_id)
+        if cur is None or tdate > cur:
+            last_test[well_id] = tdate
+
+    # Measured oil per well over the allocation period, and its field total (the group measurement).
+    wvd = cols[schema.WELL_VOL_DAILY.key]
+    measured: dict[int, float] = {}
+    for well_id, vdate, oil in zip(wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["OIL_VOLUME"]):
+        if alloc_start <= vdate <= alloc_end:
+            measured[well_id] = measured.get(well_id, 0.0) + oil
+    field_measured: dict[int, float] = {}
+    for well_id, meas in measured.items():
+        fid = well_field[well_id]
+        field_measured[fid] = field_measured.get(fid, 0.0) + meas
+
+    # Allocation factor per to-entity well: join the factor's TO reporting entity back to its well
+    # through Well-kind rows only (the from-entity is a Field-kind row, excluded here), scoped to the
+    # current allocation period + forecast product Oil (mirrors the surveillance kind guard).
+    rentity = cols[schema.REPORTING_ENTITY.key]
+    re_to_well = {
+        re_id: obj_id
+        for re_id, kind, obj_id in zip(
+            rentity["REPORTING_ENTITY_ID"],
+            rentity["REPORTING_ENTITY_KIND"],
+            rentity["ASSOCIATED_OBJECT_ID"],
+        )
+        if kind == schema.KIND_WELL
+    }
+    paf = cols[schema.RPEN_ALLOCATION_FACTOR.key]
+    factor_by_well: dict[int, float] = {}
+    for to_re, sdate, edate, product, factor in zip(
+        paf["TO_REPORTING_ENTITY_ID"],
+        paf["START_DATE"],
+        paf["END_DATE"],
+        paf["PRODUCT"],
+        paf["ALLOCATION_FACTOR"],
+    ):
+        if product != schema.PRODUCT_OIL or sdate != alloc_start or edate != alloc_end:
+            continue
+        well_id = re_to_well.get(to_re)
+        if well_id is not None:
+            factor_by_well[well_id] = factor_by_well.get(well_id, 0.0) + factor
+
+    n_stale = 0
+    n_anomalous = 0
+    flagged: list[dict] = []
+    for well_id in sorted(factor_by_well):
+        lt = last_test.get(well_id)
+        days_since = (as_of - date.fromisoformat(lt)).days if lt is not None else None
+        is_stale = days_since is not None and days_since > stale_threshold
+
+        meas = measured.get(well_id, 0.0)
+        factor = factor_by_well[well_id]
+        if meas > 0.0:
+            allocated = field_measured[well_field[well_id]] * factor
+            variance = allocated / meas
+            is_anomalous = abs(variance - 1.0) > anomaly_threshold
+        else:
+            allocated = None
+            variance = None
+            is_anomalous = False
+
+        if is_stale:
+            n_stale += 1
+        if is_anomalous:
+            n_anomalous += 1
+        if not (is_stale or is_anomalous):
+            continue
+        reasons = []
+        if is_stale:
+            reasons.append("stale-test")
+        if is_anomalous:
+            reasons.append("anomalous-allocation")
+        flagged.append(
+            {
+                "uwi": well_uwi[well_id],
+                "well_id": well_id,
+                "field_id": well_field[well_id],
+                "last_test_date": lt,
+                "days_since_last_test": days_since,
+                "is_stale": is_stale,
+                "allocation_factor": factor,
+                "allocated_oil_bbl": allocated,
+                "measured_oil_bbl": meas,
+                "allocation_variance": variance,
+                "is_anomalous": is_anomalous,
+                "reasons": reasons,
+            }
+        )
+
+    # Deterministic order: stalest test first, then largest allocation deviation, then well_id.
+    flagged.sort(
+        key=lambda r: (
+            -(r["days_since_last_test"] or 0),
+            -abs((r["allocation_variance"] or 1.0) - 1.0),
+            r["well_id"],
+        )
+    )
+
+    return {
+        "question_id": WELLTEST_QUESTION_ID,
+        "question": f"Which wells have stale tests or anomalous allocation as of {as_of.isoformat()}?",
+        "as_of": as_of.isoformat(),
+        "allocation_period": {"start": alloc_start, "end": alloc_end, "days": alloc_days},
+        "stale_threshold_days": stale_threshold,
+        "allocation_anomaly_threshold": anomaly_threshold,
+        "unit": "bbl",
+        "n_wells_evaluated": len(factor_by_well),
+        "n_stale": n_stale,
+        "n_anomalous": n_anomalous,
+        "n_flagged": len(flagged),
+        "flagged": flagged,
+        "answer": _welltest_narrative(flagged, n_stale, n_anomalous, len(factor_by_well), as_of),
+    }
+
+
+def _welltest_narrative(
+    flagged: list[dict], n_stale: int, n_anomalous: int, n_wells: int, as_of: date
+) -> str:
+    if not flagged:
+        return (
+            f"All {n_wells} wells are tested within threshold and allocate within tolerance as of "
+            f"{as_of.isoformat()}."
+        )
+    parts = []
+    if n_stale:
+        stalest = max(flagged, key=lambda r: r["days_since_last_test"] or 0)
+        parts.append(
+            f"{n_stale} have stale tests (oldest {stalest['uwi']} at "
+            f"{stalest['days_since_last_test']}d)"
+        )
+    if n_anomalous:
+        anomalous = [r for r in flagged if r["is_anomalous"]]
+        worst = max(anomalous, key=lambda r: abs((r["allocation_variance"] or 1.0) - 1.0))
+        parts.append(
+            f"{n_anomalous} show anomalous allocation (worst {worst['uwi']} at "
+            f"{worst['allocation_variance']:.2f}x measured)"
+        )
+    return (
+        f"{len(flagged)} of {n_wells} wells need attention as of {as_of.isoformat()}: "
+        + " and ".join(parts)
+        + "."
     )

@@ -8,13 +8,25 @@ summation order).
 
 from __future__ import annotations
 
+import json
+
 import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from oag_generator import canonical_table_paths, deferment_window, read_dataset_manifest
-from oag_semantic.compile import compute_decline, compute_deferment, compute_surveillance
+from oag_generator import (
+    allocation_period,
+    canonical_table_paths,
+    deferment_window,
+    read_dataset_manifest,
+)
+from oag_semantic.compile import (
+    compute_decline,
+    compute_deferment,
+    compute_surveillance,
+    compute_welltest,
+)
 from oag_semantic.manifest import load_semantic_layer
 
 
@@ -280,3 +292,157 @@ def test_decline_compile_ignores_non_forecast_non_oil_and_non_well_rows(dataset_
     assert [w.well_id for w in result.wells_declining_faster] == [
         r["well_id"] for r in g["wells_declining_faster"]
     ]
+
+
+# --- well-test & allocation (issue #6) ----------------------------------------------------------
+
+
+def test_welltest_reference_compile_reproduces_gold(welltest_dataset_dir, welltest_gold):
+    result = compute_welltest(welltest_dataset_dir)
+    g = welltest_gold
+
+    assert result.as_of == g["as_of"]
+    assert result.alloc_start == g["allocation_period"]["start"]
+    assert result.alloc_end == g["allocation_period"]["end"]
+    assert result.stale_threshold_days == g["stale_threshold_days"]
+    assert result.allocation_anomaly_threshold == g["allocation_anomaly_threshold"]
+    assert result.n_wells_evaluated == g["n_wells_evaluated"]
+    assert result.n_stale == g["n_stale"]
+    assert result.n_anomalous == g["n_anomalous"]
+
+    # Flagged set matches exactly (order + per-well values).
+    assert [w.well_id for w in result.flagged] == [r["well_id"] for r in g["flagged"]]
+    gold_by_id = {r["well_id"]: r for r in g["flagged"]}
+    for w in result.flagged:
+        r = gold_by_id[w.well_id]
+        assert w.uwi == r["uwi"]
+        assert w.field_id == r["field_id"]
+        assert w.last_test_date == r["last_test_date"]
+        assert w.days_since_last_test == r["days_since_last_test"]
+        assert w.is_stale == r["is_stale"]
+        assert w.is_anomalous == r["is_anomalous"]
+        assert list(w.reasons) == r["reasons"]
+        assert w.allocation_factor == pytest.approx(r["allocation_factor"], rel=1e-9)
+        assert w.measured_oil_bbl == pytest.approx(r["measured_oil_bbl"], rel=1e-6)
+        if r["allocation_variance"] is not None:
+            assert w.allocation_variance == pytest.approx(r["allocation_variance"], rel=1e-6)
+
+
+def test_welltest_compile_orders_and_every_flag_is_justified(welltest_dataset_dir):
+    result = compute_welltest(welltest_dataset_dir)
+    # Deterministic order: stalest test first, then biggest allocation deviation, then well_id.
+    keys = [
+        (-w.days_since_last_test, -abs((w.allocation_variance or 1.0) - 1.0), w.well_id)
+        for w in result.flagged
+    ]
+    assert keys == sorted(keys)
+    # Every flagged well is genuinely stale or genuinely anomalous (no spurious flags).
+    for w in result.flagged:
+        assert w.is_stale or w.is_anomalous
+        if w.is_stale:
+            assert w.days_since_last_test > result.stale_threshold_days
+        if w.is_anomalous:
+            assert abs(w.allocation_variance - 1.0) > result.allocation_anomaly_threshold
+    # Both signals fire in this fixture, so the flag logic is exercised, not vacuously green.
+    assert result.n_stale > 0 and result.n_anomalous > 0
+
+
+def test_allocation_factor_metric_matches_compile(welltest_dataset_dir):
+    """The governed allocation_factor metric, executed over its measure, must reproduce the factor the
+    compile uses per flagged well. Without this the metric is only asserted to *exist*, never executed,
+    so a bad edit -- re-pointing it at the wrong column -- would ship silently to any MetricFlow
+    consumer while gold/compile (a separate code path) stayed correct."""
+    layer = load_semantic_layer()
+    config = read_dataset_manifest(welltest_dataset_dir)["config"]
+    alloc_start, alloc_end, _ = allocation_period(config["start_date"], config["end_date"])
+
+    factor_metric = layer.metrics["allocation_factor"]
+    assert factor_metric.type == "simple"
+    paf_model, measure = layer.measure(factor_metric.type_params["measure"])
+    re_model = layer.model("reporting_entity")
+    paths = canonical_table_paths(welltest_dataset_dir)
+
+    con = duckdb.connect()
+    try:
+        con.register(paf_model.table, pq.read_table(paths[paf_model.table]))
+        con.register(re_model.table, pq.read_table(paths[re_model.table]))
+        by_well = dict(
+            con.execute(
+                f"""SELECT re.{re_model.entity('well').expr}      AS well_id,
+                           SUM(p.{measure.expr})                   AS factor
+                    FROM {paf_model.table} p
+                    JOIN {re_model.table} re
+                      ON p.{paf_model.entity('to_reporting_entity').expr}
+                         = re.{re_model.entity('reporting_entity').expr}
+                     AND re.{re_model.dimension('reporting_entity_kind').expr} = 'Well'
+                    WHERE p.{paf_model.dimension('product').expr} = 'Oil'
+                      AND p.{paf_model.time_dimension().expr} = ?
+                    GROUP BY 1""",
+                [alloc_start],
+            ).fetchall()
+        )
+    finally:
+        con.close()
+
+    result = compute_welltest(welltest_dataset_dir)
+    assert result.flagged, "fixture should flag wells"
+    for w in result.flagged:
+        assert by_well[w.well_id] == pytest.approx(w.allocation_factor, rel=1e-9)
+
+
+def test_welltest_compile_handles_allocated_well_with_no_test(tmp_path, welltest_config):
+    """A well with an allocation factor but no WELL_TEST row must not crash the compile: days-since is
+    None (as gold stores it), never int(None). Guards the testless-but-allocated path real OSDU data
+    can hit even though the generator always emits >=1 test per well."""
+    import pyarrow.compute as pc
+
+    from oag_generator import generate_dataset
+
+    m = generate_dataset(welltest_config, tmp_path)
+    gold = json.loads(m.gold["welltest"].read_text())
+    # An anomalous well is flagged regardless of test recency; strip its tests to force days-since None.
+    anomalous = next(f for f in gold["flagged"] if f["is_anomalous"])
+    wid = anomalous["well_id"]
+    wt_path = canonical_table_paths(tmp_path)["well_test"]
+    pq.write_table(pq.read_table(wt_path).filter(pc.field("WELL_ID") != wid), wt_path)
+
+    result = compute_welltest(tmp_path)  # must not raise
+    flag = next(w for w in result.flagged if w.well_id == wid)
+    assert flag.is_anomalous
+    assert flag.days_since_last_test is None
+    assert flag.last_test_date is None
+    assert not flag.is_stale
+
+
+def test_welltest_compile_ignores_non_well_kind_and_non_oil_rows(welltest_dataset_dir, welltest_gold):
+    """Poison the allocation table; the compile must still reproduce gold (guards the product filter
+    and the REPORTING_ENTITY kind guard on the to-entity join, mirroring surveillance)."""
+    paths = canonical_table_paths(welltest_dataset_dir)
+    g = welltest_gold
+    period_start = g["allocation_period"]["start"]
+    period_end = g["allocation_period"]["end"]
+
+    # A non-Oil factor for an existing well in-period, huge factor.
+    _append_row(paths["rpen_allocation_factor"], {
+        "TO_REPORTING_ENTITY_ID": 1, "START_DATE": period_start, "END_DATE": period_end,
+        "PRODUCT": "Gas", "ALLOCATION_FACTOR": 9.9,
+    })
+    # A Facility-kind reporting entity colliding with well 1, plus an Oil factor pointing at it:
+    # the kind guard must keep it out of well 1's allocation.
+    _append_row(paths["reporting_entity"], {
+        "REPORTING_ENTITY_ID": 999999, "REPORTING_ENTITY_KIND": "Facility",
+        "ASSOCIATED_OBJECT_ID": 1,
+    })
+    _append_row(paths["rpen_allocation_factor"], {
+        "TO_REPORTING_ENTITY_ID": 999999, "START_DATE": period_start, "END_DATE": period_end,
+        "PRODUCT": "Oil", "ALLOCATION_FACTOR": 9.9,
+    })
+
+    result = compute_welltest(welltest_dataset_dir)
+    assert [w.well_id for w in result.flagged] == [r["well_id"] for r in g["flagged"]]
+    gold_by_id = {r["well_id"]: r for r in g["flagged"]}
+    for w in result.flagged:
+        if gold_by_id[w.well_id]["allocation_variance"] is not None:
+            assert w.allocation_variance == pytest.approx(
+                gold_by_id[w.well_id]["allocation_variance"], rel=1e-6
+            )

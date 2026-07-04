@@ -397,6 +397,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0016 — Functional correctness is graded on a held-out evaluation seed, not the fork-point dataset](docs/adr/0016-held-out-evaluation-seed-grading.md)
 - [0017 — DOWN_TIME_EVENT model + forecast-rate deferment attribution](docs/adr/0017-downtime-event-model-and-forecast-rate-deferment.md)
 - [0018 — Decline & trend KPI definitions (cumulative production + annualized decline vs forecast)](docs/adr/0018-decline-trend-kpi-definitions.md)
+- [0019 — WELL_TEST + RPEN_ALLOCATION_FACTOR model + well-test/allocation KPI definitions](docs/adr/0019-welltest-allocation-model-and-kpis.md)
 
 ---
 

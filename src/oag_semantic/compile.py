@@ -15,12 +15,14 @@ never diverge.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import duckdb
 import pyarrow.parquet as pq
 
 from oag_generator import (
+    allocation_period,
     canonical_table_paths,
     decline_boundary_months,
     decline_months,
@@ -509,4 +511,197 @@ def compute_decline(
         n_wells_evaluated=n_evaluated,
         wells_declining_faster=tuple(wells_faster),
         monthly_oil=monthly,
+    )
+
+
+# --- well-test & allocation validation (issue #6) -----------------------------------------------
+
+
+@dataclass(frozen=True)
+class WellFlag:
+    well_id: int
+    uwi: str
+    field_id: int
+    last_test_date: str | None
+    days_since_last_test: int | None
+    is_stale: bool
+    allocation_factor: float
+    allocated_oil_bbl: float | None
+    measured_oil_bbl: float
+    allocation_variance: float | None
+    is_anomalous: bool
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WellTestResult:
+    """Well-test & allocation validation computed by the reference compile over the OSI (issue #6)."""
+
+    as_of: str
+    alloc_start: str
+    alloc_end: str
+    stale_threshold_days: int
+    allocation_anomaly_threshold: float
+    n_wells_evaluated: int
+    n_stale: int
+    n_anomalous: int
+    flagged: tuple[WellFlag, ...]
+
+
+def compute_welltest(
+    dataset_dir: str | Path, layer: SemanticLayer | None = None
+) -> WellTestResult:
+    """Compute stale-test + anomalous-allocation flags from the canonical Parquet, driven by the OSI.
+
+    Mirrors ``gold.compute_welltest_gold`` exactly (same as-of date, allocation period, thresholds,
+    days-since / variance formulas, ordering) so the reference compile reproduces the co-generated
+    gold. Only the tokens (table aliases, column exprs, aggregations, kind/product reference values)
+    come from the manifest + canonical OSDU constants; the query *shape* is the well-test question.
+    days-since-last-test and allocation variance are compile-assembled (a date-difference and a
+    row-level product), as documented in metrics.yaml/ADR 0019 -- the same division of labour the
+    deferment and decline compiles use.
+    """
+    dataset_dir = Path(dataset_dir)
+    config = read_dataset_manifest(dataset_dir)["config"]
+    paths = canonical_table_paths(dataset_dir)
+    layer = layer or load_semantic_layer()
+
+    as_of = date.fromisoformat(config["end_date"])
+    stale_threshold = config["welltest"]["stale_threshold_days"]
+    anomaly_threshold = config["allocation"]["anomaly_threshold"]
+    alloc_start, alloc_end, _ = allocation_period(config["start_date"], config["end_date"])
+
+    wt_model = layer.model("well_test")
+    wvd_model, actual_measure = layer.measure("actual_oil_volume")
+    _, factor_measure = layer.measure("allocation_factor_value")
+    paf_model = layer.model("rpen_allocation_factor")
+    well_model = layer.model("well")
+    re_model = layer.model("reporting_entity")
+
+    con = duckdb.connect()
+    try:
+        for model in (wt_model, wvd_model, paf_model, well_model, re_model):
+            con.register(model.table, pq.read_table(paths[model.table]))
+
+        # WELL master (uwi + field per well) -- the small dimension table.
+        well_rows = con.execute(
+            f"SELECT {well_model.entity('well').expr}, {well_model.dimension('uwi').expr}, "
+            f"{well_model.entity('field').expr} FROM {well_model.table}"
+        ).fetchall()
+
+        # Most recent test per well (days-since is assembled from MAX(test_date) below).
+        last_test_rows = con.execute(
+            f"SELECT {wt_model.entity('well').expr} AS well_id, "
+            f"MAX({wt_model.time_dimension().expr}) AS last_test "
+            f"FROM {wt_model.table} GROUP BY 1"
+        ).fetchall()
+
+        # Measured oil per well over the allocation period.
+        measured_rows = con.execute(
+            f"SELECT {wvd_model.entity('well').expr} AS well_id, "
+            f"SUM({actual_measure.expr}) AS measured "
+            f"FROM {wvd_model.table} "
+            f"WHERE {wvd_model.time_dimension().expr} BETWEEN ? AND ? GROUP BY 1",
+            [alloc_start, alloc_end],
+        ).fetchall()
+
+        # Allocation factor per to-entity well: join the factor's TO reporting entity back to its
+        # well through Well-kind rows only (same kind guard as surveillance), scoped to product Oil
+        # and the current allocation period.
+        factor_rows = con.execute(
+            f"""
+            SELECT re.{re_model.entity('well').expr}     AS well_id,
+                   SUM(p.{factor_measure.expr})          AS factor
+            FROM {paf_model.table} p
+            JOIN {re_model.table} re
+              ON p.{paf_model.entity('to_reporting_entity').expr} = re.{re_model.entity('reporting_entity').expr}
+             AND re.{re_model.dimension('reporting_entity_kind').expr} = ?
+            WHERE p.{paf_model.dimension('product').expr} = ?
+              AND p.{paf_model.time_dimension().expr} = ?
+              AND p.{paf_model.dimension('alloc_end_date').expr} = ?
+            GROUP BY 1
+            """,
+            [schema.KIND_WELL, schema.PRODUCT_OIL, alloc_start, alloc_end],
+        ).fetchall()
+    finally:
+        con.close()
+
+    well_uwi = {int(w): u for w, u, _f in well_rows}
+    well_field = {int(w): int(f) for w, _u, f in well_rows}
+    last_test = {int(w): lt for w, lt in last_test_rows}
+    measured = {int(w): float(m) for w, m in measured_rows}
+    factor_by_well = {int(w): float(f) for w, f in factor_rows}
+
+    field_measured: dict[int, float] = {}
+    for well_id, meas in measured.items():
+        fid = well_field[well_id]
+        field_measured[fid] = field_measured.get(fid, 0.0) + meas
+
+    n_stale = 0
+    n_anomalous = 0
+    flagged: list[WellFlag] = []
+    for well_id in sorted(factor_by_well):
+        lt = last_test.get(well_id)
+        days_since = (as_of - date.fromisoformat(lt)).days if lt is not None else None
+        is_stale = days_since is not None and days_since > stale_threshold
+
+        meas = measured.get(well_id, 0.0)
+        factor = factor_by_well[well_id]
+        if meas > 0.0:
+            allocated: float | None = field_measured[well_field[well_id]] * factor
+            variance: float | None = allocated / meas
+            is_anomalous = abs(variance - 1.0) > anomaly_threshold
+        else:
+            allocated = None
+            variance = None
+            is_anomalous = False
+
+        if is_stale:
+            n_stale += 1
+        if is_anomalous:
+            n_anomalous += 1
+        if not (is_stale or is_anomalous):
+            continue
+        reasons = []
+        if is_stale:
+            reasons.append("stale-test")
+        if is_anomalous:
+            reasons.append("anomalous-allocation")
+        flagged.append(
+            WellFlag(
+                well_id=well_id,
+                uwi=well_uwi[well_id],
+                field_id=well_field[well_id],
+                last_test_date=lt,
+                # None when a flagged (anomalous) well has no WELL_TEST row -- mirror gold, don't crash.
+                days_since_last_test=int(days_since) if days_since is not None else None,
+                is_stale=is_stale,
+                allocation_factor=factor,
+                allocated_oil_bbl=allocated,
+                measured_oil_bbl=meas,
+                allocation_variance=variance,
+                is_anomalous=is_anomalous,
+                reasons=tuple(reasons),
+            )
+        )
+
+    # Deterministic order: stalest test first, then largest allocation deviation, then well_id.
+    flagged.sort(
+        key=lambda r: (
+            -(r.days_since_last_test or 0),
+            -abs((r.allocation_variance or 1.0) - 1.0),
+            r.well_id,
+        )
+    )
+
+    return WellTestResult(
+        as_of=as_of.isoformat(),
+        alloc_start=alloc_start,
+        alloc_end=alloc_end,
+        stale_threshold_days=stale_threshold,
+        allocation_anomaly_threshold=anomaly_threshold,
+        n_wells_evaluated=len(factor_by_well),
+        n_stale=n_stale,
+        n_anomalous=n_anomalous,
+        flagged=tuple(flagged),
     )

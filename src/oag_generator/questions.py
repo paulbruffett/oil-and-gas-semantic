@@ -149,3 +149,5 @@ SURVEILLANCE_QUESTION_ID = question_id(1)
 DEFERMENT_QUESTION_ID = question_id(2)
 # The decline & trend question (theme 3); imported by the gold + decline compile (issue #5).
 DECLINE_QUESTION_ID = question_id(3)
+# The well-test & allocation question (theme 4); imported by the gold + welltest compile (issue #6).
+WELLTEST_QUESTION_ID = question_id(4)

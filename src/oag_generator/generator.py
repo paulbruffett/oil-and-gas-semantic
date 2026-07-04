@@ -20,11 +20,17 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from oag_generator import schema
-from oag_generator.config import Config, hash_canonical_config, load_config
+from oag_generator.config import (
+    Config,
+    allocation_period,
+    hash_canonical_config,
+    load_config,
+)
 from oag_generator.gold import (
     compute_decline_gold,
     compute_deferment_gold,
     compute_surveillance_gold,
+    compute_welltest_gold,
 )
 
 GENERATOR_VERSION = "0.1.0"
@@ -78,6 +84,8 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     wvd = schema.WELL_VOL_DAILY.empty_columns()
     pvs = schema.PRODUCT_VOLUME_SUMMARY.empty_columns()
     dte = schema.DOWN_TIME_EVENT.empty_columns()
+    wt = schema.WELL_TEST.empty_columns()
+    paf = schema.RPEN_ALLOCATION_FACTOR.empty_columns()
 
     well_seq = 0
     wvd_seq = 0
@@ -197,6 +205,12 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
             pvs["VOLUME"].extend(expected_r)
             pvs["VOLUME_UOM"].extend([schema.OIL_UOM] * n_days)
 
+    # --- Well tests + allocation factors (issue #6, ADR 0019) ------------------------------------
+    # Drawn in a second pass *after* the main loop so every earlier table (FIELD/WELL/
+    # REPORTING_ENTITY-Well-rows/WELL_VOL_DAILY/PRODUCT_VOLUME_SUMMARY/DOWN_TIME_EVENT) is byte-for-byte
+    # unchanged: continuing the same rng here only appends draws, never reorders the existing ones.
+    _build_welltest_allocation(config, rng, dates, n_days, field, well, wvd, rentity, wt, paf)
+
     return {
         schema.FIELD.key: field,
         schema.WELL.key: well,
@@ -204,7 +218,126 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
         schema.WELL_VOL_DAILY.key: wvd,
         schema.PRODUCT_VOLUME_SUMMARY.key: pvs,
         schema.DOWN_TIME_EVENT.key: dte,
+        schema.WELL_TEST.key: wt,
+        schema.RPEN_ALLOCATION_FACTOR.key: paf,
     }
+
+
+def _build_welltest_allocation(
+    config: Config,
+    rng: np.random.Generator,
+    dates: list[str],
+    n_days: int,
+    field: dict[str, list],
+    well: dict[str, list],
+    wvd: dict[str, list],
+    rentity: dict[str, list],
+    wt: dict[str, list],
+    paf: dict[str, list],
+) -> None:
+    """Emit WELL_TEST + RPEN_ALLOCATION_FACTOR rows and the allocation from-entities (ADR 0019).
+
+    Two-population signals mirror the impaired-well performance model (ADR 0009): a stale-test
+    minority (last test older than the staleness threshold) and a misallocated minority (a biased
+    allocation factor). Reads the already-built column dicts for measured volumes and test rates, and
+    continues ``rng`` so the tables built above stay byte-identical. Mutates ``rentity``/``wt``/``paf``.
+    """
+    wtc = config.welltest
+    al = config.allocation
+    n_wells = len(well["WELL_ID"])
+
+    well_uwi = dict(zip(well["WELL_ID"], well["UWI"]))
+    field_name = dict(zip(field["FIELD_ID"], field["FIELD_NAME"]))
+    # Field-major, well-order (the assignment order in the main loop) so draws are reproducible.
+    wells_by_field: dict[int, list[int]] = {}
+    for well_id, field_id in zip(well["WELL_ID"], well["FIELD_ID"]):
+        wells_by_field.setdefault(field_id, []).append(well_id)
+
+    # Allocation period = the monthly cycle ending at end_date ("last month"), clamped to data start.
+    alloc_start, alloc_end, _ = allocation_period(config.start_date, config.end_date)
+
+    # Metered daily volumes per (well, date) -- the well-test rate on a test date -- and, in the same
+    # single pass, each well's measured oil over the allocation period (the WELL_VOL_DAILY actuals).
+    vol_by_key: dict[tuple[int, str], tuple[float, float, float]] = {}
+    measured_period: dict[int, float] = {}
+    for well_id, d, oil, gas, water in zip(
+        wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["OIL_VOLUME"], wvd["GAS_VOLUME"], wvd["WATER_VOLUME"]
+    ):
+        vol_by_key[(well_id, d)] = (oil, gas, water)
+        if alloc_start <= d <= alloc_end:
+            measured_period[well_id] = measured_period.get(well_id, 0.0) + oil
+
+    wt_seq = 0
+    paf_seq = 0
+    for field_id in sorted(wells_by_field):
+        member_wells = wells_by_field[field_id]
+        # The allocation from-entity: one Field-kind REPORTING_ENTITY per field (the group
+        # measurement point). Appended after the Well-kind rows so those keep their ids/order.
+        from_re_id = n_wells + field_id
+        rentity["REPORTING_ENTITY_ID"].append(from_re_id)
+        rentity["REPORTING_ENTITY_KIND"].append(schema.KIND_FIELD)
+        rentity["ASSOCIATED_OBJECT_ID"].append(field_id)
+        rentity["ASSOCIATED_OBJECT_NAME"].append(field_name[field_id])
+
+        field_measured = sum(measured_period.get(w, 0.0) for w in member_wells)
+
+        for well_id in member_wells:
+            uwi = well_uwi[well_id]
+
+            # Well tests: draw the recency of the most recent test (stale minority vs healthy), then
+            # backfill prior tests at the nominal cadence. days-since-last-test depends only on the
+            # newest test; the earlier rows give the entity a realistic multi-test history.
+            interval = int(wtc["interval_days"])
+            is_stale = rng.uniform() < wtc["stale_fraction"]
+            if is_stale:
+                gap = int(rng.integers(int(wtc["stale_min_days"]), int(wtc["stale_max_days"]) + 1))
+            else:
+                gap = int(rng.integers(0, interval))
+            # Clamp the last test into the window. NOTE: staleness can only *manifest* when the window
+            # is longer than stale_threshold_days -- on a shorter window a stale-drawn well clamps to
+            # day 0 and its realized days-since is at most n_days-1, which may not clear the threshold.
+            # That is a domain constraint (a test can't be older than the data), not a bug; the default
+            # window and the welltest test fixture are both long enough to surface the stale population.
+            last_idx = max(0, (n_days - 1) - gap)
+            test_idxs = sorted(range(last_idx, -1, -interval))
+            for idx in test_idxs:
+                d = dates[idx]
+                oil, gas, water = vol_by_key[(well_id, d)]
+                wt_seq += 1
+                wt["WELL_TEST_ID"].append(wt_seq)
+                wt["WELL_ID"].append(well_id)
+                wt["UWI"].append(uwi)
+                wt["TEST_DATE"].append(d)
+                wt["TEST_TYPE"].append(schema.TEST_TYPE_PRODUCTION)
+                wt["DURATION_HOURS"].append(round(float(wtc["duration_hours"]), 2))
+                wt["OIL_RATE"].append(round(oil, 2))
+                wt["OIL_RATE_OUOM"].append(schema.OIL_RATE_UOM)
+                wt["GAS_RATE"].append(round(gas, 2))
+                wt["GAS_RATE_OUOM"].append(schema.GAS_RATE_UOM)
+                wt["WATER_RATE"].append(round(water, 2))
+                wt["WATER_RATE_OUOM"].append(schema.WATER_RATE_UOM)
+
+            # Allocation factor: the well's share of its field's measured oil, biased for the
+            # misallocated minority so allocation variance (allocated/measured = factor/ideal) departs
+            # from 1. Undefined when the field produced nothing that period -> factor 0 (gold skips it).
+            ideal = measured_period.get(well_id, 0.0) / field_measured if field_measured > 0 else 0.0
+            is_mis = rng.uniform() < al["misalloc_fraction"]
+            if is_mis:
+                mag = rng.uniform(al["misalloc_bias_min"], al["misalloc_bias_max"])
+                sign = 1.0 if rng.uniform() < 0.5 else -1.0
+                factor = ideal * (1.0 + sign * mag)
+            else:
+                factor = ideal * (1.0 + rng.normal(0.0, al["healthy_noise_sd"]))
+            factor = max(factor, 0.0)
+            paf_seq += 1
+            paf["RPEN_ALLOCATION_FACTOR_ID"].append(paf_seq)
+            paf["FROM_REPORTING_ENTITY_ID"].append(from_re_id)
+            paf["TO_REPORTING_ENTITY_ID"].append(well_id)  # Well-kind RE id == well_id (main loop)
+            paf["START_DATE"].append(alloc_start)
+            paf["END_DATE"].append(alloc_end)
+            paf["PRODUCT"].append(schema.PRODUCT_OIL)
+            paf["ALLOCATION_FACTOR"].append(round(factor, 8))
+            paf["ALLOCATION_FACTOR_OUOM"].append(schema.ALLOC_FACTOR_UOM)
 
 
 def _write_parquet(cols: dict[str, list], spec: schema.TableSpec, path: Path) -> None:
@@ -235,6 +368,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         "surveillance": compute_surveillance_gold(cols, cfg),
         "deferment": compute_deferment_gold(cols, cfg),
         "decline": compute_decline_gold(cols, cfg),
+        "welltest": compute_welltest_gold(cols, cfg),
     }
     gold_paths: dict[str, Path] = {}
     for key, answer in gold_answers.items():

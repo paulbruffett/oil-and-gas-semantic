@@ -41,7 +41,7 @@ Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/pro
 | ASSOCIATED_OBJECT_ID | Y | INTEGER | | | Reference id to the actual entity (e.g. WELL). Polymorphic, typed by kind. |
 | ASSOCIATED_OBJECT_NAME | Y | CHARACTER VARYING(50) | | | Reference name to the actual entity. |
 
-*We use column `REPORTING_ENTITY_KIND` (the value column of R_REPORTING_ENTITY_KIND) as a flat kind label.*
+*We use column `REPORTING_ENTITY_KIND` (the value column of R_REPORTING_ENTITY_KIND) as a flat kind label. We emit `Well` rows (one per well) and, for allocation (issue #6), one `Field` row per field — the group measurement point that allocation factors flow **from**.*
 
 ## WELL_VOL_DAILY  (actual daily volumes)
 | Column | Nullable | Type | Key | Ref | Comment |
@@ -82,3 +82,35 @@ Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/pro
 | DURATION_HOURS | N | NUMERIC(15,5) | | | Length of downtime measured in hours. |
 
 *We omit the dictionary's `R_EVENT_CATEGORY_ID` / `EVENT_SUB_CATEGORY` / `REMARK` / `IS_ACTIVE` and audit columns, carrying only the flat `EVENT_CATEGORY` value (as we carry `REPORTING_ENTITY_KIND`). A generated event spans a single VOLUME_DATE (START_DATE = END_DATE); DURATION_HOURS ∈ (0, 24]. Deferred volume is computed against the forecast series rather than stored (the PDM `PROD_DOWN_TIME_VOLUME_LOSS` companion table is out of scope). See ADR 0017.*
+
+## WELL_TEST  (periodic well tests; well-test/allocation use case, issue #6)
+| Column | Nullable | Type | Key | Ref | Comment |
+|---|---|---|---|---|---|
+| WELL_TEST_ID | Y | INTEGER | P | | Primary key of the well test. |
+| WELL_ID | Y | INTEGER | | WELL | Well the test was run on (PPDM WELL_TEST is keyed to the well/UWI). |
+| UWI | Y | CHARACTER VARYING(50) | | WELL | Unique well identifier. |
+| TEST_DATE | N | TIMESTAMP | | | Date the test was run. |
+| TEST_TYPE | N | CHARACTER VARYING(40) | | R_TEST_TYPE | Kind of test (production, injectivity, buildup, …). |
+| DURATION_HOURS | N | NUMERIC(15,5) | | | Length of the test in hours. |
+| OIL_RATE | N | NUMERIC(20,10) | | | Oil rate measured at test. |
+| OIL_RATE_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit of measure for OIL_RATE (per-value OUOM). |
+| GAS_RATE | N | NUMERIC(20,10) | | | Gas rate measured at test. |
+| GAS_RATE_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit of measure for GAS_RATE. |
+| WATER_RATE | N | NUMERIC(20,10) | | | Water rate measured at test. |
+| WATER_RATE_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit of measure for WATER_RATE. |
+
+*`WELL_TEST` is the OSDU PDM (PPDM-3.9-based) well-test table — verified present in the OSDU PDM v1.0 Well-Test data model (2026-07); PPDM is cited as lineage only (ADR 0010). The OSDU PDM stores each measured value with its own OUOM column (`R_UOM`), which we honour per rate. In the OSDU model the rates live in child tables (`WELL_TEST_FLOW_PERIOD` / `WELL_TEST_FLOW_MEASUREMENT` / `WELL_TEST_MEASUREMENT`); we **denormalize** the oil/gas/water test rates onto `WELL_TEST`. `TEST_TYPE` is the flat `R_WELL_TEST_TYPE` value column (carried like `REPORTING_ENTITY_KIND`). A generated test spans a single TEST_DATE; validation/choke/pressure, run-number and audit columns are omitted. Test rates are the well's metered daily volumes on the test date. WKS analogue: `work-product-component--FlowTest`. See ADR 0019.*
+
+## RPEN_ALLOCATION_FACTOR  (production allocation factors; allocation use case, issue #6)
+| Column | Nullable | Type | Key | Ref | Comment |
+|---|---|---|---|---|---|
+| RPEN_ALLOCATION_FACTOR_ID | Y | INTEGER | P | | Primary key of the allocation factor. |
+| FROM_REPORTING_ENTITY_ID | Y | INTEGER | | REPORTING_ENTITY | Source (from) RPEN — the group/field measurement point being apportioned. |
+| TO_REPORTING_ENTITY_ID | Y | INTEGER | | REPORTING_ENTITY | Target (to) RPEN — the well receiving the allocated share. |
+| START_DATE | Y | TIMESTAMP | | | Start of the effective allocation period. |
+| END_DATE | Y | TIMESTAMP | | | End of the effective allocation period. |
+| PRODUCT | Y | CHARACTER VARYING(40) | | R_REPORTING_PRODUCT | Product the factor applies to (Oil, Gas, Water). |
+| ALLOCATION_FACTOR | N | NUMERIC(14,10) | | | The apportioning factor (share of the from-entity's volume). |
+| ALLOCATION_FACTOR_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit for the factor (dimensionless 'fraction'). |
+
+*`RPEN_ALLOCATION_FACTOR` is the OSDU PDM (PPDM-3.9-based) production allocation-factor table — the OSDU-published table that records each **from RPEN** and **to RPEN** and the allocation factor (verified against the OSDU PDM v1.0 Volume-Relevant + Well-Test data-model pages, 2026-07). `RPEN` = `REPORTING_ENTITY`, so it is natively a **from-entity → to-entity factor**, and the PPDM-3.9 analogue `PDEN_ALLOC_FACTOR` is lineage only (ADR 0010). It is deliberately **not** a stored allocated-volume table (`PDEN_VOL_ALLOC` is out of scope — allocated volume is computed as `from-measured × factor`, so it can never drift). We carry flat `FROM_/TO_REPORTING_ENTITY_ID` keys (from = a Field-kind row, to = a Well-kind row); qualifier/method and audit columns are omitted. The factor carries its own per-value OUOM. Exact OSDU column spellings were not machine-verified from the deep dictionary page, so the columns above are a deliberate ADR-0019 profile selection. See ADR 0019.*
