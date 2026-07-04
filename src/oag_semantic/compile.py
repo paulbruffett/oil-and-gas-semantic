@@ -22,6 +22,7 @@ import pyarrow.parquet as pq
 
 from oag_generator import (
     canonical_table_paths,
+    deferment_window,
     read_dataset_manifest,
     schema,
     surveillance_window,
@@ -154,4 +155,120 @@ def compute_surveillance(
         flag_threshold=threshold,
         evaluated_well_ids=tuple(evaluated),
         flagged=tuple(flagged),
+    )
+
+
+@dataclass(frozen=True)
+class CauseDeferment:
+    cause: str
+    deferred_oil_bbl: float
+    downtime_hours: float
+    n_events: int
+
+
+@dataclass(frozen=True)
+class DefermentResult:
+    """Deferment & downtime computed by the reference compile over the semantic layer (issue #4)."""
+
+    window_start: str
+    window_end: str
+    window_days: int
+    n_wells_evaluated: int
+    total_deferred_oil_bbl: float
+    total_downtime_hours: float
+    fleet_uptime_pct: float
+    causes: tuple[CauseDeferment, ...]
+
+
+def compute_deferment(
+    dataset_dir: str | Path, layer: SemanticLayer | None = None
+) -> DefermentResult:
+    """Compute deferred oil by cause + fleet uptime from the canonical Parquet, driven by the OSI.
+
+    Mirrors ``gold.compute_deferment_gold`` exactly (same window, forecast x downtime attribution,
+    uptime formula) so the reference compile reproduces the co-generated gold. Only the tokens
+    (table aliases, column exprs, aggregations, forecast/oil reference values) come from the
+    manifest + canonical OSDU constants; the query *shape* is the deferment question.
+    """
+    dataset_dir = Path(dataset_dir)
+    config = read_dataset_manifest(dataset_dir)["config"]
+    paths = canonical_table_paths(dataset_dir)
+    layer = layer or load_semantic_layer()
+
+    start, end, days = deferment_window(config["start_date"], config["end_date"])
+
+    dte_model, downtime_measure = layer.measure("downtime_hours")
+    pvs_model, expected_measure = layer.measure("expected_oil_volume")
+    wvd_model, on_stream_measure = layer.measure("on_stream_hours")
+
+    re_col = dte_model.entity("reporting_entity").expr
+    event_date = dte_model.time_dimension().expr
+    cause_col = dte_model.dimension("event_category").expr
+
+    con = duckdb.connect()
+    try:
+        for model in (dte_model, pvs_model, wvd_model):
+            con.register(model.table, pq.read_table(paths[model.table]))
+
+        # Deferred oil by cause: forecast oil per (reporting entity, date) x the event's downtime
+        # fraction. LEFT JOIN so an event with no matching forecast still counts its hours/n_events
+        # (matches gold, which attributes 0 deferred there). Forecast is pre-aggregated per
+        # (entity, date) so duplicate forecast rows can't multiply the join.
+        cause_sql = f"""
+        WITH forecast AS (
+            SELECT {pvs_model.entity("reporting_entity").expr} AS re_id,
+                   {pvs_model.time_dimension().expr} AS d,
+                   SUM({expected_measure.expr}) AS forecast_oil
+            FROM {pvs_model.table}
+            WHERE {pvs_model.dimension("product").expr} = ?
+              AND {pvs_model.dimension("quantity_method").expr} = ?
+            GROUP BY 1, 2
+        )
+        SELECT dte.{cause_col} AS cause,
+               SUM(COALESCE(f.forecast_oil, 0.0) * dte.{downtime_measure.expr} / 24.0) AS deferred_oil,
+               SUM(dte.{downtime_measure.expr}) AS downtime_hours,
+               COUNT(*) AS n_events
+        FROM {dte_model.table} dte
+        LEFT JOIN forecast f ON f.re_id = dte.{re_col} AND f.d = dte.{event_date}
+        WHERE dte.{event_date} BETWEEN ? AND ?
+        GROUP BY dte.{cause_col}
+        """
+        cause_rows = con.execute(
+            cause_sql, [schema.PRODUCT_OIL, schema.QUANTITY_FORECAST, start, end]
+        ).fetchall()
+
+        # Fleet uptime + evaluated wells over the window.
+        uptime_sql = f"""
+        SELECT SUM({on_stream_measure.expr})            AS on_stream_hours,
+               24.0 * COUNT(*)                          AS calendar_hours,
+               COUNT(DISTINCT {wvd_model.entity("well").expr}) AS n_wells
+        FROM {wvd_model.table}
+        WHERE {wvd_model.time_dimension().expr} BETWEEN ? AND ?
+        """
+        on_stream, calendar, n_wells = con.execute(uptime_sql, [start, end]).fetchone()
+    finally:
+        con.close()
+
+    causes = [
+        CauseDeferment(
+            cause=cause,
+            deferred_oil_bbl=float(deferred_oil),
+            downtime_hours=float(downtime_hours),
+            n_events=int(n_events),
+        )
+        for cause, deferred_oil, downtime_hours, n_events in cause_rows
+    ]
+    # Deterministic order: biggest deferment first, then cause name (matches gold.py).
+    causes.sort(key=lambda c: (-c.deferred_oil_bbl, c.cause))
+
+    uptime_pct = 100.0 * float(on_stream) / float(calendar) if calendar else 0.0
+    return DefermentResult(
+        window_start=start,
+        window_end=end,
+        window_days=days,
+        n_wells_evaluated=int(n_wells or 0),
+        total_deferred_oil_bbl=sum(c.deferred_oil_bbl for c in causes),
+        total_downtime_hours=sum(c.downtime_hours for c in causes),
+        fleet_uptime_pct=uptime_pct,
+        causes=tuple(causes),
     )

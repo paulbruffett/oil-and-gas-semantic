@@ -74,6 +74,18 @@
         "QUANTITY_METHOD": ["Forecast"],
         "VOLUME_UOM": ["bbl"]
       }
+    },
+    "down_time_event": {
+      "osdu_table": "DOWN_TIME_EVENT",
+      "_note": "EVENT_CATEGORY carries the downtime cause (the R_EVENT_CATEGORY value column); it is user-extensible reference data in OSDU, so its values are NOT pinned here. DURATION_HOURS is per-value hours (an implicit UOM, per ADR 0017). Nullable audit/subcategory/id columns from the dictionary are omitted (ADR 0017).",
+      "columns": [
+        {"name": "DOWN_TIME_EVENT_ID", "type": "int"},
+        {"name": "REPORTING_ENTITY_ID", "type": "int"},
+        {"name": "EVENT_CATEGORY", "type": "string"},
+        {"name": "START_DATE", "type": "string"},
+        {"name": "END_DATE", "type": "string"},
+        {"name": "DURATION_HOURS", "type": "float"}
+      ]
     }
   }
 }

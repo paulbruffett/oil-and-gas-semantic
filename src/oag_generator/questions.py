@@ -119,3 +119,5 @@ def question_id(theme_number: int) -> str:
 
 # The hero surveillance question (theme 1); imported by the gold module and the semantic agent.
 SURVEILLANCE_QUESTION_ID = question_id(1)
+# The deferment & downtime question (theme 2); imported by the gold + deferment modules (issue #4).
+DEFERMENT_QUESTION_ID = question_id(2)

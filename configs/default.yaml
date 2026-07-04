@@ -1,8 +1,8 @@
 # Default generator config for the oil-and-gas-semantic base collateral (slice #2).
 # This mirrors the built-in defaults in oag_generator.config.Config, so running
 # `oag-generate --out DIR` with no --config produces the same dataset as passing this file.
-# Calibration (decline/watercut/gor/performance) falls back to the Volve-calibrated
-# defaults in oag_generator.config; override any subset here.
+# Calibration (decline/watercut/gor/performance/downtime + downtime_causes) falls back to the
+# Volve-calibrated defaults in oag_generator.config; override any subset here.
 seed: 42
 start_date: "2024-01-01"
 end_date: "2024-06-30"

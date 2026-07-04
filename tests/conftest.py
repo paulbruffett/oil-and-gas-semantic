@@ -34,3 +34,8 @@ def dataset_dir(tmp_path, small_config) -> Path:
 @pytest.fixture
 def gold(dataset_dir) -> dict:
     return json.loads((dataset_dir / "gold" / "surveillance.json").read_text())
+
+
+@pytest.fixture
+def deferment_gold(dataset_dir) -> dict:
+    return json.loads((dataset_dir / "gold" / "deferment.json").read_text())

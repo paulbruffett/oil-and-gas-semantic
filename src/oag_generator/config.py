@@ -53,6 +53,26 @@ DEFAULT_PERFORMANCE = {
     "floor": 0.0,              # performance factor is clipped to [floor, ceil]
     "ceil": 1.30,
 }
+# Down Time Events (deferment use case, issue #4 / ADR 0017). Each event downs one well for
+# DURATION_HOURS on a single VOLUME_DATE; that day's HOURS_ON drops to 24 - DURATION_HOURS and
+# oil/gas/water scale with the uptime fraction. Deferred volume = forecast rate x downtime
+# fraction, attributed to the event's EVENT_CATEGORY (cause). See ADR 0017.
+DEFAULT_DOWNTIME = {
+    "events_per_well_year": 12.0,  # mean event count per well per year (Poisson)
+    "min_hours": 2.0,              # partial-outage duration range (hours)
+    "max_hours": 22.0,
+    "full_day_fraction": 0.25,     # share of events that are a full 24h outage (a "day down")
+}
+# EVENT_CATEGORY (cause) pool with sampling weights. These are R_EVENT_CATEGORY reference values
+# (user-extensible in OSDU, so not pinned in the conformance profile); weights need not sum to 1.
+DEFAULT_DOWNTIME_CAUSES = [
+    {"cause": "Planned Maintenance", "weight": 0.30},
+    {"cause": "Facility Constraint", "weight": 0.20},
+    {"cause": "ESP Failure", "weight": 0.15},
+    {"cause": "Weather", "weight": 0.15},
+    {"cause": "Power Outage", "weight": 0.10},
+    {"cause": "Well Integrity", "weight": 0.10},
+]
 
 DEFAULT_OPERATORS = ["Equinor", "AkerBP", "Wintershall"]
 
@@ -76,6 +96,10 @@ class Config:
     watercut: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WATERCUT))
     gor: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_GOR))
     performance: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_PERFORMANCE))
+    downtime: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_DOWNTIME))
+    downtime_causes: list[dict[str, Any]] = field(
+        default_factory=lambda: [dict(c) for c in DEFAULT_DOWNTIME_CAUSES]
+    )
 
     def __post_init__(self) -> None:
         # Nested calibration dicts: fill any missing keys from defaults so a partial
@@ -84,6 +108,7 @@ class Config:
         self.watercut = {**DEFAULT_WATERCUT, **self.watercut}
         self.gor = {**DEFAULT_GOR, **self.gor}
         self.performance = {**DEFAULT_PERFORMANCE, **self.performance}
+        self.downtime = {**DEFAULT_DOWNTIME, **self.downtime}
         self._validate()
 
     def _validate(self) -> None:
@@ -100,6 +125,18 @@ class Config:
         # watercut cap must stay below 1.0: water = oil * wc / (1 - wc) is undefined at 1.0.
         if not 0.0 <= self.watercut["cap"] < 1.0:
             raise ValueError("watercut.cap must be in [0, 1)")
+        # Downtime: durations must be a valid sub-day range; event rate/full-day share sane.
+        dt = self.downtime
+        if not 0.0 < dt["min_hours"] <= dt["max_hours"] <= 24.0:
+            raise ValueError("downtime hours must satisfy 0 < min_hours <= max_hours <= 24")
+        if dt["events_per_well_year"] < 0.0:
+            raise ValueError("downtime.events_per_well_year must be >= 0")
+        if not 0.0 <= dt["full_day_fraction"] <= 1.0:
+            raise ValueError("downtime.full_day_fraction must be in [0, 1]")
+        if not self.downtime_causes:
+            raise ValueError("downtime_causes must be non-empty")
+        if any(c.get("weight", 0.0) <= 0.0 for c in self.downtime_causes):
+            raise ValueError("every downtime cause must have a positive weight")
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
         # silently samples the reversed interval, so reject min > max up front.
         for group, keys in (
@@ -144,6 +181,20 @@ def surveillance_window(start_date: str, end_date: str, window_days: int) -> tup
     end = date.fromisoformat(end_date)
     data_start = date.fromisoformat(start_date)
     start = max(data_start, end - timedelta(days=window_days - 1))
+    return start.isoformat(), end.isoformat(), (end - start).days + 1
+
+
+def deferment_window(start_date: str, end_date: str) -> tuple[str, str, int]:
+    """The "last month" window for the deferment question: the calendar month of ``end_date``.
+
+    Runs from the first of ``end_date``'s month to ``end_date``, clamped up to the data start so a
+    dataset that begins mid-month never reports days it never generated. Single source of truth for
+    the window shared by the gold computation and the reference compile (mirrors
+    :func:`surveillance_window`). Returns ``(start_iso, end_iso, n_days)``.
+    """
+    end = date.fromisoformat(end_date)
+    month_start = end.replace(day=1)
+    start = max(date.fromisoformat(start_date), month_start)
     return start.isoformat(), end.isoformat(), (end - start).days + 1
 
 
