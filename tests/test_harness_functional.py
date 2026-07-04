@@ -6,6 +6,7 @@ import json
 
 from oag_generator.questions import (
     DEFERMENT_QUESTION_ID,
+    ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
 )
 from oag_harness.functional import (
@@ -21,22 +22,41 @@ from oag_semantic.grading import grade_surveillance
 
 def test_oracle_scores_100_percent_across_themes(dataset_dir, build_oracle_submissions):
     report = score_submissions(build_oracle_submissions(dataset_dir), dataset_dir)
-    assert report.n_graded == 5  # surveillance, deferment, decline, welltest, rollups
+    assert report.n_graded == 6  # surveillance, deferment, decline, welltest, watchlist, rollups
     assert report.pass_rate == 1.0
     assert all(g.correct for g in report.grades)
 
 
-def test_planned_themes_are_skipped_not_failed(dataset_dir, build_oracle_submissions):
+def test_all_six_themes_are_gradable(dataset_dir, build_oracle_submissions):
     report = score_submissions(build_oracle_submissions(dataset_dir), dataset_dir)
-    # #7 watchlist has no spec/gold yet: reported skipped, never dragging the rate down.
-    assert set(report.skipped) == {"watchlist-down-watering-out-gor-change"}
+    # Every straight-tier theme now has a spec + co-generated gold, so nothing is skipped. A future
+    # adversarial-tier question (#22) with no spec would surface here as skipped rather than failing.
+    assert report.skipped == []
+
+
+def test_theme_without_a_grading_spec_is_skipped(
+    dataset_dir, build_oracle_submissions, monkeypatch
+):
+    """A catalog question whose gold_id has no SPECS entry is *skipped*, never force-graded -- the
+    `spec is None` guard (functional.score_submissions) the adversarial tier (#22) will rely on when it
+    lands without a spec. Every theme now has a spec, so this removes one to exercise that branch in
+    isolation: submission + gold both exist, only the spec is absent."""
+    from oag_harness import functional
+
+    subs = build_oracle_submissions(dataset_dir)  # built while all specs are present
+    assert ROLLUP_QUESTION_ID in subs
+    monkeypatch.delitem(functional.SPECS, ROLLUP_QUESTION_ID)
+
+    report = score_submissions(subs, dataset_dir)
+    assert "rollup-oil-gas-water-by-field-operator" in report.skipped
+    assert all(g.question_id != ROLLUP_QUESTION_ID for g in report.grades)
 
 
 def test_missing_submission_is_skipped(dataset_dir, build_oracle_submissions):
     subs = build_oracle_submissions(dataset_dir)
     del subs[SURVEILLANCE_QUESTION_ID]
     report = score_submissions(subs, dataset_dir)
-    assert report.n_graded == 4
+    assert report.n_graded == 5
     assert SURVEILLANCE_QUESTION_ID in report.skipped
 
 
@@ -49,8 +69,8 @@ def test_wrong_value_fails_that_question_only(dataset_dir, build_oracle_submissi
     assert report.pass_rate < 1.0
     bad = next(g for g in report.grades if g.question_id == DEFERMENT_QUESTION_ID)
     assert not bad.correct and bad.value_mismatches
-    # Only deferment is affected; the other four still pass.
-    assert report.n_correct == 4
+    # Only deferment is affected; the other five still pass.
+    assert report.n_correct == 5
 
 
 def test_missing_and_extra_rows_are_reported(dataset_dir):

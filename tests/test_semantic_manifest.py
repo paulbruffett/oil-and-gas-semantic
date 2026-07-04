@@ -91,6 +91,24 @@ def test_rollup_metrics_defined():
     assert layer.model("well").entity("facility").expr == "FACILITY_ID"
 
 
+def test_watchlist_metrics_defined():
+    """The operational-exceptions watchlist KPIs (§6.3, issue #7) are governed in the semantic layer."""
+    layer = load_semantic_layer()
+    # water cut + GOR are governed derived metrics over the actual oil/gas/water measures.
+    assert {"water_cut", "gor"} <= set(layer.metrics)
+    assert layer.metrics["water_cut"].type == "derived"
+    assert layer.metrics["gor"].type == "derived"
+    # Both resolve to base measures that already exist (no new physical columns).
+    wc_metrics = {m["name"] for m in layer.metrics["water_cut"].type_params["metrics"]}
+    assert wc_metrics == {"actual_water", "actual_oil"}
+    gor_metrics = {m["name"] for m in layer.metrics["gor"].type_params["metrics"]}
+    assert gor_metrics == {"actual_gas", "actual_oil"}
+    # days-down is compile-assembled from the on_stream_hours measure (HOURS_ON = 0 count); GOR change
+    # is a compile-assembled ratio of the gor metric across two windows. Neither is a MetricFlow metric.
+    _, on_stream = layer.measure("on_stream_hours")
+    assert on_stream.expr == "HOURS_ON"
+
+
 def test_semantic_layer_columns_conform_to_osdu_profile():
     """Every table/column the manifest references exists in the vendored OSDU PDM profile."""
     layer = load_semantic_layer()

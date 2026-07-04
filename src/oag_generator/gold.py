@@ -8,6 +8,10 @@ Theme 3 -- decline & trend (DESIGN.md §6), issue #5:
     "What is the 12-month oil decline for Field X, and which wells decline faster than forecast?"
 Theme 4 -- well-test & allocation validation (DESIGN.md §6), issue #6:
     "Which wells have stale tests or anomalous allocation?"
+Theme 5 -- operational exceptions / watchlist (DESIGN.md §6), issue #7:
+    "Which wells are down, watering out, or showing a GOR change?"
+Theme 6 -- asset rollups (DESIGN.md §6), issue #8:
+    "Oil/gas/water by field, operator, and facility this month vs last -- who are the biggest movers?"
 
 KPI definitions (§6.3) applied here, over OSDU PDM tables (ADR 0010):
     expected oil = PRODUCT_VOLUME_SUMMARY.VOLUME where QUANTITY_METHOD='Forecast', PRODUCT='Oil'
@@ -33,12 +37,14 @@ from oag_generator.config import (
     deferment_window,
     rollup_periods,
     surveillance_window,
+    watchlist_windows,
 )
 from oag_generator.questions import (
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
+    WATCHLIST_QUESTION_ID,
     WELLTEST_QUESTION_ID,
 )
 
@@ -831,6 +837,202 @@ def assemble_rollup(
         "facility_id",
     )
     return total, field_rows, operator_rows, facility_rows
+
+
+def watchlist_row(
+    well_id: int,
+    uwi: str,
+    field_id: int,
+    inputs: tuple[float, float, float, int, float, float],
+    watercut_threshold: float,
+    gor_change_threshold: float,
+    days_down_threshold: int,
+) -> dict:
+    """The per-well watchlist block: the three KPIs (water cut, GOR, days-down) and their flags.
+
+    ``inputs`` is ``(oil_curr, water_curr, gas_curr, days_down, oil_base, gas_base)`` over the current
+    and baseline windows. water cut = water / (oil + water); GOR = gas x 1000 / oil (Mscf->scf per bbl,
+    §6.3); GOR change = current GOR / baseline GOR - 1. A KPI is ``None`` when undefined (no producing
+    volume in the window), and never flags. Shared by ``compute_watchlist_gold`` and the reference
+    compile so the two derive the flags identically (ADR 0022) while each aggregates independently.
+    """
+    oil_c, water_c, gas_c, days_down, oil_b, gas_b = inputs
+    denom = oil_c + water_c
+    water_cut = (water_c / denom) if denom > 0.0 else None
+    gor_curr = (1000.0 * gas_c / oil_c) if oil_c > 0.0 else None
+    gor_baseline = (1000.0 * gas_b / oil_b) if oil_b > 0.0 else None
+    gor_change_pct = (
+        gor_curr / gor_baseline - 1.0
+        if gor_curr is not None and gor_baseline is not None and gor_baseline > 0.0
+        else None
+    )
+
+    is_down = days_down >= days_down_threshold
+    is_watering_out = water_cut is not None and water_cut > watercut_threshold
+    is_gor_change = gor_change_pct is not None and abs(gor_change_pct) > gor_change_threshold
+    reasons = []
+    if is_down:
+        reasons.append("down")
+    if is_watering_out:
+        reasons.append("watering-out")
+    if is_gor_change:
+        reasons.append("gor-change")
+
+    return {
+        "uwi": uwi,
+        "well_id": well_id,
+        "field_id": field_id,
+        "days_down": days_down,
+        "is_down": is_down,
+        "water_cut": water_cut,
+        "is_watering_out": is_watering_out,
+        "gor_curr": gor_curr,
+        "gor_baseline": gor_baseline,
+        "gor_change_pct": gor_change_pct,
+        "is_gor_change": is_gor_change,
+        "reasons": reasons,
+    }
+
+
+def assemble_watchlist(
+    inputs: dict[int, tuple[float, float, float, int, float, float]],
+    well_uwi: dict[int, str],
+    well_field: dict[int, int],
+    watercut_threshold: float,
+    gor_change_threshold: float,
+    days_down_threshold: int,
+) -> tuple[list[dict], int, int, int]:
+    """Assemble the flagged watchlist rows (+ per-signal counts) from per-well aggregated ``inputs``.
+
+    Shared by ``compute_watchlist_gold`` and the reference compile (ADR 0011) so the two agree on the
+    flag logic, ordering, and row shape while each derives the aggregates independently. A well is
+    flagged when it is down, watering out, or shows a GOR change; the counts tally each signal across
+    *all* evaluated wells (not just flagged ones). "Most urgent first" orders by days-down, then water
+    cut, then absolute GOR change, with well_id as a deterministic tie-break. Returns
+    ``(flagged, n_down, n_watering_out, n_gor_change)``.
+    """
+    flagged: list[dict] = []
+    n_down = n_watering_out = n_gor_change = 0
+    for well_id in sorted(inputs):
+        row = watchlist_row(
+            well_id,
+            well_uwi[well_id],
+            well_field[well_id],
+            inputs[well_id],
+            watercut_threshold,
+            gor_change_threshold,
+            days_down_threshold,
+        )
+        n_down += row["is_down"]
+        n_watering_out += row["is_watering_out"]
+        n_gor_change += row["is_gor_change"]
+        if row["reasons"]:
+            flagged.append(row)
+
+    flagged.sort(
+        key=lambda r: (
+            -r["days_down"],
+            -(r["water_cut"] or 0.0),
+            -abs(r["gor_change_pct"] or 0.0),
+            r["well_id"],
+        )
+    )
+    return flagged, n_down, n_watering_out, n_gor_change
+
+
+def compute_watchlist_gold(cols: dict[str, dict[str, list]], config: Config) -> dict:
+    """Deterministic gold for the operational-exceptions watchlist (theme 5, issue #7 / ADR 0022).
+
+    Flags wells that are **down** (>= ``watchlist.days_down_threshold`` fully-off-stream days in the
+    current window), **watering out** (current-window water cut over ``watchlist.watercut_threshold``),
+    or showing a **GOR change** (current-vs-baseline GOR ratio departs from 1 by more than
+    ``watchlist.gor_change_threshold``). The current window is the trailing ``watchlist.window_days``
+    ending at ``end_date``; the GOR baseline is the leading window of the same length. Operates on the
+    *same* rounded columns the generator writes to Parquet, so the reference compile reproduces these
+    values exactly.
+    """
+    wl = config.watchlist
+    (curr_start, curr_end, curr_days), (base_start, base_end, base_days) = watchlist_windows(
+        config.start_date, config.end_date, int(wl["window_days"])
+    )
+
+    well = cols[schema.WELL.key]
+    well_uwi = dict(zip(well["WELL_ID"], well["UWI"]))
+    well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
+
+    # Per-well aggregates: current-window oil/water/gas + fully-down day count, and baseline oil/gas.
+    # [oil_c, water_c, gas_c, days_down, oil_b, gas_b] per well, in one pass over WELL_VOL_DAILY.
+    agg: dict[int, list[float]] = {well_id: [0.0, 0.0, 0.0, 0, 0.0, 0.0] for well_id in well["WELL_ID"]}
+    wvd = cols[schema.WELL_VOL_DAILY.key]
+    for well_id, vdate, hours, oil, gas, water in zip(
+        wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["HOURS_ON"],
+        wvd["OIL_VOLUME"], wvd["GAS_VOLUME"], wvd["WATER_VOLUME"],
+    ):
+        a = agg[well_id]
+        if curr_start <= vdate <= curr_end:
+            a[0] += oil
+            a[1] += water
+            a[2] += gas
+            if hours == 0.0:  # a fully-off-stream day (a full-day downtime event, ADR 0017)
+                a[3] += 1
+        if base_start <= vdate <= base_end:
+            a[4] += oil
+            a[5] += gas
+
+    inputs = {well_id: tuple(a) for well_id, a in agg.items()}
+    flagged, n_down, n_watering_out, n_gor_change = assemble_watchlist(
+        inputs, well_uwi, well_field,
+        wl["watercut_threshold"], wl["gor_change_threshold"], int(wl["days_down_threshold"]),
+    )
+
+    return {
+        "question_id": WATCHLIST_QUESTION_ID,
+        "question": (
+            f"Which wells are down, watering out, or showing a GOR change as of {curr_end}?"
+        ),
+        "current_window": {"start": curr_start, "end": curr_end, "days": curr_days},
+        "baseline_window": {"start": base_start, "end": base_end, "days": base_days},
+        "watercut_threshold": wl["watercut_threshold"],
+        "gor_change_threshold": wl["gor_change_threshold"],
+        "days_down_threshold": int(wl["days_down_threshold"]),
+        "units": {"water_cut": "fraction", "gor": "scf/bbl", "days_down": "days"},
+        "n_wells_evaluated": len(inputs),
+        "n_down": n_down,
+        "n_watering_out": n_watering_out,
+        "n_gor_change": n_gor_change,
+        "n_flagged": len(flagged),
+        "flagged": flagged,
+        "answer": _watchlist_narrative(
+            flagged, n_down, n_watering_out, n_gor_change, len(inputs), curr_end
+        ),
+    }
+
+
+def _watchlist_narrative(
+    flagged: list[dict],
+    n_down: int,
+    n_watering_out: int,
+    n_gor_change: int,
+    n_wells: int,
+    as_of: str,
+) -> str:
+    if not flagged:
+        return (
+            f"No wells are down, watering out, or showing a GOR change as of {as_of} "
+            f"(of {n_wells} evaluated)."
+        )
+    parts = []
+    if n_down:
+        parts.append(f"{n_down} down")
+    if n_watering_out:
+        parts.append(f"{n_watering_out} watering out")
+    if n_gor_change:
+        parts.append(f"{n_gor_change} with a GOR change")
+    top = flagged[0]
+    return (
+        f"{len(flagged)} of {n_wells} wells are on the watchlist as of {as_of} "
+        f"({', '.join(parts)}); most urgent is {top['uwi']} ({', '.join(top['reasons'])})."
+    )
 
 
 def _rollup_narrative(

@@ -135,3 +135,32 @@ metric:
 # (a group-vs-total ratio). Neither is one MetricFlow aggregate, so OSI governs the base measures
 # (actual_oil/gas/water_volume) + the field/operator/facility rollup dimensions, and the reference
 # compile (compile.compute_rollup) assembles the Δ + contribution per group, reproducing gold (ADR 0021).
+---
+# --- Operational exceptions / watchlist (theme 5, issue #7, DESIGN.md §6.3 / ADR 0022) ---
+metric:
+  name: water_cut
+  description: water / (oil + water) over the window (fraction) -- the "watering out" watchlist signal.
+  type: derived
+  type_params:
+    expr: actual_water / (actual_oil + actual_water)
+    metrics:
+      - name: actual_water
+      - name: actual_oil
+---
+metric:
+  name: gor
+  description: gas-oil ratio = gas x 1000 / oil (scf/bbl; gas is Mscf) over the window -- the GOR watchlist signal.
+  type: derived
+  type_params:
+    expr: actual_gas * 1000 / actual_oil
+    metrics:
+      - name: actual_gas
+      - name: actual_oil
+# days-down (§6.3 "wells/days down") is a compile-assembled KPI, not a pure aggregate over a bare
+# column: it counts the days a well was fully off-stream, i.e. Σ over WELL_VOL_DAILY of
+# (HOURS_ON = 0 ? 1 : 0) in the window (a full-day downtime event drives HOURS_ON to 0, ADR 0017).
+# A conditional count is not one MetricFlow measure over a bare OSDU column (keeping the manifest
+# columns bare keeps them OSDU-conformance-checkable), so OSI governs the on_stream_hours measure
+# (HOURS_ON) and the reference compile (compile.compute_watchlist) assembles the fully-down-day count,
+# reproducing gold. "GOR change" (current-window GOR vs a leading baseline-window GOR) is likewise
+# compile-assembled: a ratio of the governed gor metric across two windows, like decline (ADR 0018).

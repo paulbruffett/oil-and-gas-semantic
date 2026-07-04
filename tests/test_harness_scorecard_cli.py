@@ -82,7 +82,7 @@ def test_cli_grades_forktime_and_writes_scorecard(
     assert "functional correctness" in printed
     card = json.loads(out.read_text())
     assert card["implementation"] == "team-x"
-    assert card["dimensions"]["2_spec_fidelity"]["theme_breadth_reported"]["attempted"] == 5
+    assert card["dimensions"]["2_spec_fidelity"]["theme_breadth_reported"]["attempted"] == 6
 
 
 def test_cli_eval_seed_regenerates_and_grades(

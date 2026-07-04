@@ -25,6 +25,7 @@ from oag_generator.questions import (
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
+    WATCHLIST_QUESTION_ID,
     WELLTEST_QUESTION_ID,
     QuestionCatalog,
     load_catalog,
@@ -50,8 +51,8 @@ class GradingSpec:
 
 
 # One spec per gradable theme, keyed by the catalog gold_id (imported, never a string literal, so the
-# harness and the gold module cannot drift). Planned themes (#7 watchlist, #8 rollups) get a spec when
-# their shell half lands; until then the scorer reports them as not-yet-gradable rather than failing.
+# harness and the gold module cannot drift). A planned theme gets a spec when its shell half lands;
+# until then the scorer reports it as not-yet-gradable rather than failing.
 SPECS: dict[str, GradingSpec] = {
     SURVEILLANCE_QUESTION_ID: GradingSpec(
         "flagged", "well_id", ("expected_oil_bbl", "actual_oil_bbl", "shortfall_bbl", "efficiency")
@@ -68,6 +69,12 @@ SPECS: dict[str, GradingSpec] = {
         "flagged",
         "well_id",
         ("days_since_last_test", "allocation_factor", "measured_oil_bbl", "allocation_variance"),
+    ),
+    # Operational exceptions / watchlist (#7): the flagged set keyed by well_id, graded on the three
+    # KPIs (days-down, water cut, GOR change). Undefined KPIs (no producing volume) are None in gold
+    # and grade as None==None, so an implementation can't paper a missing value over with 0.
+    WATCHLIST_QUESTION_ID: GradingSpec(
+        "flagged", "well_id", ("days_down", "water_cut", "gor_change_pct")
     ),
     # Asset rollups (#8): the headline grouping is by field; operator/facility rollups travel in the
     # gold for the narrative + the hierarchy contest (#20) but the graded anchor is the field rollup.

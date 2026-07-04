@@ -31,6 +31,7 @@ from oag_generator.gold import (
     compute_deferment_gold,
     compute_rollup_gold,
     compute_surveillance_gold,
+    compute_watchlist_gold,
     compute_welltest_gold,
 )
 
@@ -416,6 +417,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         "deferment": compute_deferment_gold(cols, cfg),
         "decline": compute_decline_gold(cols, cfg),
         "welltest": compute_welltest_gold(cols, cfg),
+        "watchlist": compute_watchlist_gold(cols, cfg),
         "rollups": compute_rollup_gold(cols, cfg),
     }
     gold_paths: dict[str, Path] = {}
