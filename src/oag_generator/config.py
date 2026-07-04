@@ -74,6 +74,30 @@ DEFAULT_DOWNTIME_CAUSES = [
     {"cause": "Well Integrity", "weight": 0.10},
 ]
 
+# Periodic well tests (well-test/allocation use case, issue #6 / ADR 0019). Each well is tested on
+# a roughly regular cadence; a minority go "stale" (no recent test), giving the days-since-last-test
+# KPI a real two-population signal (like the impaired-well performance model, ADR 0009). Test rates
+# are the well's metered daily volumes on the test date (the WELL_VOL_DAILY actuals) -- for realism
+# only; no KPI depends on them (ADR 0019).
+DEFAULT_WELLTEST = {
+    "interval_days": 30,        # nominal cadence between tests for a healthy well
+    "stale_fraction": 0.20,     # share of wells whose most recent test is stale
+    "stale_min_days": 55,       # a stale well's last test is this..max days before end_date
+    "stale_max_days": 120,
+    "stale_threshold_days": 45,  # gold flags a well "stale" when days-since-last-test exceeds this
+    "duration_hours": 24.0,     # test duration (a 24h production test)
+}
+# Production allocation factors (allocation use case, issue #6 / ADR 0019). Each well's factor is
+# its share of its field's measured oil over the allocation period; a misallocated minority carry a
+# biased factor, so allocation variance (allocated / measured = factor / ideal-share) departs from 1.
+DEFAULT_ALLOCATION = {
+    "anomaly_threshold": 0.10,   # gold flags a well when |variance - 1| exceeds this
+    "misalloc_fraction": 0.20,   # share of wells with a biased allocation factor
+    "misalloc_bias_min": 0.15,   # |factor bias| range for a misallocated well (> anomaly_threshold)
+    "misalloc_bias_max": 0.40,
+    "healthy_noise_sd": 0.02,    # small symmetric factor noise for correctly-allocated wells
+}
+
 DEFAULT_OPERATORS = ["Equinor", "AkerBP", "Wintershall"]
 
 
@@ -100,6 +124,8 @@ class Config:
     downtime_causes: list[dict[str, Any]] = field(
         default_factory=lambda: [dict(c) for c in DEFAULT_DOWNTIME_CAUSES]
     )
+    welltest: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WELLTEST))
+    allocation: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_ALLOCATION))
 
     def __post_init__(self) -> None:
         # Nested calibration dicts: fill any missing keys from defaults so a partial
@@ -109,6 +135,8 @@ class Config:
         self.gor = {**DEFAULT_GOR, **self.gor}
         self.performance = {**DEFAULT_PERFORMANCE, **self.performance}
         self.downtime = {**DEFAULT_DOWNTIME, **self.downtime}
+        self.welltest = {**DEFAULT_WELLTEST, **self.welltest}
+        self.allocation = {**DEFAULT_ALLOCATION, **self.allocation}
         self._validate()
 
     def _validate(self) -> None:
@@ -139,6 +167,35 @@ class Config:
             raise ValueError("every downtime cause must have a non-empty 'cause' name")
         if any(c.get("weight", 0.0) <= 0.0 for c in self.downtime_causes):
             raise ValueError("every downtime cause must have a positive weight")
+        # Well tests: positive cadence, a stale band that clears the staleness threshold, sane share.
+        wt = self.welltest
+        if wt["interval_days"] < 1:
+            raise ValueError("welltest.interval_days must be >= 1")
+        if not 0.0 <= wt["stale_fraction"] <= 1.0:
+            raise ValueError("welltest.stale_fraction must be in [0, 1]")
+        if not 0 < wt["stale_min_days"] <= wt["stale_max_days"]:
+            raise ValueError("welltest stale band must satisfy 0 < stale_min_days <= stale_max_days")
+        if wt["stale_threshold_days"] < wt["interval_days"]:
+            # Otherwise a healthy well tested within its cadence could itself read as stale.
+            raise ValueError("welltest.stale_threshold_days must be >= interval_days")
+        if wt["stale_min_days"] <= wt["stale_threshold_days"]:
+            # The stale band must clear the threshold so a stale well is unambiguously flagged.
+            raise ValueError("welltest.stale_min_days must exceed stale_threshold_days")
+        if not 0.0 < wt["duration_hours"] <= 24.0:
+            raise ValueError("welltest.duration_hours must be in (0, 24]")
+        # Allocation: thresholds/fractions in range; the misallocation band must clear the anomaly
+        # threshold so a misallocated well's variance is unambiguously anomalous.
+        al = self.allocation
+        if al["anomaly_threshold"] <= 0.0:
+            raise ValueError("allocation.anomaly_threshold must be > 0")
+        if not 0.0 <= al["misalloc_fraction"] <= 1.0:
+            raise ValueError("allocation.misalloc_fraction must be in [0, 1]")
+        if not 0.0 < al["misalloc_bias_min"] <= al["misalloc_bias_max"]:
+            raise ValueError("allocation misalloc bias must satisfy 0 < min <= max")
+        if al["misalloc_bias_min"] <= al["anomaly_threshold"]:
+            raise ValueError("allocation.misalloc_bias_min must exceed anomaly_threshold")
+        if al["healthy_noise_sd"] < 0.0:
+            raise ValueError("allocation.healthy_noise_sd must be >= 0")
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
         # silently samples the reversed interval, so reject min > max up front.
         for group, keys in (
@@ -198,6 +255,18 @@ def deferment_window(start_date: str, end_date: str) -> tuple[str, str, int]:
     month_start = end.replace(day=1)
     start = max(date.fromisoformat(start_date), month_start)
     return start.isoformat(), end.isoformat(), (end - start).days + 1
+
+
+def allocation_period(start_date: str, end_date: str) -> tuple[str, str, int]:
+    """The allocation cycle for the well-test/allocation question (theme 4, issue #6).
+
+    Allocation is a **monthly** cycle, so the current period is the calendar month of ``end_date``
+    (the same "last month" window the deferment question uses), clamped up to the data start.
+    ``days-since-last-test`` is evaluated *as of* ``end_date``; allocation variance is evaluated over
+    this period. Single source of truth for the window shared by the gold and the reference compile.
+    Returns ``(start_iso, end_iso, n_days)``.
+    """
+    return deferment_window(start_date, end_date)
 
 
 def decline_months(start_date: str, end_date: str) -> list[str]:

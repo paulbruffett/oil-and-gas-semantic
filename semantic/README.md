@@ -1,4 +1,4 @@
-# Semantic layer (OSI) — production surveillance + deferment
+# Semantic layer (OSI) — surveillance, deferment, decline, well-test/allocation
 
 The governed metrics/semantic-layer for the base collateral (DESIGN.md §3/§6, ADR 0008/0011),
 authored in the OSI v1.0 encoding (MetricFlow's semantic-manifest dialect).
@@ -11,6 +11,11 @@ authored in the OSI v1.0 encoding (MetricFlow's semantic-manifest dialect).
   - *Deferment & downtime* (theme 2, issue #4): `downtime_hours`, `on_stream_hours`,
     `calendar_days`, `uptime_pct` (`on-stream/calendar × 100`). Deferred volume by cause is a
     compile-assembled KPI (row-level forecast × downtime), not a MetricFlow metric — see ADR 0017.
+  - *Decline & trend* (theme 3, issue #5): `cumulative_oil` (Σ measured oil). Annualized decline
+    vs forecast is a compile-assembled KPI (a log/pow ratio across period buckets) — see ADR 0018.
+  - *Well-test & allocation* (theme 4, issue #6): `well_tests_recorded`, `allocation_factor`.
+    Days-since-last-test (a date-difference vs an as-of date) and allocation variance
+    (`allocated / measured`, a row-level factor × measure product) are compile-assembled — see ADR 0019.
 - `project.yaml` — project configuration (no time spine; the metrics are windowed aggregates).
 
 **Two engines, two jobs (ADR 0011):**

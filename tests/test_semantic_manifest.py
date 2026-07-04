@@ -58,6 +58,24 @@ def test_decline_metrics_defined():
     assert layer.model("well").entity("field").expr == "FIELD_ID"
 
 
+def test_welltest_allocation_metrics_defined():
+    """The well-test & allocation KPIs (§6.3, issue #6) are governed in the semantic layer."""
+    layer = load_semantic_layer()
+    # Well tests + allocation factor are first-class governed metrics.
+    assert {"well_tests_recorded", "allocation_factor"} <= set(layer.metrics)
+    assert layer.metrics["allocation_factor"].type_params["measure"] == "allocation_factor_value"
+    # The WELL_TEST model carries the test-date grain (days-since-test is assembled from MAX(test_date)).
+    wt = layer.model("well_test")
+    assert wt.table == "well_test"
+    assert wt.time_dimension().expr == "TEST_DATE"
+    assert wt.entity("well").expr == "WELL_ID"
+    # PDEN_ALLOC_FACTOR is a from->to factor: two foreign reporting-entity keys + the factor measure.
+    paf = layer.model("pden_alloc_factor")
+    assert paf.entity("from_reporting_entity").expr == "FROM_REPORTING_ENTITY_ID"
+    assert paf.entity("to_reporting_entity").expr == "TO_REPORTING_ENTITY_ID"
+    assert any(m.name == "allocation_factor_value" and m.expr == "ALLOCATION_FACTOR" for m in paf.measures)
+
+
 def test_semantic_layer_columns_conform_to_osdu_profile():
     """Every table/column the manifest references exists in the vendored OSDU PDM profile."""
     layer = load_semantic_layer()

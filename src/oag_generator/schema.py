@@ -7,12 +7,14 @@ gold, and the writer all reference these specs; where generation still spells a 
 a dict key, a mismatch fails loudly at ``pa.table(..., schema=spec.arrow_schema())`` and in the
 conformance test rather than drifting silently.
 
-Canonical subset (6 tables):
+Canonical subset (8 tables):
 - FIELD, WELL                       -- master entities
 - REPORTING_ENTITY                  -- polymorphic pointer volumes/events report against
 - WELL_VOL_DAILY                    -- actual daily oil/gas/water + on-stream hours
 - PRODUCT_VOLUME_SUMMARY            -- the expected/forecast series (QUANTITY_METHOD='Forecast')
 - DOWN_TIME_EVENT                   -- downtime events (cause + duration), deferment use case (#4)
+- WELL_TEST                         -- periodic well tests (rates + date), well-test use case (#6)
+- PDEN_ALLOC_FACTOR                 -- from->to allocation factors, allocation use case (#6)
 """
 
 from __future__ import annotations
@@ -100,13 +102,46 @@ DOWN_TIME_EVENT = TableSpec("DOWN_TIME_EVENT", "down_time_event", (
     ("DURATION_HOURS", pa.float64()),
 ))
 
+# Periodic well tests (well-test/allocation use case, #6). Keyed to the WELL directly (as PPDM
+# WELL_TEST is), carrying test rates with a per-value OUOM column each (ADR 0019).
+WELL_TEST = TableSpec("WELL_TEST", "well_test", (
+    ("WELL_TEST_ID", pa.int64()),
+    ("WELL_ID", pa.int64()),
+    ("UWI", pa.string()),
+    ("TEST_DATE", pa.string()),
+    ("TEST_TYPE", pa.string()),
+    ("DURATION_HOURS", pa.float64()),
+    ("OIL_RATE", pa.float64()),
+    ("OIL_RATE_OUOM", pa.string()),
+    ("GAS_RATE", pa.float64()),
+    ("GAS_RATE_OUOM", pa.string()),
+    ("WATER_RATE", pa.float64()),
+    ("WATER_RATE_OUOM", pa.string()),
+))
+
+# Production allocation factors (allocation use case, #6). A from-entity -> to-entity factor
+# (both REPORTING_ENTITY), NOT a stored allocated-volume table (ADR 0019). The factor value
+# carries its own OUOM ('fraction').
+PDEN_ALLOC_FACTOR = TableSpec("PDEN_ALLOC_FACTOR", "pden_alloc_factor", (
+    ("PDEN_ALLOC_FACTOR_ID", pa.int64()),
+    ("FROM_REPORTING_ENTITY_ID", pa.int64()),
+    ("TO_REPORTING_ENTITY_ID", pa.int64()),
+    ("START_DATE", pa.string()),
+    ("END_DATE", pa.string()),
+    ("PRODUCT", pa.string()),
+    ("ALLOCATION_FACTOR", pa.float64()),
+    ("ALLOCATION_FACTOR_OUOM", pa.string()),
+))
+
 # Emission order.
 TABLES: tuple[TableSpec, ...] = (
     FIELD, WELL, REPORTING_ENTITY, WELL_VOL_DAILY, PRODUCT_VOLUME_SUMMARY, DOWN_TIME_EVENT,
+    WELL_TEST, PDEN_ALLOC_FACTOR,
 )
 
 # Enumerated OSDU reference-data values we emit (from R_* reference tables).
 KIND_WELL = "Well"
+KIND_FIELD = "Field"             # REPORTING_ENTITY_KIND for the allocation from-entity (#6)
 FLOW_PRODUCTION = "Production"
 PERIOD_DAY = "Day"
 PRODUCT_OIL = "Oil"
@@ -114,3 +149,8 @@ QUANTITY_MEASURED = "Measured"   # WELL_VOL_DAILY.VOLUME_METHOD
 QUANTITY_FORECAST = "Forecast"   # PRODUCT_VOLUME_SUMMARY.QUANTITY_METHOD
 FIELD_TYPE = "Oil Field"
 OIL_UOM = "bbl"
+TEST_TYPE_PRODUCTION = "Production"  # WELL_TEST.TEST_TYPE (R_TEST_TYPE)
+OIL_RATE_UOM = "bbl/d"           # WELL_TEST.OIL_RATE_OUOM
+GAS_RATE_UOM = "Mscf/d"          # WELL_TEST.GAS_RATE_OUOM
+WATER_RATE_UOM = "bbl/d"         # WELL_TEST.WATER_RATE_OUOM
+ALLOC_FACTOR_UOM = "fraction"    # PDEN_ALLOC_FACTOR.ALLOCATION_FACTOR_OUOM (dimensionless)

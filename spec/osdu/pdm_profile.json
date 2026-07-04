@@ -35,7 +35,7 @@
         {"name": "ASSOCIATED_OBJECT_ID", "type": "int"},
         {"name": "ASSOCIATED_OBJECT_NAME", "type": "string"}
       ],
-      "reference_values": {"REPORTING_ENTITY_KIND": ["Well"]}
+      "reference_values": {"REPORTING_ENTITY_KIND": ["Well", "Field"]}
     },
     "well_vol_daily": {
       "osdu_table": "WELL_VOL_DAILY",
@@ -86,6 +86,48 @@
         {"name": "END_DATE", "type": "string"},
         {"name": "DURATION_HOURS", "type": "float"}
       ]
+    },
+    "well_test": {
+      "osdu_table": "WELL_TEST",
+      "_note": "OSDU PDM WELL_TEST (the PPDM-3.9 WELL_TEST family the OSDU PDM inherits -- PPDM is lineage only, ADR 0010); keyed to the WELL directly (WELL_ID/UWI). Each rate value carries its own per-value OUOM column (the OSDU PDM stores units per measured value). Deliberate simplifications (ADR 0019): TEST_TYPE is the flat R_TEST_TYPE value column (carried like REPORTING_ENTITY_KIND); a test spans a single TEST_DATE; the dictionary's separate flow-measurement rows (PDEN_WELL_TEST / WELL_TEST_FLOW_MEAS), choke/pressure, run-number and audit columns are omitted. WKS analogue: work-product-component--FlowTest.",
+      "columns": [
+        {"name": "WELL_TEST_ID", "type": "int"},
+        {"name": "WELL_ID", "type": "int"},
+        {"name": "UWI", "type": "string"},
+        {"name": "TEST_DATE", "type": "string"},
+        {"name": "TEST_TYPE", "type": "string"},
+        {"name": "DURATION_HOURS", "type": "float"},
+        {"name": "OIL_RATE", "type": "float"},
+        {"name": "OIL_RATE_OUOM", "type": "string"},
+        {"name": "GAS_RATE", "type": "float"},
+        {"name": "GAS_RATE_OUOM", "type": "string"},
+        {"name": "WATER_RATE", "type": "float"},
+        {"name": "WATER_RATE_OUOM", "type": "string"}
+      ],
+      "reference_values": {
+        "TEST_TYPE": ["Production"],
+        "OIL_RATE_OUOM": ["bbl/d"],
+        "GAS_RATE_OUOM": ["Mscf/d"],
+        "WATER_RATE_OUOM": ["bbl/d"]
+      }
+    },
+    "pden_alloc_factor": {
+      "osdu_table": "PDEN_ALLOC_FACTOR",
+      "_note": "OSDU PDM PDEN_ALLOC_FACTOR (the PPDM-3.9 PDEN allocation-factor table the OSDU PDM inherits -- PPDM is lineage only, ADR 0010; OSDU's WKS-native analogue is RPEN_ALLOCATION_FACTOR): a from-entity -> to-entity allocation factor, NOT a stored allocated-volume table (PDEN_VOL_ALLOC is out of scope). Deliberate simplifications (ADR 0019): the typed source/target PDEN pointers are flattened to FROM_/TO_REPORTING_ENTITY_ID against our REPORTING_ENTITY grain (from = Field-kind group entity, to = Well-kind entity); ALLOCATION_FACTOR carries its own per-value OUOM ('fraction', dimensionless); activity-type/qualifier/method and audit columns are omitted.",
+      "columns": [
+        {"name": "PDEN_ALLOC_FACTOR_ID", "type": "int"},
+        {"name": "FROM_REPORTING_ENTITY_ID", "type": "int"},
+        {"name": "TO_REPORTING_ENTITY_ID", "type": "int"},
+        {"name": "START_DATE", "type": "string"},
+        {"name": "END_DATE", "type": "string"},
+        {"name": "PRODUCT", "type": "string"},
+        {"name": "ALLOCATION_FACTOR", "type": "float"},
+        {"name": "ALLOCATION_FACTOR_OUOM", "type": "string"}
+      ],
+      "reference_values": {
+        "PRODUCT": ["Oil"],
+        "ALLOCATION_FACTOR_OUOM": ["fraction"]
+      }
     }
   }
 }
