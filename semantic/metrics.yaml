@@ -74,3 +74,17 @@ metric:
 # grouped by event_category (ADR 0017). The row-level forecast x downtime product cannot be a
 # MetricFlow metric over separate measures, so the reference compile (compile.compute_deferment)
 # assembles it from the governed expected_oil_volume + downtime_hours measures and reproduces gold.
+---
+# --- Decline & trend (theme 3, issue #5, DESIGN.md §6.3) ---
+metric:
+  name: cumulative_oil
+  description: Cumulative oil produced over the window (bbl) -- Σ measured oil, grouped by well/field.
+  type: simple
+  type_params:
+    measure: actual_oil_volume
+# Decline rate vs forecast (§6.3 "decline rate; cumulative") is a compile-assembled KPI, not a pure
+# aggregate: annualized decline = 1 - (rate_last/rate_first)^(1/span_years) over the first vs last
+# calendar month, computed for actual and forecast oil, and a well is "declining faster than forecast"
+# when its actual decline exceeds its forecast decline (ADR 0018). A log/pow ratio across two period
+# buckets is not expressible as one MetricFlow aggregate, so the reference compile (compile.compute_decline)
+# assembles it from the governed actual_oil_volume + expected_oil_volume measures and reproduces gold.

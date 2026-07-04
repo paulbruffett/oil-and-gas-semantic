@@ -94,7 +94,7 @@ def test_every_implemented_theme_has_its_co_generated_gold(catalog, dataset_dir)
     gold/deferment.json keyed to its catalog gold_id, exactly as theme 1 does.
     """
     implemented = [t for t in catalog.themes if t.status == "implemented"]
-    assert {t.number for t in implemented} >= {1, 2}  # surveillance (#3) + deferment (#4)
+    assert {t.number for t in implemented} >= {1, 2, 3}  # surveillance (#3) + deferment (#4) + decline (#5)
     for theme in implemented:
         for q in theme.questions:
             artifact = dataset_dir / q.gold_artifact
@@ -110,6 +110,16 @@ def test_deferment_theme_matches_the_gold_module(catalog):
     theme = next(t for t in catalog.themes if t.number == 2)
     (question,) = theme.questions
     assert question.gold_id == CATALOG_DEFERMENT_ID == DEFERMENT_QUESTION_ID
+
+
+def test_decline_theme_matches_the_gold_module(catalog):
+    """Theme 3's catalog id is the single source the generator's decline gold is keyed off (issue #5)."""
+    from oag_generator.questions import DECLINE_QUESTION_ID
+
+    theme = next(t for t in catalog.themes if t.number == 3)
+    assert theme.status == "implemented"
+    (question,) = theme.questions
+    assert question.gold_id == DECLINE_QUESTION_ID
 
 
 # --- answer-submission schema -------------------------------------------------------------------

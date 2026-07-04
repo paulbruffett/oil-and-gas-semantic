@@ -21,7 +21,11 @@ import pyarrow.parquet as pq
 
 from oag_generator import schema
 from oag_generator.config import Config, hash_canonical_config, load_config
-from oag_generator.gold import compute_deferment_gold, compute_surveillance_gold
+from oag_generator.gold import (
+    compute_decline_gold,
+    compute_deferment_gold,
+    compute_surveillance_gold,
+)
 
 GENERATOR_VERSION = "0.1.0"
 
@@ -230,6 +234,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
     gold_answers = {
         "surveillance": compute_surveillance_gold(cols, cfg),
         "deferment": compute_deferment_gold(cols, cfg),
+        "decline": compute_decline_gold(cols, cfg),
     }
     gold_paths: dict[str, Path] = {}
     for key, answer in gold_answers.items():

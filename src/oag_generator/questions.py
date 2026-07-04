@@ -147,3 +147,5 @@ def question_id(theme_number: int, *, tier: str = "straight") -> str:
 SURVEILLANCE_QUESTION_ID = question_id(1)
 # The deferment & downtime question (theme 2); imported by the gold + deferment modules (issue #4).
 DEFERMENT_QUESTION_ID = question_id(2)
+# The decline & trend question (theme 3); imported by the gold + decline compile (issue #5).
+DECLINE_QUESTION_ID = question_id(3)

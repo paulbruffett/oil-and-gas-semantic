@@ -86,7 +86,7 @@ def test_byte_stable_across_runs(tmp_path, small_config):
         assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
             f"table {name} is not byte-stable across identical runs"
         )
-    for artifact in ("surveillance", "deferment"):
+    for artifact in ("surveillance", "deferment", "decline"):
         assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes()
 
 
@@ -267,3 +267,71 @@ def test_deferment_gold_matches_kpi_defs(tmp_path, small_config):
     assert gold["total_deferred_oil_bbl"] == pytest.approx(
         sum(c["deferred_oil_bbl"] for c in expected_causes), rel=1e-9
     )
+
+
+def _annual_decline(first, last):
+    """Independent reimplementation of the ADR-0018 annualized-decline formula for the gold test."""
+    (s0, i0, n0), (s1, i1, n1) = first, last
+    if n0 == 0 or n1 == 0:
+        return None
+    r0, r1 = s0 / n0, s1 / n1
+    span = (i1 / n1 - i0 / n0) / 365.25
+    if r0 <= 0.0 or span <= 0.0:
+        return None
+    return 1.0 - (r1 / r0) ** (1.0 / span)
+
+
+def test_decline_gold_matches_kpi_defs(tmp_path, small_config):
+    """Recompute cumulative production + annualized decline vs forecast (§6.3, ADR 0018) independently."""
+    m = generate_dataset(small_config, tmp_path)
+    well = _read(m.tables["well"])
+    rentity = _read(m.tables["reporting_entity"])
+    wvd = _read(m.tables["well_vol_daily"])
+    pvs = _read(m.tables["product_volume_summary"])
+    gold = json.loads(m.gold["decline"].read_text())
+
+    start = date.fromisoformat(small_config["start_date"])
+    dmap = {d: (d[:7], (date.fromisoformat(d) - start).days) for d in set(wvd["VOLUME_DATE"])}
+    well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
+    field_name = dict(zip(well["FIELD_ID"], well["FIELD_NAME"]))
+    re_to_well = {
+        r: o for r, k, o in zip(
+            rentity["REPORTING_ENTITY_ID"], rentity["REPORTING_ENTITY_KIND"], rentity["ASSOCIATED_OBJECT_ID"]
+        ) if k == "Well"
+    }
+
+    actual, forecast, cumulative = {}, {}, {}
+    for wid, d, oil in zip(wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["OIL_VOLUME"]):
+        month, idx = dmap[d]
+        b = actual.setdefault((wid, month), [0.0, 0.0, 0])
+        b[0] += oil; b[1] += idx; b[2] += 1
+        cumulative[wid] = cumulative.get(wid, 0.0) + oil
+    for reid, d, product, method, vol in zip(
+        pvs["REPORTING_ENTITY_ID"], pvs["START_DATE"], pvs["PRODUCT"], pvs["QUANTITY_METHOD"], pvs["VOLUME"]
+    ):
+        if method == "Forecast" and product == "Oil":
+            month, idx = dmap[d]
+            b = forecast.setdefault((re_to_well[reid], month), [0.0, 0.0, 0])
+            b[0] += vol; b[1] += idx; b[2] += 1
+
+    # "Field X" = largest cumulative oil (tie-break field_id).
+    field_cum = {}
+    for wid, cum in cumulative.items():
+        field_cum[well_field[wid]] = field_cum.get(well_field[wid], 0.0) + cum
+    target = min(field_cum, key=lambda f: (-field_cum[f], f))
+    assert gold["field"] == {"field_id": target, "field_name": field_name[target]}
+    assert gold["field_cumulative_oil_bbl"] == pytest.approx(field_cum[target], rel=1e-9)
+
+    months = sorted({month for (_w, month) in actual})
+    assert gold["window"]["months"] == months
+    first_m, last_m = months[0], months[-1]
+
+    expected_faster = []
+    for wid in sorted(w for w, f in well_field.items() if f == target):
+        a = _annual_decline(actual.get((wid, first_m), [0, 0, 0]), actual.get((wid, last_m), [0, 0, 0]))
+        f = _annual_decline(forecast.get((wid, first_m), [0, 0, 0]), forecast.get((wid, last_m), [0, 0, 0]))
+        if a is not None and f is not None and a > f:
+            expected_faster.append({"well_id": wid, "gap": a - f})
+    expected_faster.sort(key=lambda r: (-r["gap"], r["well_id"]))
+    assert [w["well_id"] for w in gold["wells_declining_faster"]] == [w["well_id"] for w in expected_faster]
+    assert gold["n_declining_faster"] == len(expected_faster)

@@ -135,6 +135,8 @@ class Config:
             raise ValueError("downtime.full_day_fraction must be in [0, 1]")
         if not self.downtime_causes:
             raise ValueError("downtime_causes must be non-empty")
+        if any(not c.get("cause") for c in self.downtime_causes):
+            raise ValueError("every downtime cause must have a non-empty 'cause' name")
         if any(c.get("weight", 0.0) <= 0.0 for c in self.downtime_causes):
             raise ValueError("every downtime cause must have a positive weight")
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
@@ -196,6 +198,37 @@ def deferment_window(start_date: str, end_date: str) -> tuple[str, str, int]:
     month_start = end.replace(day=1)
     start = max(date.fromisoformat(start_date), month_start)
     return start.isoformat(), end.isoformat(), (end - start).days + 1
+
+
+def decline_months(start_date: str, end_date: str) -> list[str]:
+    """Distinct calendar months (``YYYY-MM``) spanned by ``[start_date, end_date]``, ascending.
+
+    The decline window (theme 3, issue #5) is the whole dataset, bucketed into calendar months; the
+    ``YYYY-MM`` keys match ``date.isoformat()[:7]`` and DuckDB ``substr(date, 1, 7)`` so the gold and
+    the reference compile bucket days identically. Single source for the period grain shared by both.
+    """
+    start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    months: list[str] = []
+    y, m = start.year, start.month
+    while (y, m) <= (end.year, end.month):
+        months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+    return months
+
+
+def decline_boundary_months(start_date: str, end_date: str) -> tuple[str, str] | None:
+    """The first and last calendar month spanned, or ``None`` if the window spans <2 months.
+
+    Decline is measured between these boundary periods (ADR 0018). ``None`` lets the gold and compile
+    report a null decline rather than dividing by a zero-length span on a single-month dataset.
+    """
+    months = decline_months(start_date, end_date)
+    if len(months) < 2:
+        return None
+    return months[0], months[-1]
 
 
 def hash_canonical_config(canonical: dict[str, Any]) -> str:
