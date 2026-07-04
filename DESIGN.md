@@ -151,7 +151,8 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
 2. **Canonical layer — OSDU/PDM** — the system-of-record model; faithful to OSDU PDM, ingestible by any
    warehouse.
 3. **Semantic / metrics layer — OSI** — governed measures/dimensions/KPIs authored in OSI v1.0, validated
-   by MetricFlow, with DAX / Databricks-Metric-View mappings.
+   by MetricFlow; platform mappings (DAX / Databricks Metric Views / Snowflake Semantic Views) are
+   **contest deliverables per designated round** (ADR 0014), not base collateral.
 4. **Knowledge layer — LPG** — entities, typed relationships, hierarchy, and business vocabulary; optional
    RDF/OWL track for reasoning-tool comparisons.
 5. **Agent / reasoning layer** — AI-over-BI: NL question → consult semantic + knowledge layers → query/tool
@@ -182,9 +183,12 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
 ### Semantic / metrics layer (OSI)
 8. As a builder, I want the KPI set defined once in OSI v1.0 so each platform translates rather than reinvents.
 9. As a builder, I want a MetricFlow reference build that compiles the metrics to SQL so I can validate them.
-10. As a Fabric builder, I want an OSI→DAX measure mapping so I can implement the Power BI semantic model.
-11. As a Databricks builder, I want an OSI→Unity Catalog Metric View mapping.
-12. As a Snowflake builder, I want to consume OSI into Semantic Views / Cortex Analyst.
+10. As a Fabric builder, I want to map OSI→DAX measures so I can implement the Power BI semantic model
+    (a contest deliverable in a Fabric-designated round — ADR 0014).
+11. As a Databricks builder, I want to map OSI→Unity Catalog Metric Views (a round-1 contest
+    deliverable — ADR 0014).
+12. As a Snowflake builder, I want to consume OSI into Semantic Views / Cortex Analyst (a contest
+    deliverable in a Snowflake-designated round — ADR 0014).
 13. As an analyst, I want governed KPI definitions (water cut, uptime, deferred volume, variance, …) so all tools agree on the numbers.
 
 ### Knowledge layer (LPG)
@@ -236,7 +240,9 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
 ### 6.1 Base collateral inventory (the deliverables)
 - **Data generator** (runnable, Python) → Parquet (canonical) + OSDU JSON (secondary) + gold answers.
 - **OSDU/PDM data-model spec** — the entity subset and table shapes.
-- **Semantic layer** — KPI/metric definitions in OSI v1.0 (+ MetricFlow reference + DAX/Metric-View mappings).
+- **Semantic layer** — KPI/metric definitions in OSI v1.0 + the MetricFlow/DuckDB reference compile
+  (ADR 0011). Platform mappings (DAX / Metric Views / Semantic Views) are contest deliverables per
+  designated round (ADR 0014), not base collateral.
 - **Knowledge layer** — the LPG (entities, relationships, vocabulary); optional RDF/OWL track.
 - **Use-case / question catalog** — the six themes below, with gold answers; includes the **adversarial
   tier** (compound / ambiguous / trap questions, expected behavior gold-encoded — ADR 0013).
@@ -300,7 +306,9 @@ outputs are scored on a rubric in which **every dimension has an objective ancho
 panel is the tiebreaker (ADR 0015):
 
 1. **Functional correctness** — answers vs the deterministic gold set, incl. the adversarial tier
-   (objective; not voted).
+   (objective; not voted). Graded on a **held-out evaluation seed** (ADR 0016): gold in the fork is
+   build-time collateral; the harness regenerates with an unseen seed at round close, so implementations
+   must be seed-agnostic.
 2. **Spec fidelity & completeness** — anchored by the contest issues' acceptance-criteria checklist
    (objective); the panel judges conformance quality (OSDU, six-layer architecture, OSI + LPG as
    specified) on top. Theme breadth is a **reported fact**, not a score (ADR 0015).
@@ -339,6 +347,9 @@ anchors are computed, not voted. **Effort-to-build** is captured as a **reported
 - **Provisioning (round 1):** one Databricks workspace; per-contestant catalog + service principal with
   scoped Unity Catalog grants; environments fully rebuildable from the fork; credentials never enter the
   repo. **Forks stay private mid-round**, published at round close.
+- **Evaluation seed (ADR 0016):** dimension 1 and the round-2 re-grade run against a dataset regenerated
+  with a **held-out seed** contestants never saw; the seed is published with the results so grading is
+  reproducible. The webapp acceptance checklist is evaluated against the eval-seed gold.
 
 **Effort-metering recipe.** Report tokens broken out (input / output / cacheRead / cacheCreation) and a
 **notional cost = tokens × public API price** (Max is flat-rate; this is a modeled ROM). For Claude Code on
@@ -356,7 +367,8 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - **Highest seam — generator output.** Run the generator on a fixed seed; assert gold-answer computations
   match the KPI definitions (§6.3) and that outputs are byte-stable across runs.
 - **Semantic seam — MetricFlow compile.** Assert compiled SQL for each KPI returns expected values on the
-  synthetic data; validate the DAX / Metric-View mappings against the same expected values.
+  synthetic data. (Platform mappings are contest deliverables — ADR 0014 — validated by the harness
+  against the same expected values, not by shell engineering tests.)
 - **Knowledge seam — LPG.** Assert entity resolution and relationship traversal return known results on a
   fixed graph.
 - **What makes a good test here:** drive each module through its public interface against deterministic
@@ -382,6 +394,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0013 — Axis-B discrimination scope: sealed change-request round, neutral webapp vertical, adversarial question tier — every addition objectively anchored](docs/adr/0013-axis-b-discrimination-scope.md)
 - [0014 — Axis-A demonstrations emerge from the graded contest; one designated platform per round (round 1: Databricks); no independent reference instantiation](docs/adr/0014-axis-a-emerges-from-contest-designated-platform.md)
 - [0015 — Contest operations policy + rubric hardening: three-class amendments, submit-when-done rounds, pre-tag sealed custody, locus-adherence grading, objective anchors everywhere](docs/adr/0015-contest-operations-and-rubric-hardening.md)
+- [0016 — Functional correctness is graded on a held-out evaluation seed, not the fork-point dataset](docs/adr/0016-held-out-evaluation-seed-grading.md)
 
 ---
 
