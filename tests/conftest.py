@@ -86,3 +86,29 @@ def welltest_dataset_dir(tmp_path_factory, welltest_config) -> Path:
 @pytest.fixture
 def welltest_gold(welltest_dataset_dir) -> dict:
     return json.loads((welltest_dataset_dir / "gold" / "welltest.json").read_text())
+
+
+@pytest.fixture
+def build_oracle_submissions():
+    """A factory that builds the *oracle* submission set (gold values) for a generated dataset.
+
+    Shared by the harness tests so the catalog-walk + spec + gold-exists loop lives in one place --
+    when a new gradable theme lands, only this helper changes, and every harness test picks it up.
+    """
+    from oag_generator.questions import load_catalog
+    from oag_harness.functional import SPECS, submission_from_gold
+
+    def _build(dataset_dir) -> dict:
+        catalog = load_catalog()
+        subs: dict = {}
+        for theme in catalog.themes:
+            for q in theme.questions:
+                spec = SPECS.get(q.gold_id)
+                gold_path = dataset_dir / q.gold_artifact
+                if spec is None or not gold_path.exists():
+                    continue
+                gold = json.loads(gold_path.read_text())
+                subs[q.id] = submission_from_gold(gold, spec, q.id, q.expected_behavior)
+        return subs
+
+    return _build

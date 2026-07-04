@@ -20,6 +20,7 @@ dependencies = [
 [project.scripts]
 oag-generate = "oag_generator.cli:main"
 oag-answer = "oag_semantic.cli:main"
+oag-assess = "oag_harness.cli:main"
 
 [dependency-groups]
 dev = [
@@ -37,7 +38,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/oag_generator", "src/oag_semantic"]
+packages = ["src/oag_generator", "src/oag_semantic", "src/oag_harness"]
 
 # The question catalog + submission schema live at the repo root (spec/questions) as standalone
 # versioned base artifacts, but the base package loads them at run time. Force-include a copy into
