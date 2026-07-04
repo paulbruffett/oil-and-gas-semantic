@@ -1,0 +1,7 @@
+# Functional correctness is graded on a held-out evaluation seed, not the fork-point dataset
+
+**Context.** Gold answers are co-emitted with the data and live in the public repo — they ship inside the fork-point dataset every contestant builds against. A contestant agent graded on functional correctness could read the gold artifact and echo the values back, silently inflating the one dimension the design treats as its objective bedrock; instructing agents not to look is not verification.
+
+**Decision.** Contestants build against the frozen fork-point dataset as before, but **dimension 1 (and the round-2 re-grade) is graded on a held-out evaluation seed**: at round close the harness regenerates the dataset with a seed contestants never saw (same config schema, different seed), runs each implementation against it, and grades answers — and the webapp acceptance checklist — against the eval-seed gold. Implementations must therefore be **seed-agnostic** (parameterized on the dataset, not its values), which the contest issues and per-assistant plan state explicitly. The eval seed is published with the results so anyone can reproduce the grading.
+
+**Why.** Determinism makes this nearly free: a correct implementation — governed metrics over whatever data is loaded — answers correctly on any seed, while a gold-echoing or value-hardcoding one collapses. It converts "don't cheat" from an instruction into a property the harness verifies, without hiding any collateral or complicating the build round.

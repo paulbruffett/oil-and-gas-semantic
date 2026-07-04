@@ -103,11 +103,14 @@ Each merge unblocks the next slice(s). Repeat until the `ready-for-agent` label 
 
 ## Dependency order for this repo
 
-`#2` (prefactor) → `#3` (hero, full end-to-end) → then the **shell halves** of `#4–#8` (data/gold/OSI
-definitions; `#14` question catalog first) and `#11` fan out; `#9` needs only `#14`; `#10` needs only
-`#2`; `#13` (Volve calibration) must land **before the Axis-B fork-point tag**. The `axis-b-contest`
-issues are built in per-assistant **forks after the tag**, not in this repo (ADR 0012). See the
-[issues list](https://github.com/paulbruffett/oil-and-gas-semantic/issues) and each issue's
+`#2` (prefactor) → `#3` (hero, full end-to-end) → `#14` (question catalog + answer schema) → then the
+**shell halves** of `#4–#8` fan out; `#9` needs only `#14`; `#10` needs only `#2`; `#22` (adversarial
+tier) needs `#4`/`#6`/`#14`; `#23` (webapp spec) needs `#14`; `#24` (sealed protocol) needs `#9`;
+`#15` (OSDU JSON export) needs the entity-adding slices `#4`/`#6`/`#8`; `#13` (Volve calibration) is
+independent. **Everything `ready-for-agent` — plus the sealed-set sha256 (ADR 0015) — lands before the
+Axis-B fork-point tag.** The `axis-b-contest` issues are built in per-assistant **forks after the tag**,
+not in this repo (ADR 0012); dimension-1 grading runs on a **held-out evaluation seed** (ADR 0016). See
+the [issues list](https://github.com/paulbruffett/oil-and-gas-semantic/issues) and each issue's
 `Blocked by`.
 
 ## Conventions this flow depends on
