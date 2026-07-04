@@ -14,7 +14,7 @@ Canonical subset (8 tables):
 - PRODUCT_VOLUME_SUMMARY            -- the expected/forecast series (QUANTITY_METHOD='Forecast')
 - DOWN_TIME_EVENT                   -- downtime events (cause + duration), deferment use case (#4)
 - WELL_TEST                         -- periodic well tests (rates + date), well-test use case (#6)
-- PDEN_ALLOC_FACTOR                 -- from->to allocation factors, allocation use case (#6)
+- RPEN_ALLOCATION_FACTOR                 -- from->to allocation factors, allocation use case (#6)
 """
 
 from __future__ import annotations
@@ -122,8 +122,8 @@ WELL_TEST = TableSpec("WELL_TEST", "well_test", (
 # Production allocation factors (allocation use case, #6). A from-entity -> to-entity factor
 # (both REPORTING_ENTITY), NOT a stored allocated-volume table (ADR 0019). The factor value
 # carries its own OUOM ('fraction').
-PDEN_ALLOC_FACTOR = TableSpec("PDEN_ALLOC_FACTOR", "pden_alloc_factor", (
-    ("PDEN_ALLOC_FACTOR_ID", pa.int64()),
+RPEN_ALLOCATION_FACTOR = TableSpec("RPEN_ALLOCATION_FACTOR", "rpen_allocation_factor", (
+    ("RPEN_ALLOCATION_FACTOR_ID", pa.int64()),
     ("FROM_REPORTING_ENTITY_ID", pa.int64()),
     ("TO_REPORTING_ENTITY_ID", pa.int64()),
     ("START_DATE", pa.string()),
@@ -136,7 +136,7 @@ PDEN_ALLOC_FACTOR = TableSpec("PDEN_ALLOC_FACTOR", "pden_alloc_factor", (
 # Emission order.
 TABLES: tuple[TableSpec, ...] = (
     FIELD, WELL, REPORTING_ENTITY, WELL_VOL_DAILY, PRODUCT_VOLUME_SUMMARY, DOWN_TIME_EVENT,
-    WELL_TEST, PDEN_ALLOC_FACTOR,
+    WELL_TEST, RPEN_ALLOCATION_FACTOR,
 )
 
 # Enumerated OSDU reference-data values we emit (from R_* reference tables).
@@ -153,4 +153,4 @@ TEST_TYPE_PRODUCTION = "Production"  # WELL_TEST.TEST_TYPE (R_TEST_TYPE)
 OIL_RATE_UOM = "bbl/d"           # WELL_TEST.OIL_RATE_OUOM
 GAS_RATE_UOM = "Mscf/d"          # WELL_TEST.GAS_RATE_OUOM
 WATER_RATE_UOM = "bbl/d"         # WELL_TEST.WATER_RATE_OUOM
-ALLOC_FACTOR_UOM = "fraction"    # PDEN_ALLOC_FACTOR.ALLOCATION_FACTOR_OUOM (dimensionless)
+ALLOC_FACTOR_UOM = "fraction"    # RPEN_ALLOCATION_FACTOR.ALLOCATION_FACTOR_OUOM (dimensionless)

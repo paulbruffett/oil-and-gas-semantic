@@ -85,7 +85,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     pvs = schema.PRODUCT_VOLUME_SUMMARY.empty_columns()
     dte = schema.DOWN_TIME_EVENT.empty_columns()
     wt = schema.WELL_TEST.empty_columns()
-    paf = schema.PDEN_ALLOC_FACTOR.empty_columns()
+    paf = schema.RPEN_ALLOCATION_FACTOR.empty_columns()
 
     well_seq = 0
     wvd_seq = 0
@@ -219,7 +219,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
         schema.PRODUCT_VOLUME_SUMMARY.key: pvs,
         schema.DOWN_TIME_EVENT.key: dte,
         schema.WELL_TEST.key: wt,
-        schema.PDEN_ALLOC_FACTOR.key: paf,
+        schema.RPEN_ALLOCATION_FACTOR.key: paf,
     }
 
 
@@ -235,7 +235,7 @@ def _build_welltest_allocation(
     wt: dict[str, list],
     paf: dict[str, list],
 ) -> None:
-    """Emit WELL_TEST + PDEN_ALLOC_FACTOR rows and the allocation from-entities (ADR 0019).
+    """Emit WELL_TEST + RPEN_ALLOCATION_FACTOR rows and the allocation from-entities (ADR 0019).
 
     Two-population signals mirror the impaired-well performance model (ADR 0009): a stale-test
     minority (last test older than the staleness threshold) and a misallocated minority (a biased
@@ -330,7 +330,7 @@ def _build_welltest_allocation(
                 factor = ideal * (1.0 + rng.normal(0.0, al["healthy_noise_sd"]))
             factor = max(factor, 0.0)
             paf_seq += 1
-            paf["PDEN_ALLOC_FACTOR_ID"].append(paf_seq)
+            paf["RPEN_ALLOCATION_FACTOR_ID"].append(paf_seq)
             paf["FROM_REPORTING_ENTITY_ID"].append(from_re_id)
             paf["TO_REPORTING_ENTITY_ID"].append(well_id)  # Well-kind RE id == well_id (main loop)
             paf["START_DATE"].append(alloc_start)

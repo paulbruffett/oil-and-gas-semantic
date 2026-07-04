@@ -206,17 +206,17 @@ semantic_model:
       agg_time_dimension: test_date
 ---
 semantic_model:
-  name: pden_alloc_factor
-  description: OSDU PDM PDEN_ALLOC_FACTOR -- from->to allocation factors for the allocation use case (#6).
+  name: rpen_allocation_factor
+  description: OSDU PDM RPEN_ALLOCATION_FACTOR -- from->to allocation factors for the allocation use case (#6).
   node_relation:
     schema_name: main
-    alias: pden_alloc_factor
+    alias: rpen_allocation_factor
   defaults:
     agg_time_dimension: alloc_start_date
   entities:
-    - name: pden_alloc_factor
+    - name: rpen_allocation_factor
       type: primary
-      expr: PDEN_ALLOC_FACTOR_ID
+      expr: RPEN_ALLOCATION_FACTOR_ID
     - name: from_reporting_entity
       type: foreign
       expr: FROM_REPORTING_ENTITY_ID

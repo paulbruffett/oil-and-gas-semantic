@@ -423,7 +423,7 @@ def test_welltest_compile_ignores_non_well_kind_and_non_oil_rows(welltest_datase
     period_end = g["allocation_period"]["end"]
 
     # A non-Oil factor for an existing well in-period, huge factor.
-    _append_row(paths["pden_alloc_factor"], {
+    _append_row(paths["rpen_allocation_factor"], {
         "TO_REPORTING_ENTITY_ID": 1, "START_DATE": period_start, "END_DATE": period_end,
         "PRODUCT": "Gas", "ALLOCATION_FACTOR": 9.9,
     })
@@ -433,7 +433,7 @@ def test_welltest_compile_ignores_non_well_kind_and_non_oil_rows(welltest_datase
         "REPORTING_ENTITY_ID": 999999, "REPORTING_ENTITY_KIND": "Facility",
         "ASSOCIATED_OBJECT_ID": 1,
     })
-    _append_row(paths["pden_alloc_factor"], {
+    _append_row(paths["rpen_allocation_factor"], {
         "TO_REPORTING_ENTITY_ID": 999999, "START_DATE": period_start, "END_DATE": period_end,
         "PRODUCT": "Oil", "ALLOCATION_FACTOR": 9.9,
     })

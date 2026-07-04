@@ -99,18 +99,18 @@ Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/pro
 | WATER_RATE | N | NUMERIC(20,10) | | | Water rate measured at test. |
 | WATER_RATE_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit of measure for WATER_RATE. |
 
-*`WELL_TEST` is the OSDU PDM (PPDM-3.9-based) well-test table; PPDM is cited as lineage only (ADR 0010). The OSDU PDM stores each measured value with its own OUOM column (`R_UOM`), which we honour per rate. `TEST_TYPE` is the flat R_TEST_TYPE value column (carried like `REPORTING_ENTITY_KIND`). A generated test spans a single TEST_DATE; the separate flow-measurement rows (`PDEN_WELL_TEST` / `WELL_TEST_FLOW_MEAS`), choke/pressure, run-number and audit columns are omitted. Test rates are the well's metered daily volumes on the test date. WKS analogue: `work-product-component--FlowTest`. See ADR 0019.*
+*`WELL_TEST` is the OSDU PDM (PPDM-3.9-based) well-test table — verified present in the OSDU PDM v1.0 Well-Test data model (2026-07); PPDM is cited as lineage only (ADR 0010). The OSDU PDM stores each measured value with its own OUOM column (`R_UOM`), which we honour per rate. In the OSDU model the rates live in child tables (`WELL_TEST_FLOW_PERIOD` / `WELL_TEST_FLOW_MEASUREMENT` / `WELL_TEST_MEASUREMENT`); we **denormalize** the oil/gas/water test rates onto `WELL_TEST`. `TEST_TYPE` is the flat `R_WELL_TEST_TYPE` value column (carried like `REPORTING_ENTITY_KIND`). A generated test spans a single TEST_DATE; validation/choke/pressure, run-number and audit columns are omitted. Test rates are the well's metered daily volumes on the test date. WKS analogue: `work-product-component--FlowTest`. See ADR 0019.*
 
-## PDEN_ALLOC_FACTOR  (production allocation factors; allocation use case, issue #6)
+## RPEN_ALLOCATION_FACTOR  (production allocation factors; allocation use case, issue #6)
 | Column | Nullable | Type | Key | Ref | Comment |
 |---|---|---|---|---|---|
-| PDEN_ALLOC_FACTOR_ID | Y | INTEGER | P | | Primary key of the allocation factor. |
-| FROM_REPORTING_ENTITY_ID | Y | INTEGER | | REPORTING_ENTITY | Source (from) entity — the group/field measurement point being apportioned. |
-| TO_REPORTING_ENTITY_ID | Y | INTEGER | | REPORTING_ENTITY | Target (to) entity — the well receiving the allocated share. |
+| RPEN_ALLOCATION_FACTOR_ID | Y | INTEGER | P | | Primary key of the allocation factor. |
+| FROM_REPORTING_ENTITY_ID | Y | INTEGER | | REPORTING_ENTITY | Source (from) RPEN — the group/field measurement point being apportioned. |
+| TO_REPORTING_ENTITY_ID | Y | INTEGER | | REPORTING_ENTITY | Target (to) RPEN — the well receiving the allocated share. |
 | START_DATE | Y | TIMESTAMP | | | Start of the effective allocation period. |
 | END_DATE | Y | TIMESTAMP | | | End of the effective allocation period. |
 | PRODUCT | Y | CHARACTER VARYING(40) | | R_REPORTING_PRODUCT | Product the factor applies to (Oil, Gas, Water). |
 | ALLOCATION_FACTOR | N | NUMERIC(14,10) | | | The apportioning factor (share of the from-entity's volume). |
 | ALLOCATION_FACTOR_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit for the factor (dimensionless 'fraction'). |
 
-*`PDEN_ALLOC_FACTOR` is the OSDU PDM (PPDM-3.9-based) production allocation-factor table; PPDM is cited as lineage only (ADR 0010) and OSDU's WKS-native analogue is `RPEN_ALLOCATION_FACTOR`. It is a **from-entity → to-entity factor**, deliberately **not** a stored allocated-volume table (`PDEN_VOL_ALLOC` is out of scope — allocated volume is computed as `from-measured × factor`, so it can never drift). The typed source/target PDEN pointers are flattened to `FROM_/TO_REPORTING_ENTITY_ID` against our `REPORTING_ENTITY` grain (from = a Field-kind row, to = a Well-kind row); activity-type/qualifier/method and audit columns are omitted. The factor carries its own per-value OUOM. See ADR 0019.*
+*`RPEN_ALLOCATION_FACTOR` is the OSDU PDM (PPDM-3.9-based) production allocation-factor table — the OSDU-published table that records each **from RPEN** and **to RPEN** and the allocation factor (verified against the OSDU PDM v1.0 Volume-Relevant + Well-Test data-model pages, 2026-07). `RPEN` = `REPORTING_ENTITY`, so it is natively a **from-entity → to-entity factor**, and the PPDM-3.9 analogue `PDEN_ALLOC_FACTOR` is lineage only (ADR 0010). It is deliberately **not** a stored allocated-volume table (`PDEN_VOL_ALLOC` is out of scope — allocated volume is computed as `from-measured × factor`, so it can never drift). We carry flat `FROM_/TO_REPORTING_ENTITY_ID` keys (from = a Field-kind row, to = a Well-kind row); qualifier/method and audit columns are omitted. The factor carries its own per-value OUOM. Exact OSDU column spellings were not machine-verified from the deep dictionary page, so the columns above are a deliberate ADR-0019 profile selection. See ADR 0019.*

@@ -17,7 +17,7 @@ from oag_generator import generate_dataset
 
 CANONICAL_TABLES = [
     "field", "well", "reporting_entity", "well_vol_daily", "product_volume_summary", "down_time_event",
-    "well_test", "pden_alloc_factor",
+    "well_test", "rpen_allocation_factor",
 ]
 
 
@@ -352,12 +352,12 @@ def test_decline_gold_matches_kpi_defs(tmp_path, small_config):
 
 
 def test_emits_well_test_and_allocation_tables(tmp_path, welltest_config):
-    """WELL_TEST + PDEN_ALLOC_FACTOR rows exist and are referentially + physically consistent."""
+    """WELL_TEST + RPEN_ALLOCATION_FACTOR rows exist and are referentially + physically consistent."""
     m = generate_dataset(welltest_config, tmp_path)
     well = _read(m.tables["well"])
     rentity = _read(m.tables["reporting_entity"])
     wt = _read(m.tables["well_test"])
-    paf = _read(m.tables["pden_alloc_factor"])
+    paf = _read(m.tables["rpen_allocation_factor"])
 
     # Well tests are keyed to real wells; each is a single-day production test with per-value OUOMs.
     assert len(wt["WELL_TEST_ID"]) > 0
@@ -373,7 +373,7 @@ def test_emits_well_test_and_allocation_tables(tmp_path, welltest_config):
 
     # Allocation is a from-entity -> to-entity factor: FROM is a Field-kind entity, TO a Well-kind one.
     re_kind = dict(zip(rentity["REPORTING_ENTITY_ID"], rentity["REPORTING_ENTITY_KIND"]))
-    assert len(paf["PDEN_ALLOC_FACTOR_ID"]) == len(well["WELL_ID"])  # one factor per well/period
+    assert len(paf["RPEN_ALLOCATION_FACTOR_ID"]) == len(well["WELL_ID"])  # one factor per well/period
     assert all(re_kind[fr] == "Field" for fr in paf["FROM_REPORTING_ENTITY_ID"])
     assert all(re_kind[to] == "Well" for to in paf["TO_REPORTING_ENTITY_ID"])
     assert set(paf["PRODUCT"]) == {"Oil"}
@@ -393,7 +393,7 @@ def test_welltest_gold_matches_kpi_defs(tmp_path, welltest_config):
     rentity = _read(m.tables["reporting_entity"])
     wvd = _read(m.tables["well_vol_daily"])
     wt = _read(m.tables["well_test"])
-    paf = _read(m.tables["pden_alloc_factor"])
+    paf = _read(m.tables["rpen_allocation_factor"])
     gold = json.loads(m.gold["welltest"].read_text())
 
     as_of = date.fromisoformat(welltest_config["end_date"])

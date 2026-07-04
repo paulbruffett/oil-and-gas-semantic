@@ -574,7 +574,7 @@ def compute_welltest(
     wt_model = layer.model("well_test")
     wvd_model, actual_measure = layer.measure("actual_oil_volume")
     _, factor_measure = layer.measure("allocation_factor_value")
-    paf_model = layer.model("pden_alloc_factor")
+    paf_model = layer.model("rpen_allocation_factor")
     well_model = layer.model("well")
     re_model = layer.model("reporting_entity")
 

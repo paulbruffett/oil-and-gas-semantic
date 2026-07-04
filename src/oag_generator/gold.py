@@ -559,7 +559,7 @@ def compute_welltest_gold(cols: dict[str, dict[str, list]], config: Config) -> d
         )
         if kind == schema.KIND_WELL
     }
-    paf = cols[schema.PDEN_ALLOC_FACTOR.key]
+    paf = cols[schema.RPEN_ALLOCATION_FACTOR.key]
     factor_by_well: dict[int, float] = {}
     for to_re, sdate, edate, product, factor in zip(
         paf["TO_REPORTING_ENTITY_ID"],

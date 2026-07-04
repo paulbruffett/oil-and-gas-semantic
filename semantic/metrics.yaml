@@ -111,6 +111,6 @@ metric:
 #
 # Allocation-variance (§6.3 "allocation variance = allocated / measured") is likewise compile-assembled:
 # allocated = field_measured x ALLOCATION_FACTOR is a row-level product of a measure on
-# PDEN_ALLOC_FACTOR and a summed measure on WELL_VOL_DAILY (different models), which -- like deferred
+# RPEN_ALLOCATION_FACTOR and a summed measure on WELL_VOL_DAILY (different models), which -- like deferred
 # volume (ADR 0017) -- is not one aggregate over separate measures. So OSI governs the allocation_factor
 # metric + the actual_oil_volume measure, and compile.compute_welltest assembles the ratio.

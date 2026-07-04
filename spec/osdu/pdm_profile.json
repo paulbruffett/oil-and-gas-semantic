@@ -89,7 +89,7 @@
     },
     "well_test": {
       "osdu_table": "WELL_TEST",
-      "_note": "OSDU PDM WELL_TEST (the PPDM-3.9 WELL_TEST family the OSDU PDM inherits -- PPDM is lineage only, ADR 0010); keyed to the WELL directly (WELL_ID/UWI). Each rate value carries its own per-value OUOM column (the OSDU PDM stores units per measured value). Deliberate simplifications (ADR 0019): TEST_TYPE is the flat R_TEST_TYPE value column (carried like REPORTING_ENTITY_KIND); a test spans a single TEST_DATE; the dictionary's separate flow-measurement rows (PDEN_WELL_TEST / WELL_TEST_FLOW_MEAS), choke/pressure, run-number and audit columns are omitted. WKS analogue: work-product-component--FlowTest.",
+      "_note": "OSDU PDM WELL_TEST (verified present in the OSDU PDM v1.0 Well-Test data model, 2026-07; the PPDM-3.9 WELL_TEST family is lineage only, ADR 0010); keyed to the WELL directly (WELL_ID/UWI). Each rate value carries its own per-value OUOM column (the OSDU PDM stores units per measured value). Deliberate simplifications (ADR 0019): the OSDU model splits rates across child tables WELL_TEST_FLOW_PERIOD / WELL_TEST_FLOW_MEASUREMENT / WELL_TEST_MEASUREMENT -- we denormalize the oil/gas/water test rates onto WELL_TEST; TEST_TYPE is the flat R_WELL_TEST_TYPE value column (carried like REPORTING_ENTITY_KIND); a test spans a single TEST_DATE; validation/choke/pressure, run-number and audit columns are omitted. WKS analogue: work-product-component--FlowTest.",
       "columns": [
         {"name": "WELL_TEST_ID", "type": "int"},
         {"name": "WELL_ID", "type": "int"},
@@ -111,11 +111,11 @@
         "WATER_RATE_OUOM": ["bbl/d"]
       }
     },
-    "pden_alloc_factor": {
-      "osdu_table": "PDEN_ALLOC_FACTOR",
-      "_note": "OSDU PDM PDEN_ALLOC_FACTOR (the PPDM-3.9 PDEN allocation-factor table the OSDU PDM inherits -- PPDM is lineage only, ADR 0010; OSDU's WKS-native analogue is RPEN_ALLOCATION_FACTOR): a from-entity -> to-entity allocation factor, NOT a stored allocated-volume table (PDEN_VOL_ALLOC is out of scope). Deliberate simplifications (ADR 0019): the typed source/target PDEN pointers are flattened to FROM_/TO_REPORTING_ENTITY_ID against our REPORTING_ENTITY grain (from = Field-kind group entity, to = Well-kind entity); ALLOCATION_FACTOR carries its own per-value OUOM ('fraction', dimensionless); activity-type/qualifier/method and audit columns are omitted.",
+    "rpen_allocation_factor": {
+      "osdu_table": "RPEN_ALLOCATION_FACTOR",
+      "_note": "OSDU PDM RPEN_ALLOCATION_FACTOR -- the OSDU-published production allocation-factor table, which records each 'from' RPEN (reporting entity) and 'to' RPEN and the allocation factor (verified against the OSDU PDM v1.0 Volume-Relevant + Well-Test data-model pages, 2026-07). RPEN = REPORTING_ENTITY, so this is natively a from-entity -> to-entity factor; the PPDM-3.9 analogue is PDEN_ALLOC_FACTOR (lineage only, ADR 0010). NOT a stored allocated-volume table (PDEN_VOL_ALLOC is out of scope). Deliberate simplifications (ADR 0019): we carry flat FROM_/TO_REPORTING_ENTITY_ID keys (from = Field-kind group entity, to = Well-kind entity); ALLOCATION_FACTOR carries its own per-value OUOM ('fraction', dimensionless); qualifier/method and audit columns are omitted. Exact OSDU column spellings were not machine-verified from the deep dictionary page, so the column profile below is a deliberate ADR-0019 selection.",
       "columns": [
-        {"name": "PDEN_ALLOC_FACTOR_ID", "type": "int"},
+        {"name": "RPEN_ALLOCATION_FACTOR_ID", "type": "int"},
         {"name": "FROM_REPORTING_ENTITY_ID", "type": "int"},
         {"name": "TO_REPORTING_ENTITY_ID", "type": "int"},
         {"name": "START_DATE", "type": "string"},
