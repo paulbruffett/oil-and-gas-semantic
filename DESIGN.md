@@ -277,9 +277,13 @@ questions are graded as objectively as the straight ones.
 ## 7. The two comparison axes — assessment
 
 ### Axis A — platform capability demonstration
-For each platform, instantiate all six layers end-to-end and **exercise** the reference architecture with
-the use-case suite. The deliverable is a working demonstration + a reproducible instantiation guide, not a
-score. Success = the pattern works natively on the platform and answers the use cases.
+Axis-A demonstrations **emerge from the graded contest** (ADR 0014) — there is no independent reference
+instantiation. Each contest round designates one platform (**round 1: Databricks**); every contestant
+builds all six layers end-to-end on it, and the **best output is curated** into that platform's working
+demonstration + reproducible instantiation guide. Platform comparison = re-running the contest on another
+designated platform. Success = the pattern works natively on the platform and answers the use cases.
+Round 1 doubles as spec-validation for the platform-native path (OSI → Metric View); a spec-defect
+amendment rule is agreed before the round starts.
 
 ### Axis B — competing-implementation code review
 Each coding assistant implements the design (from its per-assistant plan), building the open
@@ -299,7 +303,10 @@ outputs are scored on a rubric:
 **Method.** The contest runs in **two rounds** (ADR 0013): round 1 builds the `axis-b-contest` issues
 (including the webapp vertical, graded against its gold-anchored acceptance checklist plus dimensions
 2–7); round 2 releases the sealed change-request set, which every contestant applies to its own fork and
-the harness re-grades. A **multi-LLM assessor panel** scores dimensions 2–7 (averages + spread surface
+the harness re-grades. All contestants in a round build on the **designated platform** (round 1:
+Databricks — ADR 0014) so model quality isn't confounded with platform differences; a reproducible
+instantiation guide is part of each contestant's deliverables (dimension 7). The webapp's own tech stack
+remains each contestant's graded choice. A **multi-LLM assessor panel** scores dimensions 2–7 (averages + spread surface
 disagreement) using review/assessment skills; dimensions 1 and 8 are computed objectively.
 **Effort-to-build** is captured as a **reported (not scored) signal**.
 
@@ -343,6 +350,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0011 — MetricFlow validates the OSI manifest; DuckDB is the neutral reference-compile engine (refines 0008)](docs/adr/0011-metricflow-validates-manifest-duckdb-reference-compile.md)
 - [0012 — Shell/contest boundary: hero built in-repo as scaffolding; use cases 2–6 split at the data seam; Axis-B work built in forks from a frozen tag](docs/adr/0012-shell-contest-boundary-axis-b.md)
 - [0013 — Axis-B discrimination scope: sealed change-request round, neutral webapp vertical, adversarial question tier — every addition objectively anchored](docs/adr/0013-axis-b-discrimination-scope.md)
+- [0014 — Axis-A demonstrations emerge from the graded contest; one designated platform per round (round 1: Databricks); no independent reference instantiation](docs/adr/0014-axis-a-emerges-from-contest-designated-platform.md)
 
 ---
 

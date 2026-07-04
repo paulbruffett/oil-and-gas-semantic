@@ -124,7 +124,10 @@ issues are built in per-assistant **forks after the tag**, not in this repo (ADR
 
 ## Project-specific: the two comparison axes
 
-- **Axis A** (platform): instantiate the merged slices on a target warehouse and *demonstrate* the pattern.
+- **Axis A** (platform): demonstrations **emerge from the contest** (ADR 0014) — no independent
+  reference instantiation. The best contestant output on the round's designated platform is curated into
+  that platform's demonstration + instantiation guide; comparing platforms = re-running the contest on
+  another designated platform.
 - **Axis B** (coding assistant): the in-repo Phase-5 loop builds **shell issues only**
   (`ready-for-agent`); it is neutral scaffolding, **excluded from Axis-B scoring** (ADR 0012). Each
   competing assistant **forks at the tagged fork point** (cut after all shell issues + `#13` merge,
@@ -134,4 +137,5 @@ issues are built in per-assistant **forks after the tag**, not in this repo (ADR
   The contest runs in **two rounds** (ADR 0013): round 1 = the `axis-b-contest` builds (including the
   webapp vertical and the adversarial question tier); round 2 = the **sealed change-request set** is
   released, each contestant applies it to its own fork, and the harness re-grades (correctness + diff
-  blast radius).
+  blast radius). All contestants in a round build on the **designated platform** — round 1: **Databricks**
+  (ADR 0014) — and ship a reproducible instantiation guide as part of their deliverables.
