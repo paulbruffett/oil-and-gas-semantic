@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/paulbruffett/oil-and-gas-semantic/spec/questions/answer_submission.schema.json",
+  "title": "Answer submission",
+  "description": "The minimal structured output every implementation returns for a catalog question (ADR 0005, DESIGN.md §6.4): a natural-language answer + key numeric value(s) + optional provenance. `behavior` lets the adversarial tier (ADR 0015) encode expected behavior -- and a submission report its actual behavior -- so ambiguous/trap questions grade as objectively as straight ones. This schema governs both submitted answers and the behavior-encoding of gold answers.",
+  "type": "object",
+  "required": ["question_id", "answer", "key_values"],
+  "additionalProperties": false,
+  "properties": {
+    "question_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The catalog question id (spec/questions/catalog.yaml). Ties the submission to its gold answer."
+    },
+    "answer": {
+      "type": "string",
+      "description": "Natural-language answer. For clarification/refusal behaviors, the question asked or the reason to refuse."
+    },
+    "key_values": {
+      "type": "object",
+      "description": "The key numeric value(s) graded against gold. Shape is per-question (e.g. flagged rows for surveillance); may be empty {} when behavior is a clarification request or a refusal."
+    },
+    "behavior": {
+      "type": "string",
+      "enum": [
+        "answered",
+        "assumptions-stated",
+        "clarification-requested",
+        "refused-data-quality"
+      ],
+      "default": "answered",
+      "description": "What the implementation did. Straight questions expect `answered`; the adversarial tier gold-encodes the expected value here."
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Optional: the governed metrics/dimensions/filters/entities used to produce the answer.",
+      "additionalProperties": false,
+      "properties": {
+        "metrics": {"type": "array", "items": {"type": "string"}},
+        "dimensions": {"type": "array", "items": {"type": "string"}},
+        "filters": {"type": "array", "items": {"type": "string"}},
+        "entities": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

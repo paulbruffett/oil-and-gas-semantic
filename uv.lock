@@ -263,6 +263,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "dbt-semantic-interfaces" },
+    { name = "jsonschema" },
     { name = "pytest" },
 ]
 
@@ -277,6 +278,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "dbt-semantic-interfaces", specifier = ">=0.10,<0.11" },
+    { name = "jsonschema", specifier = ">=4,<5" },
     { name = "pytest", specifier = ">=8,<9" },
 ]
 

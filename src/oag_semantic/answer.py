@@ -23,17 +23,25 @@ class Provenance:
 
 @dataclass(frozen=True)
 class AnswerSubmission:
-    """NL answer + key values + provenance for a single question."""
+    """NL answer + key values + provenance for a single question.
+
+    ``behavior`` (ADR 0015) is what the implementation did: ``answered`` for straight questions, or
+    ``assumptions-stated`` / ``clarification-requested`` / ``refused-data-quality`` for the
+    adversarial tier, where gold encodes the *expected* behavior. The allowed values are the
+    ``behavior`` enum in ``spec/questions/answer_submission.schema.json``.
+    """
 
     question_id: str
     answer: str
     key_values: dict[str, Any]
     provenance: Provenance
+    behavior: str = "answered"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "question_id": self.question_id,
             "answer": self.answer,
             "key_values": self.key_values,
+            "behavior": self.behavior,
             "provenance": asdict(self.provenance),
         }
