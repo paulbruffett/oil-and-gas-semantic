@@ -1,12 +1,16 @@
-# Semantic layer (OSI) — production surveillance
+# Semantic layer (OSI) — production surveillance + deferment
 
 The governed metrics/semantic-layer for the base collateral (DESIGN.md §3/§6, ADR 0008/0011),
 authored in the OSI v1.0 encoding (MetricFlow's semantic-manifest dialect).
 
 - `semantic_models.yaml` — measures, dimensions, and entities/joins over the OSDU PDM canonical
   tables. Every physical `expr`/`alias` is a canonical OSDU column/table name (ADR 0010).
-- `metrics.yaml` — the surveillance KPIs: `actual_oil`, `expected_oil`, `production_efficiency`
-  (`actual/expected`), `oil_shortfall` (`expected − actual`).
+- `metrics.yaml` — the governed KPIs:
+  - *Surveillance* (theme 1): `actual_oil`, `expected_oil`, `production_efficiency`
+    (`actual/expected`), `oil_shortfall` (`expected − actual`).
+  - *Deferment & downtime* (theme 2, issue #4): `downtime_hours`, `on_stream_hours`,
+    `calendar_days`, `uptime_pct` (`on-stream/calendar × 100`). Deferred volume by cause is a
+    compile-assembled KPI (row-level forecast × downtime), not a MetricFlow metric — see ADR 0017.
 - `project.yaml` — project configuration (no time spine; the metrics are windowed aggregates).
 
 **Two engines, two jobs (ADR 0011):**

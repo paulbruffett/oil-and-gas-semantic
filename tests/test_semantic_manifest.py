@@ -33,6 +33,18 @@ def test_expected_metrics_defined():
     assert layer.metrics["production_efficiency"].type == "ratio"
 
 
+def test_deferment_metrics_defined():
+    """The deferment & downtime KPIs (§6.3, issue #4) are defined once in the semantic layer."""
+    layer = load_semantic_layer()
+    assert {"downtime_hours", "on_stream_hours", "calendar_days", "uptime_pct"} <= set(layer.metrics)
+    assert layer.metrics["uptime_pct"].type == "derived"
+    # The DOWN_TIME_EVENT model carries the duration measure keyed to the event-date time dimension.
+    dte = layer.model("down_time_event")
+    assert dte.table == "down_time_event"
+    assert dte.time_dimension().expr == "START_DATE"
+    assert any(m.name == "downtime_hours" and m.expr == "DURATION_HOURS" for m in dte.measures)
+
+
 def test_semantic_layer_columns_conform_to_osdu_profile():
     """Every table/column the manifest references exists in the vendored OSDU PDM profile."""
     layer = load_semantic_layer()

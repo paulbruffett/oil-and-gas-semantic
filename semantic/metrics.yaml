@@ -37,3 +37,40 @@ metric:
     metrics:
       - name: expected_oil
       - name: actual_oil
+---
+# --- Deferment & downtime attribution (theme 2, issue #4, DESIGN.md §6.3) ---
+metric:
+  name: downtime_hours
+  description: Σ downtime-event duration (hours) over the window; group by event_category for top causes.
+  type: simple
+  type_params:
+    measure: downtime_hours
+---
+metric:
+  name: on_stream_hours
+  description: Σ on-stream (producing) hours over the window -- the numerator of uptime %.
+  type: simple
+  type_params:
+    measure: on_stream_hours
+---
+metric:
+  name: calendar_days
+  description: Count of daily volume records; x24 gives calendar hours (uptime % denominator).
+  type: simple
+  type_params:
+    measure: daily_record_count
+---
+metric:
+  name: uptime_pct
+  description: on-stream hours / calendar hours x 100 (uptime %, §6.3).
+  type: derived
+  type_params:
+    expr: on_stream_hours / (calendar_days * 24) * 100
+    metrics:
+      - name: on_stream_hours
+      - name: calendar_days
+# Deferred volume (§6.3 "forecast - actual by cause") is a compile-assembled KPI, not a pure
+# aggregate: deferred = Σ over downtime events of forecast_oil(entity, date) x DURATION_HOURS/24,
+# grouped by event_category (ADR 0017). The row-level forecast x downtime product cannot be a
+# MetricFlow metric over separate measures, so the reference compile (compile.compute_deferment)
+# assembles it from the governed expected_oil_volume + downtime_hours measures and reproduces gold.

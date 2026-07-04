@@ -33,7 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Generated dataset (config_hash={manifest.config_hash}) -> {manifest.output_dir}")
     for name, count in manifest.row_counts.items():
         print(f"  {name}: {count} rows -> {manifest.tables[name]}")
-    print(f"  gold/surveillance.json -> {manifest.gold['surveillance']}")
+    for name, path in manifest.gold.items():
+        print(f"  gold/{name}.json -> {path}")
     return 0
 
 

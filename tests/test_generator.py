@@ -15,7 +15,9 @@ import pytest
 
 from oag_generator import generate_dataset
 
-CANONICAL_TABLES = ["field", "well", "reporting_entity", "well_vol_daily", "product_volume_summary"]
+CANONICAL_TABLES = [
+    "field", "well", "reporting_entity", "well_vol_daily", "product_volume_summary", "down_time_event",
+]
 
 
 def _read(path: Path) -> dict[str, list]:
@@ -84,7 +86,8 @@ def test_byte_stable_across_runs(tmp_path, small_config):
         assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
             f"table {name} is not byte-stable across identical runs"
         )
-    assert a.gold["surveillance"].read_bytes() == b.gold["surveillance"].read_bytes()
+    for artifact in ("surveillance", "deferment"):
+        assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes()
 
 
 def test_config_hash_stamped_and_sensitive(tmp_path, small_config):
@@ -175,7 +178,92 @@ def test_derived_volumes_are_physical(tmp_path, small_config):
         wvd["OIL_VOLUME"], wvd["GAS_VOLUME"], wvd["WATER_VOLUME"], wvd["HOURS_ON"]
     ):
         assert oil >= 0 and gas >= 0 and water >= 0
-        assert 0 < hours <= 24
+        assert 0 <= hours <= 24  # a full-day downtime event drives HOURS_ON to 0 (issue #4)
         if oil + water > 0:
             watercut = water / (oil + water)
             assert 0.0 <= watercut < 1.0
+
+
+def test_downtime_events_reduce_uptime_and_are_consistent(tmp_path, small_config):
+    """DOWN_TIME_EVENT rows exist and are internally consistent with WELL_VOL_DAILY.HOURS_ON."""
+    m = generate_dataset(small_config, tmp_path)
+    dte = _read(m.tables["down_time_event"])
+    wvd = _read(m.tables["well_vol_daily"])
+
+    # Some downtime is generated, and it shows up as reduced on-stream hours somewhere.
+    assert len(dte["DOWN_TIME_EVENT_ID"]) > 0
+    assert any(h < 24.0 for h in wvd["HOURS_ON"])
+
+    # Every event is a single-day event with a sane duration and a cause (ADR 0017).
+    for start, end, dur, cause in zip(
+        dte["START_DATE"], dte["END_DATE"], dte["DURATION_HOURS"], dte["EVENT_CATEGORY"]
+    ):
+        assert start == end
+        assert 0.0 < dur <= 24.0
+        assert cause
+
+    # HOURS_ON on an event's (reporting-entity, date) equals 24 - DURATION_HOURS.
+    re_to_well = dict(zip(
+        _read(m.tables["reporting_entity"])["REPORTING_ENTITY_ID"],
+        _read(m.tables["reporting_entity"])["ASSOCIATED_OBJECT_ID"],
+    ))
+    hours_by_key = {
+        (wid, d): h for wid, d, h in zip(wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["HOURS_ON"])
+    }
+    for re_id, d, dur in zip(dte["REPORTING_ENTITY_ID"], dte["START_DATE"], dte["DURATION_HOURS"]):
+        assert hours_by_key[(re_to_well[re_id], d)] == pytest.approx(24.0 - dur, abs=1e-9)
+
+
+def test_deferment_gold_matches_kpi_defs(tmp_path, small_config):
+    """Recompute deferred-volume-by-cause and uptime % (§6.3) independently; assert gold matches.
+
+    deferred = forecast oil x downtime fraction (DURATION_HOURS/24), by cause (ADR 0017);
+    uptime %  = Σ HOURS_ON / Σ calendar hours over the "last month" window.
+    """
+    m = generate_dataset(small_config, tmp_path)
+    wvd = _read(m.tables["well_vol_daily"])
+    pvs = _read(m.tables["product_volume_summary"])
+    dte = _read(m.tables["down_time_event"])
+    gold = json.loads(m.gold["deferment"].read_text())
+
+    # "Last month" = calendar month of end_date, clamped to data start.
+    end = date.fromisoformat(small_config["end_date"])
+    win_start = max(date.fromisoformat(small_config["start_date"]), end.replace(day=1))
+    window = {(win_start + timedelta(days=i)).isoformat() for i in range((end - win_start).days + 1)}
+    assert gold["window"] == {"start": win_start.isoformat(), "end": end.isoformat(), "days": len(window)}
+
+    forecast = {}
+    for reid, d, product, method, vol in zip(
+        pvs["REPORTING_ENTITY_ID"], pvs["START_DATE"], pvs["PRODUCT"], pvs["QUANTITY_METHOD"], pvs["VOLUME"]
+    ):
+        if method == "Forecast" and product == "Oil" and d in window:
+            forecast[(reid, d)] = forecast.get((reid, d), 0.0) + vol
+
+    by_cause: dict[str, list[float]] = {}
+    for reid, cause, d, hours in zip(
+        dte["REPORTING_ENTITY_ID"], dte["EVENT_CATEGORY"], dte["START_DATE"], dte["DURATION_HOURS"]
+    ):
+        if d in window:
+            deferred = forecast.get((reid, d), 0.0) * hours / 24.0
+            agg = by_cause.setdefault(cause, [0.0, 0.0, 0])
+            agg[0] += deferred
+            agg[1] += hours
+            agg[2] += 1
+
+    expected_causes = sorted(
+        ({"cause": c, "deferred_oil_bbl": v[0], "downtime_hours": v[1], "n_events": v[2]}
+         for c, v in by_cause.items()),
+        key=lambda c: (-c["deferred_oil_bbl"], c["cause"]),
+    )
+    assert [c["cause"] for c in gold["causes"]] == [c["cause"] for c in expected_causes]
+    for got, exp in zip(gold["causes"], expected_causes):
+        assert got["deferred_oil_bbl"] == pytest.approx(exp["deferred_oil_bbl"], rel=1e-9)
+        assert got["downtime_hours"] == pytest.approx(exp["downtime_hours"], rel=1e-9)
+        assert got["n_events"] == exp["n_events"]
+
+    on_stream = sum(h for d, h in zip(wvd["VOLUME_DATE"], wvd["HOURS_ON"]) if d in window)
+    calendar = 24.0 * sum(1 for d in wvd["VOLUME_DATE"] if d in window)
+    assert gold["fleet_uptime_pct"] == pytest.approx(100.0 * on_stream / calendar, rel=1e-9)
+    assert gold["total_deferred_oil_bbl"] == pytest.approx(
+        sum(c["deferred_oil_bbl"] for c in expected_causes), rel=1e-9
+    )

@@ -70,3 +70,15 @@ Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/pro
 | QUANTITY_METHOD | Y | CHARACTER VARYING(40) | | R_QUANTITY_METHOD | "Allocated, Allowed, Estimated, Target, Measured, Budget, **Forecast** Etc." |
 | VOLUME | N | NUMERIC(14,4) | | | The volume of the product measured. |
 | VOLUME_UOM | N | CHARACTER VARYING(40) | | | Measurement unit used for reported volume. |
+
+## DOWN_TIME_EVENT  (downtime events; deferment use case, issue #4)
+| Column | Nullable | Type | Key | Ref | Comment |
+|---|---|---|---|---|---|
+| DOWN_TIME_EVENT_ID | Y | INTEGER | P | | The identifier of this row of data. |
+| REPORTING_ENTITY_ID | Y | INTEGER | | REPORTING_ENTITY | A unique identifier distinguishing the entity the downtime is reported against. |
+| EVENT_CATEGORY | N | CHARACTER VARYING(40) | | R_EVENT_CATEGORY | The activity or event category (we carry the downtime cause here). |
+| START_DATE | N | TIMESTAMP | | | When the downtime event commenced. |
+| END_DATE | N | TIMESTAMP | | | When the downtime event concluded. |
+| DURATION_HOURS | N | NUMERIC(15,5) | | | Length of downtime measured in hours. |
+
+*We omit the dictionary's `R_EVENT_CATEGORY_ID` / `EVENT_SUB_CATEGORY` / `REMARK` / `IS_ACTIVE` and audit columns, carrying only the flat `EVENT_CATEGORY` value (as we carry `REPORTING_ENTITY_KIND`). A generated event spans a single VOLUME_DATE (START_DATE = END_DATE); DURATION_HOURS ∈ (0, 24]. Deferred volume is computed against the forecast series rather than stored (the PDM `PROD_DOWN_TIME_VOLUME_LOSS` companion table is out of scope). See ADR 0017.*

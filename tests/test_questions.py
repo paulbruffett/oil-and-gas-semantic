@@ -7,6 +7,8 @@ gold artifact is keyed to the same question ids the catalog declares.
 
 from __future__ import annotations
 
+import json
+
 import jsonschema
 import pytest
 
@@ -83,6 +85,31 @@ def test_generated_gold_is_keyed_to_the_catalog(catalog, gold, dataset_dir):
     hero_q = next(t for t in catalog.themes if t.hero).questions[0]
     assert gold["question_id"] == hero_q.gold_id
     assert (dataset_dir / hero_q.gold_artifact).exists()
+
+
+def test_every_implemented_theme_has_its_co_generated_gold(catalog, dataset_dir):
+    """Each `implemented` theme's question resolves to a gold artifact keyed to the catalog id.
+
+    This is the no-drift guarantee generalized past the hero: theme 2 (deferment, #4) now co-generates
+    gold/deferment.json keyed to its catalog gold_id, exactly as theme 1 does.
+    """
+    implemented = [t for t in catalog.themes if t.status == "implemented"]
+    assert {t.number for t in implemented} >= {1, 2}  # surveillance (#3) + deferment (#4)
+    for theme in implemented:
+        for q in theme.questions:
+            artifact = dataset_dir / q.gold_artifact
+            assert artifact.exists(), f"{theme.id}: missing gold artifact {q.gold_artifact}"
+            assert json.loads(artifact.read_text())["question_id"] == q.gold_id
+
+
+def test_deferment_theme_matches_the_gold_module(catalog):
+    """Theme 2's catalog id is the single source the generator's deferment gold is keyed off."""
+    from oag_generator.gold import DEFERMENT_QUESTION_ID
+    from oag_generator.questions import DEFERMENT_QUESTION_ID as CATALOG_DEFERMENT_ID
+
+    theme = next(t for t in catalog.themes if t.number == 2)
+    (question,) = theme.questions
+    assert question.gold_id == CATALOG_DEFERMENT_ID == DEFERMENT_QUESTION_ID
 
 
 # --- answer-submission schema -------------------------------------------------------------------

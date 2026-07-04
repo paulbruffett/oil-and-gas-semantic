@@ -21,7 +21,7 @@ import pyarrow.parquet as pq
 
 from oag_generator import schema
 from oag_generator.config import Config, hash_canonical_config, load_config
-from oag_generator.gold import compute_surveillance_gold
+from oag_generator.gold import compute_deferment_gold, compute_surveillance_gold
 
 GENERATOR_VERSION = "0.1.0"
 
@@ -59,17 +59,25 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     n_days = len(dates)
     t_years = np.arange(n_days, dtype=np.float64) / 365.25
 
-    dcl, wcc, gor, perf = config.decline, config.watercut, config.gor, config.performance
+    dcl, wcc, gor, perf, dtc = (
+        config.decline, config.watercut, config.gor, config.performance, config.downtime
+    )
+    # Downtime cause pool -> parallel value/weight arrays for deterministic weighted sampling.
+    cause_values = [c["cause"] for c in config.downtime_causes]
+    cause_weights = np.array([c["weight"] for c in config.downtime_causes], dtype=np.float64)
+    cause_cum = np.cumsum(cause_weights / cause_weights.sum())
 
     field = schema.FIELD.empty_columns()
     well = schema.WELL.empty_columns()
     rentity = schema.REPORTING_ENTITY.empty_columns()
     wvd = schema.WELL_VOL_DAILY.empty_columns()
     pvs = schema.PRODUCT_VOLUME_SUMMARY.empty_columns()
+    dte = schema.DOWN_TIME_EVENT.empty_columns()
 
     well_seq = 0
     wvd_seq = 0
     pvs_seq = 0
+    dte_seq = 0
     for f in range(config.n_fields):
         field_id = f + 1
         field_name = _FIELD_NAME_POOL[f] if f < len(_FIELD_NAME_POOL) else f"Field-{f + 1:03d}"
@@ -117,10 +125,33 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
                 bias = rng.normal(perf["bias_mean"], perf["bias_sd"])
             daily_noise = rng.normal(0.0, perf["daily_noise_sd"], size=n_days)
 
+            # Down Time Events (ADR 0017): draw a Poisson count of single-day outages, place them on
+            # distinct dates, and derive HOURS_ON. Drawn per well *after* the performance draws so
+            # existing per-well draw order is preserved. Volumes scale with the uptime fraction, so
+            # downtime shows up as both lost production and (in gold) forecast-rate deferment by cause.
+            hours_on = np.full(n_days, 24.0)
+            n_events = min(int(rng.poisson(dtc["events_per_well_year"] * t_years[-1])), n_days)
+            if n_events > 0:
+                day_idx = np.sort(rng.choice(n_days, size=n_events, replace=False))
+                is_full = rng.uniform(size=n_events) < dtc["full_day_fraction"]
+                part_hours = rng.uniform(dtc["min_hours"], dtc["max_hours"], size=n_events)
+                durations = np.round(np.where(is_full, 24.0, part_hours), 2)
+                cause_pick = np.searchsorted(cause_cum, rng.uniform(size=n_events))
+                hours_on[day_idx] = np.round(24.0 - durations, 2)
+                for k, idx in enumerate(day_idx):
+                    dte_seq += 1
+                    dte["DOWN_TIME_EVENT_ID"].append(dte_seq)
+                    dte["REPORTING_ENTITY_ID"].append(re_id)
+                    dte["EVENT_CATEGORY"].append(cause_values[cause_pick[k]])
+                    dte["START_DATE"].append(dates[idx])
+                    dte["END_DATE"].append(dates[idx])
+                    dte["DURATION_HOURS"].append(float(durations[k]))
+            uptime = hours_on / 24.0
+
             # Arps hyperbolic decline -> expected (forecast) oil rate at full uptime (bopd).
             expected = qi / np.power(1.0 + b * di * t_years, 1.0 / b)
             performance = np.clip(bias * (1.0 + daily_noise), perf["floor"], perf["ceil"])
-            oil = expected * performance  # daily bbl at 24h uptime (no downtime in slice #2)
+            oil = expected * performance * uptime  # daily bbl scaled by on-stream fraction
 
             watercut = np.clip(wc0 + wc_rise * t_years, 0.0, wcc["cap"])
             water = oil * watercut / (1.0 - watercut)
@@ -138,7 +169,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
             wvd["WELL_ID"].extend([well_id] * n_days)
             wvd["UWI"].extend([uwi] * n_days)
             wvd["VOLUME_DATE"].extend(dates)
-            wvd["HOURS_ON"].extend([24.0] * n_days)
+            wvd["HOURS_ON"].extend(np.round(hours_on, 2).tolist())
             wvd["OIL_VOLUME"].extend(oil_r)
             wvd["GAS_VOLUME"].extend(gas_r)
             wvd["WATER_VOLUME"].extend(water_r)
@@ -164,6 +195,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
         schema.REPORTING_ENTITY.key: rentity,
         schema.WELL_VOL_DAILY.key: wvd,
         schema.PRODUCT_VOLUME_SUMMARY.key: pvs,
+        schema.DOWN_TIME_EVENT.key: dte,
     }
 
 
@@ -191,9 +223,15 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         tables[spec.key] = path
         row_counts[spec.key] = len(next(iter(cols[spec.key].values())))
 
-    surveillance = compute_surveillance_gold(cols, cfg)
-    gold_path = gold_dir / "surveillance.json"
-    gold_path.write_text(json.dumps(surveillance, indent=2, ensure_ascii=False) + "\n")
+    gold_answers = {
+        "surveillance": compute_surveillance_gold(cols, cfg),
+        "deferment": compute_deferment_gold(cols, cfg),
+    }
+    gold_paths: dict[str, Path] = {}
+    for key, answer in gold_answers.items():
+        path = gold_dir / f"{key}.json"
+        path.write_text(json.dumps(answer, indent=2, ensure_ascii=False) + "\n")
+        gold_paths[key] = path
 
     canonical_config = cfg.to_canonical_dict()
     chash = hash_canonical_config(canonical_config)
@@ -205,7 +243,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
             spec.key: {"osdu_table": spec.osdu_table, "path": str(tables[spec.key].relative_to(out))}
             for spec in schema.TABLES
         },
-        "gold": {"surveillance": str(gold_path.relative_to(out))},
+        "gold": {key: str(path.relative_to(out)) for key, path in gold_paths.items()},
         "row_counts": row_counts,
     }
     (out / "dataset.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -215,7 +253,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         config_hash=chash,
         generator_version=GENERATOR_VERSION,
         tables=tables,
-        gold={"surveillance": gold_path},
+        gold=gold_paths,
         row_counts=row_counts,
     )
 

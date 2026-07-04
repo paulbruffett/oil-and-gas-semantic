@@ -7,11 +7,12 @@ gold, and the writer all reference these specs; where generation still spells a 
 a dict key, a mismatch fails loudly at ``pa.table(..., schema=spec.arrow_schema())`` and in the
 conformance test rather than drifting silently.
 
-Surveillance subset (5 tables):
+Canonical subset (6 tables):
 - FIELD, WELL                       -- master entities
-- REPORTING_ENTITY                  -- polymorphic pointer volumes report against
+- REPORTING_ENTITY                  -- polymorphic pointer volumes/events report against
 - WELL_VOL_DAILY                    -- actual daily oil/gas/water + on-stream hours
 - PRODUCT_VOLUME_SUMMARY            -- the expected/forecast series (QUANTITY_METHOD='Forecast')
+- DOWN_TIME_EVENT                   -- downtime events (cause + duration), deferment use case (#4)
 """
 
 from __future__ import annotations
@@ -90,8 +91,19 @@ PRODUCT_VOLUME_SUMMARY = TableSpec("PRODUCT_VOLUME_SUMMARY", "product_volume_sum
     ("VOLUME_UOM", pa.string()),
 ))
 
+DOWN_TIME_EVENT = TableSpec("DOWN_TIME_EVENT", "down_time_event", (
+    ("DOWN_TIME_EVENT_ID", pa.int64()),
+    ("REPORTING_ENTITY_ID", pa.int64()),
+    ("EVENT_CATEGORY", pa.string()),
+    ("START_DATE", pa.string()),
+    ("END_DATE", pa.string()),
+    ("DURATION_HOURS", pa.float64()),
+))
+
 # Emission order.
-TABLES: tuple[TableSpec, ...] = (FIELD, WELL, REPORTING_ENTITY, WELL_VOL_DAILY, PRODUCT_VOLUME_SUMMARY)
+TABLES: tuple[TableSpec, ...] = (
+    FIELD, WELL, REPORTING_ENTITY, WELL_VOL_DAILY, PRODUCT_VOLUME_SUMMARY, DOWN_TIME_EVENT,
+)
 
 # Enumerated OSDU reference-data values we emit (from R_* reference tables).
 KIND_WELL = "Well"

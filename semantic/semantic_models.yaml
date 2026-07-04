@@ -36,6 +36,16 @@ semantic_model:
       agg: sum
       expr: OIL_VOLUME
       agg_time_dimension: volume_date
+    - name: on_stream_hours
+      description: On-stream (producing) hours -- the numerator of uptime % (deferment use case #4).
+      agg: sum
+      expr: HOURS_ON
+      agg_time_dimension: volume_date
+    - name: daily_record_count
+      description: Count of daily volume records; x24 gives calendar hours for uptime %.
+      agg: count
+      expr: WELL_VOLUME_DAILY_ID
+      agg_time_dimension: volume_date
 ---
 semantic_model:
   name: product_volume_summary
@@ -127,3 +137,34 @@ semantic_model:
     - name: field_name
       type: categorical
       expr: FIELD_NAME
+---
+semantic_model:
+  name: down_time_event
+  description: OSDU PDM DOWN_TIME_EVENT -- downtime events (cause + duration) for the deferment use case (#4).
+  node_relation:
+    schema_name: main
+    alias: down_time_event
+  defaults:
+    agg_time_dimension: event_date
+  entities:
+    - name: down_time_event
+      type: primary
+      expr: DOWN_TIME_EVENT_ID
+    - name: reporting_entity
+      type: foreign
+      expr: REPORTING_ENTITY_ID
+  dimensions:
+    - name: event_date
+      type: time
+      expr: START_DATE
+      type_params:
+        time_granularity: day
+    - name: event_category
+      type: categorical
+      expr: EVENT_CATEGORY
+  measures:
+    - name: downtime_hours
+      description: Downtime duration (hours) -- Σ event duration by cause (deferment use case #4).
+      agg: sum
+      expr: DURATION_HOURS
+      agg_time_dimension: event_date

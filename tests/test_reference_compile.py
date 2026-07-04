@@ -13,7 +13,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from oag_generator import canonical_table_paths
-from oag_semantic.compile import compute_surveillance
+from oag_semantic.compile import compute_deferment, compute_surveillance
 
 
 def _append_row(path, overrides: dict) -> None:
@@ -86,3 +86,32 @@ def test_reference_compile_ignores_non_forecast_non_oil_and_non_well_rows(datase
     gold_by_id = {r["well_id"]: r for r in gold["flagged"]}
     for w in result.flagged:
         assert w.expected_oil_bbl == pytest.approx(gold_by_id[w.well_id]["expected_oil_bbl"], rel=1e-6)
+
+
+# --- deferment & downtime (issue #4) ------------------------------------------------------------
+
+
+def test_deferment_reference_compile_reproduces_gold(dataset_dir, deferment_gold):
+    result = compute_deferment(dataset_dir)
+    g = deferment_gold
+
+    assert result.window_start == g["window"]["start"]
+    assert result.window_end == g["window"]["end"]
+    assert result.window_days == g["window"]["days"]
+    assert result.n_wells_evaluated == g["n_wells_evaluated"]
+    assert result.fleet_uptime_pct == pytest.approx(g["fleet_uptime_pct"], rel=1e-9)
+    assert result.total_deferred_oil_bbl == pytest.approx(g["total_deferred_oil_bbl"], rel=1e-9)
+    assert result.total_downtime_hours == pytest.approx(g["total_downtime_hours"], rel=1e-9)
+
+    # Cause ranking matches exactly (order + values).
+    assert [c.cause for c in result.causes] == [c["cause"] for c in g["causes"]]
+    for got, exp in zip(result.causes, g["causes"]):
+        assert got.deferred_oil_bbl == pytest.approx(exp["deferred_oil_bbl"], rel=1e-6)
+        assert got.downtime_hours == pytest.approx(exp["downtime_hours"], rel=1e-6)
+        assert got.n_events == exp["n_events"]
+
+
+def test_deferment_compile_ranks_by_biggest_deferment(dataset_dir):
+    result = compute_deferment(dataset_dir)
+    deferred = [c.deferred_oil_bbl for c in result.causes]
+    assert deferred == sorted(deferred, reverse=True)
