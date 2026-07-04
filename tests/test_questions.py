@@ -50,6 +50,14 @@ def test_every_question_is_keyed_to_a_gold_id_and_a_known_behavior(catalog):
         assert q.text.strip(), f"question {q.id!r} has no text"
 
 
+def test_question_id_equals_gold_id(catalog):
+    # Submissions and gold are both keyed on gold_id, but the catalog identifies questions by id.
+    # Until the harness joins id -> gold_id explicitly, the two must be equal or a correct answer
+    # would be keyed where the grader can't find it. Pin the invariant the code relies on.
+    for q in catalog.questions():
+        assert q.id == q.gold_id, f"{q.id!r}: id must equal gold_id (see questions.question_id)"
+
+
 def test_hero_theme_is_implemented_and_matches_the_gold_module(catalog):
     hero = next(t for t in catalog.themes if t.hero)
     assert hero.number == 1
@@ -69,8 +77,7 @@ def test_hero_theme_is_implemented_and_matches_the_gold_module(catalog):
 # --- no drift between the catalog and the generated gold ----------------------------------------
 
 
-def test_generated_gold_is_keyed_to_the_catalog(catalog, dataset_dir):
-    gold = json.loads((dataset_dir / "gold" / "surveillance.json").read_text())
+def test_generated_gold_is_keyed_to_the_catalog(catalog, gold, dataset_dir):
     catalog_gold_ids = {q.gold_id for q in catalog.questions()}
     assert gold["question_id"] in catalog_gold_ids
 

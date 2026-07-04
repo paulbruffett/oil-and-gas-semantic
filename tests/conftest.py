@@ -8,9 +8,13 @@ from pathlib import Path
 import pytest
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def small_config() -> dict:
-    """A tiny, fast, deterministic config exercising >1 field and a trailing week."""
+    """A tiny, fast, deterministic config exercising >1 field and a trailing week.
+
+    Session-scoped and treated read-only: consumers that vary it spread into a fresh dict, and
+    generate_dataset is byte-stable (never mutates its config, see test_byte_stable_across_runs).
+    """
     return {
         "seed": 7,
         "start_date": "2024-01-01",
@@ -22,13 +26,18 @@ def small_config() -> dict:
     }
 
 
-@pytest.fixture
-def dataset_dir(tmp_path, small_config) -> Path:
-    """A generated dataset (canonical Parquet + gold) the semantic-layer tests run against."""
+@pytest.fixture(scope="session")
+def dataset_dir(tmp_path_factory, small_config) -> Path:
+    """A generated dataset (canonical Parquet + gold), built once for the whole suite.
+
+    Session-scoped via tmp_path_factory so the many semantic-layer/catalog tests that only read
+    the dataset share one generation instead of regenerating all OSDU tables + forecasts per test.
+    """
     from oag_generator import generate_dataset
 
-    generate_dataset(small_config, tmp_path)
-    return tmp_path
+    out = tmp_path_factory.mktemp("dataset")
+    generate_dataset(small_config, out)
+    return out
 
 
 @pytest.fixture

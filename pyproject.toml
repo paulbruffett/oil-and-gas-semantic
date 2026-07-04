@@ -39,5 +39,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/oag_generator", "src/oag_semantic"]
 
+# The question catalog + submission schema live at the repo root (spec/questions) as standalone
+# versioned base artifacts, but the base package loads them at run time. Force-include a copy into
+# the wheel so an installed (non-editable) build can still resolve them (see questions._spec_file).
+[tool.hatch.build.targets.wheel.force-include]
+"spec/questions/catalog.yaml" = "oag_generator/_spec/catalog.yaml"
+"spec/questions/answer_submission.schema.json" = "oag_generator/_spec/answer_submission.schema.json"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
