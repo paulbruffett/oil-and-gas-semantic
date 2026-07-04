@@ -36,6 +36,16 @@ semantic_model:
       agg: sum
       expr: OIL_VOLUME
       agg_time_dimension: volume_date
+    - name: actual_gas_volume
+      description: Measured gas volume (Mscf) -- the gas leg of the asset-rollup product mix (#8).
+      agg: sum
+      expr: GAS_VOLUME
+      agg_time_dimension: volume_date
+    - name: actual_water_volume
+      description: Measured water volume (bbl) -- the water leg of the asset-rollup product mix (#8).
+      agg: sum
+      expr: WATER_VOLUME
+      agg_time_dimension: volume_date
     - name: on_stream_hours
       description: On-stream (producing) hours -- the numerator of uptime % (deferment use case #4).
       agg: sum
@@ -112,6 +122,9 @@ semantic_model:
     - name: field
       type: foreign
       expr: FIELD_ID
+    - name: facility
+      type: foreign
+      expr: FACILITY_ID
   dimensions:
     - name: uwi
       type: categorical
@@ -137,6 +150,30 @@ semantic_model:
     - name: field_name
       type: categorical
       expr: FIELD_NAME
+---
+semantic_model:
+  name: facility
+  description: OSDU PDM FACILITY -- battery/facility master; the Well -> Facility -> Field hierarchy for asset rollups (#8).
+  node_relation:
+    schema_name: main
+    alias: facility
+  entities:
+    - name: facility
+      type: primary
+      expr: FACILITY_ID
+    - name: field
+      type: foreign
+      expr: FIELD_ID
+  dimensions:
+    - name: facility_name
+      type: categorical
+      expr: FACILITY_NAME
+    - name: facility_type
+      type: categorical
+      expr: FACILITY_TYPE
+    - name: facility_operator
+      type: categorical
+      expr: OPERATOR
 ---
 semantic_model:
   name: down_time_event

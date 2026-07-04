@@ -32,6 +32,7 @@ Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/pro
 | OPERATOR | N | CHARACTER VARYING(40) | | | The Business Associate representing the owners of the well. |
 | X_COORDINATE | N | NUMERIC(18,9) | | | X of surface (longitude or projected X per CRS). |
 | Y_COORDINATE | N | NUMERIC(18,9) | | | Y of surface (latitude or projected Y per CRS). |
+| FACILITY_ID | N | INTEGER | | FACILITY | The battery/facility the well routes to (Well → Facility → Field, #8). Denormalized FK — PPDM links well↔facility via a junction; carried flat here (ADR 0021). |
 
 ## REPORTING_ENTITY
 | Column | Nullable | Type | Key | Ref | Comment |
@@ -114,3 +115,18 @@ Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/pro
 | ALLOCATION_FACTOR_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit for the factor (dimensionless 'fraction'). |
 
 *`RPEN_ALLOCATION_FACTOR` is the OSDU PDM (PPDM-3.9-based) production allocation-factor table — the OSDU-published table that records each **from RPEN** and **to RPEN** and the allocation factor (verified against the OSDU PDM v1.0 Volume-Relevant + Well-Test data-model pages, 2026-07). `RPEN` = `REPORTING_ENTITY`, so it is natively a **from-entity → to-entity factor**, and the PPDM-3.9 analogue `PDEN_ALLOC_FACTOR` is lineage only (ADR 0010). It is deliberately **not** a stored allocated-volume table (`PDEN_VOL_ALLOC` is out of scope — allocated volume is computed as `from-measured × factor`, so it can never drift). We carry flat `FROM_/TO_REPORTING_ENTITY_ID` keys (from = a Field-kind row, to = a Well-kind row); qualifier/method and audit columns are omitted. The factor carries its own per-value OUOM. Exact OSDU column spellings were not machine-verified from the deep dictionary page, so the columns above are a deliberate ADR-0019 profile selection. See ADR 0019.*
+
+## FACILITY  (surface-facility master + asset hierarchy; asset-rollups use case, issue #8)
+| Column | Nullable | Type | Key | Ref | Comment |
+|---|---|---|---|---|---|
+| FACILITY_ID | Y | INTEGER | P | | Primary key of the facility (with FACILITY_TYPE — the PPDM FACILITY PK is the pair). |
+| FACILITY_TYPE | Y | CHARACTER VARYING(40) | P | R_FACILITY_TYPE | Kind of facility; a battery is a FACILITY_TYPE value ('Battery'), not its own table. |
+| FACILITY_NAME | N | CHARACTER VARYING(100) | | | Name assigned to the facility. |
+| FIELD_ID | N | INTEGER | | FIELD | Field the facility belongs to. |
+| OPERATOR | N | CHARACTER VARYING(40) | | | The Business Associate operating the facility. |
+| LATITUDE | N | NUMERIC(18,9) | | | Facility centroid latitude. |
+| LATITUDE_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit of measure for LATITUDE (per-value OUOM: 'dega'). |
+| LONGITUDE | N | NUMERIC(18,9) | | | Facility centroid longitude. |
+| LONGITUDE_OUOM | N | CHARACTER VARYING(40) | | R_UOM | Unit of measure for LONGITUDE (per-value OUOM: 'dega'). |
+
+*`FACILITY` is the OSDU PDM (PPDM-3.9-based) surface-facility master. Its **primary key is the pair `(FACILITY_ID, FACILITY_TYPE)`** — a **battery is a `FACILITY_TYPE` value** (`R_FACILITY_TYPE`), not a separate table, matching PPDM/`PDEN_FACILITY` practice (verified against the OSDU PDM v1.0 + PPDM 3.9 FACILITY model, 2026-07). It links to `FIELD` and `OPERATOR`, and carries a centroid latitude/longitude each with its **own per-value OUOM column** (`dega`, decimal degrees), honouring the OSDU per-value-OUOM pattern. The `WELL → FACILITY → FIELD` asset hierarchy is carried as a flat `FACILITY_ID` FK on `WELL`. **Deliberate simplifications** (ADR 0021): the well↔facility link is a flat FK (PPDM uses a junction); operator/field are flat columns; a facility carries a single centroid (no footprint) and no CRS; status/class/regulatory and audit columns are omitted. WKS analogue: `master-data--GenericFacility`. See ADR 0021.*

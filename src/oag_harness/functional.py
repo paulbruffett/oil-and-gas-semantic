@@ -23,6 +23,7 @@ from typing import Any
 from oag_generator.questions import (
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
+    ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
     WELLTEST_QUESTION_ID,
     QuestionCatalog,
@@ -67,6 +68,13 @@ SPECS: dict[str, GradingSpec] = {
         "flagged",
         "well_id",
         ("days_since_last_test", "allocation_factor", "measured_oil_bbl", "allocation_variance"),
+    ),
+    # Asset rollups (#8): the headline grouping is by field; operator/facility rollups travel in the
+    # gold for the narrative + the hierarchy contest (#20) but the graded anchor is the field rollup.
+    ROLLUP_QUESTION_ID: GradingSpec(
+        "by_field",
+        "field_id",
+        ("oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"),
     ),
 }
 

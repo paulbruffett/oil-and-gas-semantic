@@ -55,6 +55,11 @@ def decline_gold(dataset_dir) -> dict:
     return json.loads((dataset_dir / "gold" / "decline.json").read_text())
 
 
+@pytest.fixture
+def rollup_gold(dataset_dir) -> dict:
+    return json.loads((dataset_dir / "gold" / "rollups.json").read_text())
+
+
 @pytest.fixture(scope="session")
 def welltest_config() -> dict:
     """A config sized to exercise both well-test signals (issue #6).

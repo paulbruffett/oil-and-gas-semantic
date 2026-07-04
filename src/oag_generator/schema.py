@@ -7,8 +7,8 @@ gold, and the writer all reference these specs; where generation still spells a 
 a dict key, a mismatch fails loudly at ``pa.table(..., schema=spec.arrow_schema())`` and in the
 conformance test rather than drifting silently.
 
-Canonical subset (8 tables):
-- FIELD, WELL                       -- master entities
+Canonical subset (9 tables):
+- FIELD, WELL, FACILITY             -- master entities (WELL rolls up to FACILITY -> FIELD, #8)
 - REPORTING_ENTITY                  -- polymorphic pointer volumes/events report against
 - WELL_VOL_DAILY                    -- actual daily oil/gas/water + on-stream hours
 - PRODUCT_VOLUME_SUMMARY            -- the expected/forecast series (QUANTITY_METHOD='Forecast')
@@ -58,6 +58,9 @@ WELL = TableSpec("WELL", "well", (
     ("OPERATOR", pa.string()),
     ("X_COORDINATE", pa.float64()),
     ("Y_COORDINATE", pa.float64()),
+    # FK into FACILITY (the well's battery); the Well -> Facility -> Field hierarchy for asset
+    # rollups (#8). Appended last so the earlier columns keep their order.
+    ("FACILITY_ID", pa.int64()),
 ))
 
 REPORTING_ENTITY = TableSpec("REPORTING_ENTITY", "reporting_entity", (
@@ -119,6 +122,21 @@ WELL_TEST = TableSpec("WELL_TEST", "well_test", (
     ("WATER_RATE_OUOM", pa.string()),
 ))
 
+# Facility / asset hierarchy (asset-rollups use case, #8). OSDU PDM FACILITY, whose primary key is
+# the pair (FACILITY_ID, FACILITY_TYPE) -- a battery is a FACILITY_TYPE *value*, not its own table
+# (ADR 0021). Links to FIELD + OPERATOR; carries a centroid lat/long with a per-value OUOM each.
+FACILITY = TableSpec("FACILITY", "facility", (
+    ("FACILITY_ID", pa.int64()),
+    ("FACILITY_TYPE", pa.string()),   # composite-PK partner of FACILITY_ID; value 'Battery'
+    ("FACILITY_NAME", pa.string()),
+    ("FIELD_ID", pa.int64()),
+    ("OPERATOR", pa.string()),
+    ("LATITUDE", pa.float64()),
+    ("LATITUDE_OUOM", pa.string()),
+    ("LONGITUDE", pa.float64()),
+    ("LONGITUDE_OUOM", pa.string()),
+))
+
 # Production allocation factors (allocation use case, #6). A from-entity -> to-entity factor
 # (both REPORTING_ENTITY), NOT a stored allocated-volume table (ADR 0019). The factor value
 # carries its own OUOM ('fraction').
@@ -136,7 +154,7 @@ RPEN_ALLOCATION_FACTOR = TableSpec("RPEN_ALLOCATION_FACTOR", "rpen_allocation_fa
 # Emission order.
 TABLES: tuple[TableSpec, ...] = (
     FIELD, WELL, REPORTING_ENTITY, WELL_VOL_DAILY, PRODUCT_VOLUME_SUMMARY, DOWN_TIME_EVENT,
-    WELL_TEST, RPEN_ALLOCATION_FACTOR,
+    WELL_TEST, RPEN_ALLOCATION_FACTOR, FACILITY,
 )
 
 # Enumerated OSDU reference-data values we emit (from R_* reference tables).
@@ -148,7 +166,10 @@ PRODUCT_OIL = "Oil"
 QUANTITY_MEASURED = "Measured"   # WELL_VOL_DAILY.VOLUME_METHOD
 QUANTITY_FORECAST = "Forecast"   # PRODUCT_VOLUME_SUMMARY.QUANTITY_METHOD
 FIELD_TYPE = "Oil Field"
+FACILITY_TYPE_BATTERY = "Battery"  # FACILITY.FACILITY_TYPE (R_FACILITY_TYPE) for the rollup use case (#8)
+COORD_UOM = "dega"                 # FACILITY latitude/longitude OUOM (decimal degrees)
 OIL_UOM = "bbl"
+GAS_UOM = "Mscf"                   # WELL_VOL_DAILY gas grain, for the rollup product mix (#8)
 TEST_TYPE_PRODUCTION = "Production"  # WELL_TEST.TEST_TYPE (R_TEST_TYPE)
 OIL_RATE_UOM = "bbl/d"           # WELL_TEST.OIL_RATE_OUOM
 GAS_RATE_UOM = "Mscf/d"          # WELL_TEST.GAS_RATE_OUOM

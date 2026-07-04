@@ -76,6 +76,21 @@ def test_welltest_allocation_metrics_defined():
     assert any(m.name == "allocation_factor_value" and m.expr == "ALLOCATION_FACTOR" for m in paf.measures)
 
 
+def test_rollup_metrics_defined():
+    """The asset-rollup KPIs (§6.3, issue #8) are governed in the semantic layer."""
+    layer = load_semantic_layer()
+    # Oil/gas/water product-mix measures are governed simple metrics.
+    assert {"actual_oil", "actual_gas", "actual_water"} <= set(layer.metrics)
+    assert layer.metrics["actual_gas"].type_params["measure"] == "actual_gas_volume"
+    # The FACILITY model carries the Well -> Facility -> Field hierarchy (facility resolves to field);
+    # WELL joins to it via the facility entity. Δ + contribution are compile-assembled (not metrics).
+    facility = layer.model("facility")
+    assert facility.table == "facility"
+    assert facility.entity("facility").expr == "FACILITY_ID"
+    assert facility.entity("field").expr == "FIELD_ID"
+    assert layer.model("well").entity("facility").expr == "FACILITY_ID"
+
+
 def test_semantic_layer_columns_conform_to_osdu_profile():
     """Every table/column the manifest references exists in the vendored OSDU PDM profile."""
     layer = load_semantic_layer()

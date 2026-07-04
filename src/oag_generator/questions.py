@@ -151,3 +151,5 @@ DEFERMENT_QUESTION_ID = question_id(2)
 DECLINE_QUESTION_ID = question_id(3)
 # The well-test & allocation question (theme 4); imported by the gold + welltest compile (issue #6).
 WELLTEST_QUESTION_ID = question_id(4)
+# The asset-rollups question (theme 6); imported by the gold + rollup compile (issue #8).
+ROLLUP_QUESTION_ID = question_id(6)

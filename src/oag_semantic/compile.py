@@ -28,10 +28,11 @@ from oag_generator import (
     decline_months,
     deferment_window,
     read_dataset_manifest,
+    rollup_periods,
     schema,
     surveillance_window,
 )
-from oag_generator.gold import _annualized_decline
+from oag_generator.gold import _annualized_decline, assemble_rollup
 from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 
 _AGG_SQL = {"sum": "SUM", "min": "MIN", "max": "MAX", "count": "COUNT", "average": "AVG"}
@@ -704,4 +705,147 @@ def compute_welltest(
         n_stale=n_stale,
         n_anomalous=n_anomalous,
         flagged=tuple(flagged),
+    )
+
+
+# --- asset rollups (issue #8) -------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RollupResult:
+    """Asset rollups computed by the reference compile over the OSI (issue #8, ADR 0021).
+
+    Each ``by_*`` list mirrors the co-generated gold's rows exactly (same per-group oil/gas/water
+    current+prior volumes, deltas, oil contribution %, and biggest-mover ordering), so the reference
+    compile reproduces gold. Rows are plain dicts keyed as in gold.
+    """
+
+    curr_start: str
+    curr_end: str
+    prior_start: str
+    prior_end: str
+    totals: dict[str, float]
+    by_field: tuple[dict, ...]
+    by_operator: tuple[dict, ...]
+    by_facility: tuple[dict, ...]
+
+
+def compute_rollup(dataset_dir: str | Path, layer: SemanticLayer | None = None) -> RollupResult:
+    """Compute oil/gas/water rollups (Δ + contribution %) by field/operator/facility, driven by the OSI.
+
+    Mirrors ``gold.compute_rollup_gold`` exactly (same current/prior monthly periods, per-group
+    aggregation over the Well -> Facility -> Field hierarchy, Δ + contribution formulas, biggest-mover
+    ordering) so the reference compile reproduces the co-generated gold. Only the tokens (table
+    aliases, column exprs, aggregations) come from the manifest; the Δ + contribution assembly is the
+    shared ``gold._rollup_row`` so the two cannot diverge. Period-over-period Δ and contribution-% are
+    compile-assembled (a two-window difference and a group/total ratio), per metrics.yaml/ADR 0021.
+    """
+    dataset_dir = Path(dataset_dir)
+    config = read_dataset_manifest(dataset_dir)["config"]
+    paths = canonical_table_paths(dataset_dir)
+    layer = layer or load_semantic_layer()
+
+    (curr_start, curr_end, _), (prior_start, prior_end, prior_days) = rollup_periods(
+        config["start_date"], config["end_date"]
+    )
+
+    wvd_model, oil = layer.measure("actual_oil_volume")
+    _, gas = layer.measure("actual_gas_volume")
+    _, water = layer.measure("actual_water_volume")
+    well_model = layer.model("well")
+    field_model = layer.model("field")
+    facility_model = layer.model("facility")
+
+    wvd_well = wvd_model.entity("well").expr
+    wvd_date = wvd_model.time_dimension().expr
+    well_id_col = well_model.entity("well").expr
+    well_field_col = well_model.entity("field").expr
+    well_facility_col = well_model.entity("facility").expr
+    well_operator_col = well_model.dimension("operator").expr
+
+    # An empty prior period (clamped away) must match no rows -- push the prior window before the data
+    # so its conditional sums are 0, mirroring gold's empty date set.
+    if prior_days <= 0:
+        prior_lo, prior_hi = "0001-01-01", "0001-01-01"
+    else:
+        prior_lo, prior_hi = prior_start, prior_end
+
+    con = duckdb.connect()
+    try:
+        for model in (wvd_model, well_model, field_model, facility_model):
+            con.register(model.table, pq.read_table(paths[model.table]))
+
+        # Per-well-attribute grain (field/operator/facility) with current + prior conditional sums of
+        # each product; rolled up into the three groupings in Python, matching gold's per-row pass.
+        rows = con.execute(
+            f"""
+            SELECT w.{well_field_col}                                              AS field_id,
+                   w.{well_operator_col}                                           AS operator,
+                   w.{well_facility_col}                                           AS facility_id,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{oil.expr}   ELSE 0 END) AS oil_c,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{gas.expr}   ELSE 0 END) AS gas_c,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{water.expr} ELSE 0 END) AS wat_c,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{oil.expr}   ELSE 0 END) AS oil_p,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{gas.expr}   ELSE 0 END) AS gas_p,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{water.expr} ELSE 0 END) AS wat_p
+            FROM {wvd_model.table} v
+            JOIN {well_model.table} w ON v.{wvd_well} = w.{well_id_col}
+            GROUP BY 1, 2, 3
+            """,
+            [curr_start, curr_end] * 3 + [prior_lo, prior_hi] * 3,
+        ).fetchall()
+
+        field_names = dict(
+            con.execute(
+                f"SELECT {field_model.entity('field').expr}, "
+                f"{field_model.dimension('field_name').expr} FROM {field_model.table}"
+            ).fetchall()
+        )
+        facility_names = dict(
+            con.execute(
+                f"SELECT {facility_model.entity('facility').expr}, "
+                f"{facility_model.dimension('facility_name').expr} FROM {facility_model.table}"
+            ).fetchall()
+        )
+        facility_field = dict(
+            con.execute(
+                f"SELECT {facility_model.entity('facility').expr}, "
+                f"{facility_model.entity('field').expr} FROM {facility_model.table}"
+            ).fetchall()
+        )
+    finally:
+        con.close()
+
+    # Aggregate the SQL rows into the three groupings (the compile's independent re-derivation of the
+    # aggregates); the Δ/contribution/ordering assembly is shared with gold via assemble_rollup.
+    by_field: dict[int, list[float]] = {}
+    by_operator: dict[str, list[float]] = {}
+    by_facility: dict[int, list[float]] = {}
+    for field_id, operator, facility_id, oil_c, gas_c, wat_c, oil_p, gas_p, wat_p in rows:
+        block = [float(oil_c), float(gas_c), float(wat_c), float(oil_p), float(gas_p), float(wat_p)]
+        for store, key in (
+            (by_field, int(field_id)),
+            (by_operator, operator),
+            (by_facility, int(facility_id)),
+        ):
+            acc = store.setdefault(key, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            for i in range(6):
+                acc[i] += block[i]
+
+    totals, field_rows, operator_rows, facility_rows = assemble_rollup(
+        by_field, by_operator, by_facility,
+        {int(k): v for k, v in field_names.items()},
+        {int(k): v for k, v in facility_names.items()},
+        {int(k): int(v) for k, v in facility_field.items()},
+    )
+
+    return RollupResult(
+        curr_start=curr_start,
+        curr_end=curr_end,
+        prior_start=prior_start,
+        prior_end=prior_end,
+        totals=totals,
+        by_field=tuple(field_rows),
+        by_operator=tuple(operator_rows),
+        by_facility=tuple(facility_rows),
     )

@@ -21,25 +21,22 @@ from oag_semantic.grading import grade_surveillance
 
 def test_oracle_scores_100_percent_across_themes(dataset_dir, build_oracle_submissions):
     report = score_submissions(build_oracle_submissions(dataset_dir), dataset_dir)
-    assert report.n_graded == 4  # surveillance, deferment, decline, welltest
+    assert report.n_graded == 5  # surveillance, deferment, decline, welltest, rollups
     assert report.pass_rate == 1.0
     assert all(g.correct for g in report.grades)
 
 
 def test_planned_themes_are_skipped_not_failed(dataset_dir, build_oracle_submissions):
     report = score_submissions(build_oracle_submissions(dataset_dir), dataset_dir)
-    # #7 watchlist + #8 rollups have no spec/gold yet: reported skipped, never dragging the rate down.
-    assert set(report.skipped) == {
-        "watchlist-down-watering-out-gor-change",
-        "rollup-oil-gas-water-by-field-operator",
-    }
+    # #7 watchlist has no spec/gold yet: reported skipped, never dragging the rate down.
+    assert set(report.skipped) == {"watchlist-down-watering-out-gor-change"}
 
 
 def test_missing_submission_is_skipped(dataset_dir, build_oracle_submissions):
     subs = build_oracle_submissions(dataset_dir)
     del subs[SURVEILLANCE_QUESTION_ID]
     report = score_submissions(subs, dataset_dir)
-    assert report.n_graded == 3
+    assert report.n_graded == 4
     assert SURVEILLANCE_QUESTION_ID in report.skipped
 
 
@@ -52,8 +49,8 @@ def test_wrong_value_fails_that_question_only(dataset_dir, build_oracle_submissi
     assert report.pass_rate < 1.0
     bad = next(g for g in report.grades if g.question_id == DEFERMENT_QUESTION_ID)
     assert not bad.correct and bad.value_mismatches
-    # Only deferment is affected; the other three still pass.
-    assert report.n_correct == 3
+    # Only deferment is affected; the other four still pass.
+    assert report.n_correct == 4
 
 
 def test_missing_and_extra_rows_are_reported(dataset_dir):

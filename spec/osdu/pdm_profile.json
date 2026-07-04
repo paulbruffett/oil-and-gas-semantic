@@ -24,8 +24,10 @@
         {"name": "FIELD_NAME", "type": "string"},
         {"name": "OPERATOR", "type": "string"},
         {"name": "X_COORDINATE", "type": "float"},
-        {"name": "Y_COORDINATE", "type": "float"}
-      ]
+        {"name": "Y_COORDINATE", "type": "float"},
+        {"name": "FACILITY_ID", "type": "int"}
+      ],
+      "_note": "FACILITY_ID is a denormalized FK to FACILITY (the well's battery), added for the asset-rollups hierarchy Well -> Facility -> Field (#8, ADR 0021). PPDM links a well to a facility via a junction; we carry the flat FK as a deliberate simplification."
     },
     "reporting_entity": {
       "osdu_table": "REPORTING_ENTITY",
@@ -127,6 +129,26 @@
       "reference_values": {
         "PRODUCT": ["Oil"],
         "ALLOCATION_FACTOR_OUOM": ["fraction"]
+      }
+    },
+    "facility": {
+      "osdu_table": "FACILITY",
+      "_note": "OSDU PDM FACILITY (PPDM-3.9-based) -- the surface-facility master. Its primary key is the pair (FACILITY_ID, FACILITY_TYPE): a battery is a FACILITY_TYPE *value* (R_FACILITY_TYPE), not its own table. Links to FIELD (FIELD_ID) and OPERATOR; carries a centroid latitude/longitude, each with its own per-value OUOM column ('dega', decimal degrees), mirroring the OSDU per-value OUOM pattern. Deliberate simplifications (ADR 0021): the well->facility link is a flat FACILITY_ID FK on WELL (PPDM uses a junction); operator/field are flat columns; the FACILITY family's status/class/audit and CRS columns are omitted; a facility carries a single centroid, not a footprint. WKS analogue: master-data--GenericFacility. Exact column spellings were not machine-verified from the deep dictionary page, so the columns below are a deliberate ADR-0021 profile selection.",
+      "columns": [
+        {"name": "FACILITY_ID", "type": "int"},
+        {"name": "FACILITY_TYPE", "type": "string"},
+        {"name": "FACILITY_NAME", "type": "string"},
+        {"name": "FIELD_ID", "type": "int"},
+        {"name": "OPERATOR", "type": "string"},
+        {"name": "LATITUDE", "type": "float"},
+        {"name": "LATITUDE_OUOM", "type": "string"},
+        {"name": "LONGITUDE", "type": "float"},
+        {"name": "LONGITUDE_OUOM", "type": "string"}
+      ],
+      "reference_values": {
+        "FACILITY_TYPE": ["Battery"],
+        "LATITUDE_OUOM": ["dega"],
+        "LONGITUDE_OUOM": ["dega"]
       }
     }
   }
