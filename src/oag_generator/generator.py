@@ -66,6 +66,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     cause_values = [c["cause"] for c in config.downtime_causes]
     cause_weights = np.array([c["weight"] for c in config.downtime_causes], dtype=np.float64)
     cause_cum = np.cumsum(cause_weights / cause_weights.sum())
+    cause_cum[-1] = 1.0  # guard FP rounding below 1.0 so searchsorted can't index past the list
 
     field = schema.FIELD.empty_columns()
     well = schema.WELL.empty_columns()
@@ -130,7 +131,10 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
             # existing per-well draw order is preserved. Volumes scale with the uptime fraction, so
             # downtime shows up as both lost production and (in gold) forecast-rate deferment by cause.
             hours_on = np.full(n_days, 24.0)
-            n_events = min(int(rng.poisson(dtc["events_per_well_year"] * t_years[-1])), n_days)
+            # Exposure is the full window length (n_days daily records = n_days/365.25 years); using
+            # t_years[-1] = (n_days-1)/365.25 would undercount by a day and emit zero events when n_days=1.
+            exposure_years = n_days / 365.25
+            n_events = min(int(rng.poisson(dtc["events_per_well_year"] * exposure_years)), n_days)
             if n_events > 0:
                 day_idx = np.sort(rng.choice(n_days, size=n_events, replace=False))
                 is_full = rng.uniform(size=n_events) < dtc["full_day_fraction"]
