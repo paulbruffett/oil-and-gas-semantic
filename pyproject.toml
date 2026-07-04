@@ -27,6 +27,9 @@ dev = [
     # MetricFlow's manifest schema + validators (ADR 0011): the "validate the OSI
     # manifest is well-formed" gate. Dev-only -- it never runs at answer time.
     "dbt-semantic-interfaces>=0.10,<0.11",
+    # Validates answer submissions against spec/questions/answer_submission.schema.json
+    # (issue #14). Dev-only -- library code ships the schema file, not a runtime validator.
+    "jsonschema>=4,<5",
 ]
 
 [build-system]

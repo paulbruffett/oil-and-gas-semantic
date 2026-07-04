@@ -13,12 +13,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from oag_generator.questions import SURVEILLANCE_QUESTION_ID
 from oag_semantic.answer import AnswerSubmission, Provenance
 from oag_semantic.compile import SurveillanceResult, WellSurveillance, compute_surveillance
 from oag_semantic.lpg import LPG, VOCABULARY_PATH, TermConcept, load_lpg
 from oag_semantic.manifest import SEMANTIC_DIR, SemanticLayer, load_semantic_layer
 
-QUESTION_ID = "surveillance-below-expected-oil"
+# Same catalog-sourced id the gold artifact is keyed on -- graded answers must match it (issue #14).
+QUESTION_ID = SURVEILLANCE_QUESTION_ID
 # Vocabulary comparison keyword -> SQL/relational operator, for provenance filter strings.
 _COMPARISON_OP = {"less_than": "<", "greater_than": ">", "equals": "="}
 

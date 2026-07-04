@@ -19,8 +19,11 @@ from datetime import date, timedelta
 
 from oag_generator import schema
 from oag_generator.config import Config, surveillance_window
+from oag_generator.questions import SURVEILLANCE_QUESTION_ID
 
-QUESTION_ID = "surveillance-below-expected-oil"
+# Single source for the question id: the catalog (spec/questions/catalog.yaml). Keeping the gold
+# artifact keyed off the catalog is what makes "no drift between questions and gold" true (issue #14).
+QUESTION_ID = SURVEILLANCE_QUESTION_ID
 
 
 def compute_surveillance_gold(cols: dict[str, dict[str, list]], config: Config) -> dict:
