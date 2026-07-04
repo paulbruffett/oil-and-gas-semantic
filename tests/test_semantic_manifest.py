@@ -45,6 +45,19 @@ def test_deferment_metrics_defined():
     assert any(m.name == "downtime_hours" and m.expr == "DURATION_HOURS" for m in dte.measures)
 
 
+def test_decline_metrics_defined():
+    """The decline & trend KPIs (§6.3, issue #5) are defined once in the semantic layer."""
+    layer = load_semantic_layer()
+    # Cumulative production is a governed simple metric over the measured-oil measure.
+    assert "cumulative_oil" in layer.metrics
+    assert layer.metrics["cumulative_oil"].type == "simple"
+    assert layer.metrics["cumulative_oil"].type_params["measure"] == "actual_oil_volume"
+    # Decline rate itself is compile-assembled (a log/pow ratio across period buckets), so it is not
+    # a MetricFlow metric; the FIELD model that scopes "Field X" resolves wells -> field.
+    assert layer.model("field").entity("field").expr == "FIELD_ID"
+    assert layer.model("well").entity("field").expr == "FIELD_ID"
+
+
 def test_semantic_layer_columns_conform_to_osdu_profile():
     """Every table/column the manifest references exists in the vendored OSDU PDM profile."""
     layer = load_semantic_layer()

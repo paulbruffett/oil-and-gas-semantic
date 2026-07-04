@@ -48,3 +48,8 @@ def gold(dataset_dir) -> dict:
 @pytest.fixture
 def deferment_gold(dataset_dir) -> dict:
     return json.loads((dataset_dir / "gold" / "deferment.json").read_text())
+
+
+@pytest.fixture
+def decline_gold(dataset_dir) -> dict:
+    return json.loads((dataset_dir / "gold" / "decline.json").read_text())

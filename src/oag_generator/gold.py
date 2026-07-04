@@ -21,8 +21,18 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from oag_generator import schema
-from oag_generator.config import Config, deferment_window, surveillance_window
-from oag_generator.questions import DEFERMENT_QUESTION_ID, SURVEILLANCE_QUESTION_ID
+from oag_generator.config import (
+    Config,
+    decline_boundary_months,
+    decline_months,
+    deferment_window,
+    surveillance_window,
+)
+from oag_generator.questions import (
+    DECLINE_QUESTION_ID,
+    DEFERMENT_QUESTION_ID,
+    SURVEILLANCE_QUESTION_ID,
+)
 
 # Single source for the question id: the catalog (spec/questions/catalog.yaml). Keeping the gold
 # artifact keyed off the catalog is what makes "no drift between questions and gold" true (issue #14).
@@ -234,6 +244,243 @@ def compute_deferment_gold(cols: dict[str, dict[str, list]], config: Config) -> 
         "causes": causes,
         "answer": _deferment_narrative(causes, total_deferred, uptime_pct, start, end),
     }
+
+
+def _annualized_decline(
+    first: tuple[float, float, int], last: tuple[float, float, int]
+) -> float | None:
+    """Annualized effective decline of the average daily rate between two period buckets (ADR 0018).
+
+    Each bucket is ``(sum_oil, sum_day_index, n_days)``; ``rate = sum_oil/n`` is the mean daily rate
+    and ``mid = sum_day_index/n`` the mean day-index (partial-month-safe). With
+    ``span_years = (mid_last - mid_first)/365.25`` the decline is ``1 - (rate_last/rate_first)^(1/span)``.
+    Returns ``None`` when it is undefined (empty bucket, zero first-period rate, or zero span).
+    """
+    sum0, idx0, n0 = first
+    sum1, idx1, n1 = last
+    if n0 == 0 or n1 == 0:
+        return None
+    rate0 = sum0 / n0
+    rate1 = sum1 / n1
+    span_years = (idx1 / n1 - idx0 / n0) / 365.25
+    if rate0 <= 0.0 or span_years <= 0.0:
+        return None
+    return 1.0 - (rate1 / rate0) ** (1.0 / span_years)
+
+
+def compute_decline_gold(cols: dict[str, dict[str, list]], config: Config) -> dict:
+    """Deterministic gold for the decline & trend question (theme 3, issue #5).
+
+    Cumulative production (Σ actual oil) and an annualized decline rate vs forecast, over the calendar
+    months the dataset spans (ADR 0018). "Field X" is the field with the largest cumulative oil; the
+    answer lists that field's wells whose actual annual decline exceeds their forecast annual decline.
+    Operates on the *same* rounded columns the generator writes to Parquet, so the reference compile
+    reproduces these values exactly.
+    """
+    start_iso, end_iso = config.start_date, config.end_date
+    start = date.fromisoformat(start_iso)
+    boundary = decline_boundary_months(start_iso, end_iso)
+
+    # date -> (YYYY-MM month bucket, day index since start) for every day in the window.
+    dmap: dict[str, tuple[str, int]] = {}
+    d = start
+    end = date.fromisoformat(end_iso)
+    i = 0
+    while d <= end:
+        iso = d.isoformat()
+        dmap[iso] = (iso[:7], i)
+        d += timedelta(days=1)
+        i += 1
+
+    well = cols[schema.WELL.key]
+    well_uwi = dict(zip(well["WELL_ID"], well["UWI"]))
+    well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
+    field = cols[schema.FIELD.key]
+    field_name = dict(zip(field["FIELD_ID"], field["FIELD_NAME"]))
+
+    # Forecast row -> well, via Well-kind reporting entities only (same guard as surveillance).
+    rentity = cols[schema.REPORTING_ENTITY.key]
+    re_to_well = {
+        re_id: obj_id
+        for re_id, kind, obj_id in zip(
+            rentity["REPORTING_ENTITY_ID"],
+            rentity["REPORTING_ENTITY_KIND"],
+            rentity["ASSOCIATED_OBJECT_ID"],
+        )
+        if kind == schema.KIND_WELL
+    }
+
+    # Per-well monthly actual oil buckets (sum_oil, sum_idx, n) + window cumulative.
+    def _empty_bucket() -> list[float]:
+        return [0.0, 0.0, 0]
+
+    actual_month: dict[tuple[int, str], list[float]] = {}
+    cumulative: dict[int, float] = {}
+    wvd = cols[schema.WELL_VOL_DAILY.key]
+    for well_id, vol_date, oil in zip(wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["OIL_VOLUME"]):
+        month, idx = dmap[vol_date]
+        b = actual_month.setdefault((well_id, month), _empty_bucket())
+        b[0] += oil
+        b[1] += idx
+        b[2] += 1
+        cumulative[well_id] = cumulative.get(well_id, 0.0) + oil
+
+    # Per-well monthly forecast oil buckets (forecast oil, joined forecast->well).
+    forecast_month: dict[tuple[int, str], list[float]] = {}
+    pvs = cols[schema.PRODUCT_VOLUME_SUMMARY.key]
+    for re_id, sdate, product, method, vol in zip(
+        pvs["REPORTING_ENTITY_ID"],
+        pvs["START_DATE"],
+        pvs["PRODUCT"],
+        pvs["QUANTITY_METHOD"],
+        pvs["VOLUME"],
+    ):
+        if method != schema.QUANTITY_FORECAST or product != schema.PRODUCT_OIL:
+            continue
+        well_id = re_to_well.get(re_id)
+        if well_id is None:
+            continue
+        month, idx = dmap[sdate]
+        b = forecast_month.setdefault((well_id, month), _empty_bucket())
+        b[0] += vol
+        b[1] += idx
+        b[2] += 1
+
+    def _bucket(store: dict[tuple[int, str], list[float]], well_id: int, month: str):
+        return tuple(store.get((well_id, month), _empty_bucket()))
+
+    # "Field X" = the field with the largest cumulative oil (tie-break field_id asc).
+    field_cumulative: dict[int, float] = {}
+    for well_id, cum in cumulative.items():
+        fid = well_field[well_id]
+        field_cumulative[fid] = field_cumulative.get(fid, 0.0) + cum
+    target_field = min(field_cumulative, key=lambda fid: (-field_cumulative[fid], fid))
+    target_wells = sorted(w for w, f in well_field.items() if f == target_field)
+
+    # Per-well decline (actual vs forecast) for the target field's wells.
+    wells_faster: list[dict] = []
+    n_evaluated = 0
+    if boundary is not None:
+        first_m, last_m = boundary
+        for well_id in target_wells:
+            a_dec = _annualized_decline(
+                _bucket(actual_month, well_id, first_m), _bucket(actual_month, well_id, last_m)
+            )
+            f_dec = _annualized_decline(
+                _bucket(forecast_month, well_id, first_m), _bucket(forecast_month, well_id, last_m)
+            )
+            if a_dec is None or f_dec is None:
+                continue
+            n_evaluated += 1
+            if a_dec > f_dec:
+                wells_faster.append(
+                    {
+                        "uwi": well_uwi[well_id],
+                        "well_id": well_id,
+                        "actual_annual_decline": a_dec,
+                        "forecast_annual_decline": f_dec,
+                        "decline_gap": a_dec - f_dec,
+                        "cumulative_oil_bbl": cumulative.get(well_id, 0.0),
+                    }
+                )
+    # Deterministic order: biggest gap (actual - forecast) first, then well_id for ties.
+    wells_faster.sort(key=lambda r: (-r["decline_gap"], r["well_id"]))
+
+    # Field-level decline + monthly cumulative series (aggregate the target field's wells in one
+    # pass over the buckets, filtered by target-field membership).
+    target_set = set(target_wells)
+    field_actual: dict[str, list[float]] = {}
+    field_forecast: dict[str, list[float]] = {}
+    for (w, month), b in actual_month.items():
+        if w in target_set:
+            fb = field_actual.setdefault(month, _empty_bucket())
+            fb[0] += b[0]
+            fb[1] += b[1]
+            fb[2] += b[2]
+    for (w, month), b in forecast_month.items():
+        if w in target_set:
+            fb = field_forecast.setdefault(month, _empty_bucket())
+            fb[0] += b[0]
+            fb[1] += b[1]
+            fb[2] += b[2]
+
+    field_actual_decline = field_forecast_decline = None
+    if boundary is not None:
+        first_m, last_m = boundary
+        field_actual_decline = _annualized_decline(
+            tuple(field_actual.get(first_m, _empty_bucket())),
+            tuple(field_actual.get(last_m, _empty_bucket())),
+        )
+        field_forecast_decline = _annualized_decline(
+            tuple(field_forecast.get(first_m, _empty_bucket())),
+            tuple(field_forecast.get(last_m, _empty_bucket())),
+        )
+
+    # The calendar months the dataset spans (authoritative span), not just months that produced.
+    months = decline_months(start_iso, end_iso)
+    monthly = [
+        {
+            "month": month,
+            "oil_bbl": field_actual.get(month, _empty_bucket())[0],
+            "forecast_oil_bbl": field_forecast.get(month, _empty_bucket())[0],
+        }
+        for month in months
+    ]
+
+    return {
+        "question_id": DECLINE_QUESTION_ID,
+        "question": (
+            f"What is the 12-month oil decline for {field_name[target_field]}, and which wells are "
+            "declining faster than forecast?"
+        ),
+        "window": {"start": start_iso, "end": end_iso, "months": months},
+        "unit": "bbl",
+        "field": {"field_id": target_field, "field_name": field_name[target_field]},
+        "field_cumulative_oil_bbl": field_cumulative[target_field],
+        "field_actual_annual_decline": field_actual_decline,
+        "field_forecast_annual_decline": field_forecast_decline,
+        "monthly_oil": monthly,
+        "n_wells_evaluated": n_evaluated,
+        "n_declining_faster": len(wells_faster),
+        "wells_declining_faster": wells_faster,
+        "answer": _decline_narrative(
+            field_name[target_field],
+            field_actual_decline,
+            field_forecast_decline,
+            wells_faster,
+            n_evaluated,
+            start,
+            end,
+        ),
+    }
+
+
+def _decline_narrative(
+    field: str,
+    actual_decline: float | None,
+    forecast_decline: float | None,
+    wells_faster: list[dict],
+    n_evaluated: int,
+    start: date,
+    end: date,
+) -> str:
+    if actual_decline is None:
+        return (
+            f"{field} spans too few periods between {start.isoformat()} and {end.isoformat()} "
+            "to compute a decline rate."
+        )
+    span = f"{start.isoformat()}..{end.isoformat()}"
+    lead = (
+        f"{field} oil is declining ~{actual_decline * 100:.1f}%/yr (actual) vs "
+        f"~{forecast_decline * 100:.1f}%/yr forecast over {span}"
+    )
+    if not wells_faster:
+        return f"{lead}; no wells are declining faster than forecast (of {n_evaluated} evaluated)."
+    worst = wells_faster[0]
+    return (
+        f"{lead}; {len(wells_faster)} of {n_evaluated} wells are declining faster than forecast, "
+        f"led by {worst['uwi']} (+{worst['decline_gap'] * 100:.1f} pts/yr)."
+    )
 
 
 def _deferment_narrative(
