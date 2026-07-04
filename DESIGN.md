@@ -131,6 +131,14 @@ values + optional provenance) so answers can be graded.
 assistant (Axis B).
 **Base collateral**: the platform-/assistant-neutral artifacts in this repo (§5). **Axis A / Axis B**: the
 two comparison dimensions (§1).
+**Fork point**: the tagged, dataset-frozen commit every contestant forks from (ADR 0012). _Avoid_:
+"baseline", "snapshot".
+**Designated platform**: the single platform all contestants in a contest round build on (round 1:
+Databricks — ADR 0014).
+**Sealed change-request set**: the private, pre-tag-hashed change set every contestant applies in round 2
+(ADR 0015). _Avoid_: "round-2 tasks".
+**Expected change locus**: the seam a sealed change request declares it should land at; grading checks
+adherence (ADR 0015). _Avoid_: "blast radius" (that's the reported raw line count).
 
 ---
 
@@ -282,33 +290,55 @@ instantiation. Each contest round designates one platform (**round 1: Databricks
 builds all six layers end-to-end on it, and the **best output is curated** into that platform's working
 demonstration + reproducible instantiation guide. Platform comparison = re-running the contest on another
 designated platform. Success = the pattern works natively on the platform and answers the use cases.
-Round 1 doubles as spec-validation for the platform-native path (OSI → Metric View); a spec-defect
-amendment rule is agreed before the round starts.
+Round 1 doubles as spec-validation for the platform-native path (OSI → Metric View); defects are handled
+by the amendment rule below (ADR 0015).
 
 ### Axis B — competing-implementation code review
 Each coding assistant implements the design (from its per-assistant plan), building the open
 `axis-b-contest` issues in its **own fork** from the tagged, dataset-frozen fork point (ADR 0012);
-outputs are scored on a rubric:
+outputs are scored on a rubric in which **every dimension has an objective anchor** and the assessor
+panel is the tiebreaker (ADR 0015):
 
-1. **Functional correctness** — answers vs the deterministic gold set (objective; not voted).
-2. **Spec fidelity** — OSDU conformance, six-layer architecture, OSI semantic layer + LPG as specified.
-3. **Use-case coverage** — how many themes are implemented end-to-end.
-4. **Code quality / maintainability** — structure, idiomatic platform use, readability.
-5. **Test quality** — meaningful engineering tests at the right seams.
-6. **Security & governance** — secrets handling, access control, lineage.
-7. **Documentation / runnability** — reproducible from what was produced.
-8. **Change absorption** — correctness + diff blast radius on the sealed change-request set (objective;
-   not voted — ADR 0013).
+1. **Functional correctness** — answers vs the deterministic gold set, incl. the adversarial tier
+   (objective; not voted).
+2. **Spec fidelity & completeness** — anchored by the contest issues' acceptance-criteria checklist
+   (objective); the panel judges conformance quality (OSDU, six-layer architecture, OSI + LPG as
+   specified) on top. Theme breadth is a **reported fact**, not a score (ADR 0015).
+3. **Code quality / maintainability** — structure, idiomatic platform use, readability; panel-scored by
+   **pairwise comparison** with **per-judge scores published** (surfaces self-preference bias).
+4. **Test quality** — anchored by a **seeded-bug/perturbation probe** (does the contestant's own suite
+   catch it — objective); panel judges seam placement and meaningfulness on top.
+5. **Security & governance** — secrets handling, access control (UC grants), lineage; evidence from the
+   Databricks build.
+6. **Documentation / runnability** — anchored by a **fresh-agent reproduction probe** (a clean agent
+   given only the instantiation guide attempts the build — observable); panel judges clarity on top.
+7. **Change absorption** — post-change gold correctness **plus locus adherence**: each sealed change
+   request declares the seam it should land at; out-of-locus touches are enumerated and reviewed
+   (objective; raw line counts reported only — ADR 0015).
 
 **Method.** The contest runs in **two rounds** (ADR 0013): round 1 builds the `axis-b-contest` issues
 (including the webapp vertical, graded against its gold-anchored acceptance checklist plus dimensions
-2–7); round 2 releases the sealed change-request set, which every contestant applies to its own fork and
+2–6); round 2 releases the sealed change-request set, which every contestant applies to its own fork and
 the harness re-grades. All contestants in a round build on the **designated platform** (round 1:
 Databricks — ADR 0014) so model quality isn't confounded with platform differences; a reproducible
-instantiation guide is part of each contestant's deliverables (dimension 7). The webapp's own tech stack
-remains each contestant's graded choice. A **multi-LLM assessor panel** scores dimensions 2–7 (averages + spread surface
-disagreement) using review/assessment skills; dimensions 1 and 8 are computed objectively.
-**Effort-to-build** is captured as a **reported (not scored) signal**.
+instantiation guide is part of each contestant's deliverables (dimension 6). The webapp's own tech stack
+remains each contestant's graded choice. A **multi-LLM assessor panel** scores the panel portions of
+dimensions 2–6 (pairwise, per-judge scores + spread published); dimensions 1 and 7 and the objective
+anchors are computed, not voted. **Effort-to-build** is captured as a **reported (not scored) signal**.
+
+**Contest operations (ADR 0015).**
+- **Amendments** after the fork tag are three-class: *clarification* → public broadcast to all
+  contestants simultaneously, no artifact change; *gold correction* → fix + re-grade everyone at round
+  close; *substrate change* → new tagged dataset version, bounded remediation window, remediation effort
+  reported separately. All amendments are logged publicly with timestamps.
+- **Round close** is submit-when-done with operator discretion as the backstop (no formal effort caps);
+  the sealed set releases to all contestants simultaneously at close.
+- **Sealed custody:** the change-request set is authored **before the fork tag**, held outside the repo;
+  the archive's sha256 is committed publicly pre-tag (proves it wasn't tailored to observed outputs);
+  release = committing the files at round close.
+- **Provisioning (round 1):** one Databricks workspace; per-contestant catalog + service principal with
+  scoped Unity Catalog grants; environments fully rebuildable from the fork; credentials never enter the
+  repo. **Forks stay private mid-round**, published at round close.
 
 **Effort-metering recipe.** Report tokens broken out (input / output / cacheRead / cacheCreation) and a
 **notional cost = tokens × public API price** (Max is flat-rate; this is a modeled ROM). For Claude Code on
@@ -351,6 +381,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0012 — Shell/contest boundary: hero built in-repo as scaffolding; use cases 2–6 split at the data seam; Axis-B work built in forks from a frozen tag](docs/adr/0012-shell-contest-boundary-axis-b.md)
 - [0013 — Axis-B discrimination scope: sealed change-request round, neutral webapp vertical, adversarial question tier — every addition objectively anchored](docs/adr/0013-axis-b-discrimination-scope.md)
 - [0014 — Axis-A demonstrations emerge from the graded contest; one designated platform per round (round 1: Databricks); no independent reference instantiation](docs/adr/0014-axis-a-emerges-from-contest-designated-platform.md)
+- [0015 — Contest operations policy + rubric hardening: three-class amendments, submit-when-done rounds, pre-tag sealed custody, locus-adherence grading, objective anchors everywhere](docs/adr/0015-contest-operations-and-rubric-hardening.md)
 
 ---
 
@@ -361,6 +392,9 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - Midstream/downstream, drilling & completions, deep reservoir simulation.
 - A full quantitative multi-model answer benchmark (parked; §6.4).
 - Comparing the *generation of the design itself* across assistants.
+- The optional RDF/OWL ontology track (story 16) — **deferred out of v1** (ADR 0015); the LPG is the sole
+  knowledge layer for round 1. Revisit only if a future round/platform demonstration wants a
+  reasoning-tooling comparison.
 
 **Open questions / flagged items:**
 - Exact OSDU PDM entity subset and table shapes for v1: the **sourcing method** is settled (ADR 0010 —
@@ -371,7 +405,6 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - Generator config defaults (field/well counts, date range) and the Volve calibration parameters. The
   performance-model *shape* (unbiased forecast + impaired minority + surveillance materiality band) is
   settled in ADR 0009; the specific numeric defaults remain open.
-- Whether the optional RDF/OWL track is built in v1 or deferred.
 - The `skills@paul-skills` plugin is installed and enabled (user scope); `to-prd` / `to-issues` /
   `implement` / `grill-with-docs` are present but **user-invocation-only** — invoke them as slash commands
   in an interactive Claude Code session (they don't auto-surface in headless/SDK runs).

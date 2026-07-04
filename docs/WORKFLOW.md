@@ -136,6 +136,11 @@ issues are built in per-assistant **forks after the tag**, not in this repo (ADR
   metering in `DESIGN.md` §7. Claude Code competes from the same fork point as everyone else.
   The contest runs in **two rounds** (ADR 0013): round 1 = the `axis-b-contest` builds (including the
   webapp vertical and the adversarial question tier); round 2 = the **sealed change-request set** is
-  released, each contestant applies it to its own fork, and the harness re-grades (correctness + diff
-  blast radius). All contestants in a round build on the **designated platform** — round 1: **Databricks**
-  (ADR 0014) — and ship a reproducible instantiation guide as part of their deliverables.
+  released, each contestant applies it to its own fork, and the harness re-grades (post-change gold
+  correctness + **locus adherence** — ADR 0015). All contestants in a round build on the **designated
+  platform** — round 1: **Databricks** (ADR 0014) — and ship a reproducible instantiation guide as part
+  of their deliverables. Operations (ADR 0015): rounds close **submit-when-done** (operator discretion as
+  backstop; effort logged, never capped or scored); the sealed set is authored + sha256-committed
+  **before the fork tag** and released to everyone simultaneously at round close; amendments follow the
+  three-class rule (clarification / gold correction / substrate change) logged publicly; one Databricks
+  workspace with per-contestant catalogs + service principals; **forks stay private mid-round**.
