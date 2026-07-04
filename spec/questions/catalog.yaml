@@ -7,7 +7,7 @@
 # Each question's `gold_id` is the join key to a co-generated gold answer (its JSON carries the same
 # value in `question_id`), so there is a single source for the id -- no drift path between the
 # question and its gold. `expected_behavior` is one of `behaviors` below; straight questions expect
-# `answered`, while the adversarial tier (#22, ADR 0015) encodes assumptions/clarification/refusal.
+# `answered`, while the adversarial tier (#22, ADR 0013) encodes assumptions/clarification/refusal.
 version: 1
 
 # Allowed expected-behavior values. Mirrors the `behavior` enum in answer_submission.schema.json;
