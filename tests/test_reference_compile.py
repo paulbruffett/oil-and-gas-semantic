@@ -8,12 +8,14 @@ summation order).
 
 from __future__ import annotations
 
+import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from oag_generator import canonical_table_paths
+from oag_generator import canonical_table_paths, deferment_window, read_dataset_manifest
 from oag_semantic.compile import compute_deferment, compute_surveillance
+from oag_semantic.manifest import load_semantic_layer
 
 
 def _append_row(path, overrides: dict) -> None:
@@ -115,3 +117,45 @@ def test_deferment_compile_ranks_by_biggest_deferment(dataset_dir):
     result = compute_deferment(dataset_dir)
     deferred = [c.deferred_oil_bbl for c in result.causes]
     assert deferred == sorted(deferred, reverse=True)
+
+
+def test_uptime_pct_metric_formula_matches_compile(dataset_dir):
+    """The governed uptime_pct derived-metric formula (metrics.yaml) must reproduce the compile's
+    fleet uptime when evaluated over its measures. Without this, the formula is never executed (only
+    its type is asserted), so a bad edit -- dropping the ``* 24`` or ``* 100`` -- would ship silently
+    to any MetricFlow consumer while gold/compile (a separate code path) stayed correct."""
+    layer = load_semantic_layer()
+    config = read_dataset_manifest(dataset_dir)["config"]
+    start, end, _ = deferment_window(config["start_date"], config["end_date"])
+
+    # Resolve the derived formula's referenced (simple) metrics down to their governed measures.
+    uptime = layer.metrics["uptime_pct"]
+    assert uptime.type == "derived"
+    measure_of = {
+        m["name"]: layer.metrics[m["name"]].type_params["measure"]
+        for m in uptime.type_params["metrics"]
+    }
+    wvd_model, on_stream_measure = layer.measure(measure_of["on_stream_hours"])
+    _, calendar_measure = layer.measure(measure_of["calendar_days"])
+
+    con = duckdb.connect()
+    try:
+        con.register(
+            wvd_model.table, pq.read_table(canonical_table_paths(dataset_dir)[wvd_model.table])
+        )
+        on_stream_hours, calendar_days = con.execute(
+            f"""SELECT SUM({on_stream_measure.expr}), COUNT({calendar_measure.expr})
+                FROM {wvd_model.table}
+                WHERE {wvd_model.time_dimension().expr} BETWEEN ? AND ?""",
+            [start, end],
+        ).fetchone()
+    finally:
+        con.close()
+
+    # Evaluate the governed formula string itself (no builtins), so an edit to it fails this test.
+    evaluated = eval(
+        uptime.type_params["expr"],
+        {"__builtins__": {}},
+        {"on_stream_hours": float(on_stream_hours), "calendar_days": float(calendar_days)},
+    )
+    assert evaluated == pytest.approx(compute_deferment(dataset_dir).fleet_uptime_pct, rel=1e-9)

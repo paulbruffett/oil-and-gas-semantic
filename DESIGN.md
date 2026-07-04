@@ -395,6 +395,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0014 — Axis-A demonstrations emerge from the graded contest; one designated platform per round (round 1: Databricks); no independent reference instantiation](docs/adr/0014-axis-a-emerges-from-contest-designated-platform.md)
 - [0015 — Contest operations policy + rubric hardening: three-class amendments, submit-when-done rounds, pre-tag sealed custody, locus-adherence grading, objective anchors everywhere](docs/adr/0015-contest-operations-and-rubric-hardening.md)
 - [0016 — Functional correctness is graded on a held-out evaluation seed, not the fork-point dataset](docs/adr/0016-held-out-evaluation-seed-grading.md)
+- [0017 — DOWN_TIME_EVENT model + forecast-rate deferment attribution](docs/adr/0017-downtime-event-model-and-forecast-rate-deferment.md)
 
 ---
 

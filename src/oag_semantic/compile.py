@@ -200,6 +200,11 @@ def compute_deferment(
     dte_model, downtime_measure = layer.measure("downtime_hours")
     pvs_model, expected_measure = layer.measure("expected_oil_volume")
     wvd_model, on_stream_measure = layer.measure("on_stream_hours")
+    _, calendar_measure = layer.measure("daily_record_count")
+    expected_agg = _AGG_SQL[expected_measure.agg]
+    downtime_agg = _AGG_SQL[downtime_measure.agg]
+    on_stream_agg = _AGG_SQL[on_stream_measure.agg]
+    calendar_agg = _AGG_SQL[calendar_measure.agg]
 
     re_col = dte_model.entity("reporting_entity").expr
     event_date = dte_model.time_dimension().expr
@@ -218,7 +223,7 @@ def compute_deferment(
         WITH forecast AS (
             SELECT {pvs_model.entity("reporting_entity").expr} AS re_id,
                    {pvs_model.time_dimension().expr} AS d,
-                   SUM({expected_measure.expr}) AS forecast_oil
+                   {expected_agg}({expected_measure.expr}) AS forecast_oil
             FROM {pvs_model.table}
             WHERE {pvs_model.dimension("product").expr} = ?
               AND {pvs_model.dimension("quantity_method").expr} = ?
@@ -226,7 +231,7 @@ def compute_deferment(
         )
         SELECT dte.{cause_col} AS cause,
                SUM(COALESCE(f.forecast_oil, 0.0) * dte.{downtime_measure.expr} / 24.0) AS deferred_oil,
-               SUM(dte.{downtime_measure.expr}) AS downtime_hours,
+               {downtime_agg}(dte.{downtime_measure.expr}) AS downtime_hours,
                COUNT(*) AS n_events
         FROM {dte_model.table} dte
         LEFT JOIN forecast f ON f.re_id = dte.{re_col} AND f.d = dte.{event_date}
@@ -239,9 +244,9 @@ def compute_deferment(
 
         # Fleet uptime + evaluated wells over the window.
         uptime_sql = f"""
-        SELECT SUM({on_stream_measure.expr})            AS on_stream_hours,
-               24.0 * COUNT(*)                          AS calendar_hours,
-               COUNT(DISTINCT {wvd_model.entity("well").expr}) AS n_wells
+        SELECT {on_stream_agg}({on_stream_measure.expr})       AS on_stream_hours,
+               24.0 * {calendar_agg}({calendar_measure.expr})  AS calendar_hours,
+               COUNT(DISTINCT {wvd_model.entity("well").expr})  AS n_wells
         FROM {wvd_model.table}
         WHERE {wvd_model.time_dimension().expr} BETWEEN ? AND ?
         """

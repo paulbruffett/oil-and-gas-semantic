@@ -135,6 +135,8 @@ class Config:
             raise ValueError("downtime.full_day_fraction must be in [0, 1]")
         if not self.downtime_causes:
             raise ValueError("downtime_causes must be non-empty")
+        if any(not c.get("cause") for c in self.downtime_causes):
+            raise ValueError("every downtime cause must have a non-empty 'cause' name")
         if any(c.get("weight", 0.0) <= 0.0 for c in self.downtime_causes):
             raise ValueError("every downtime cause must have a positive weight")
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
