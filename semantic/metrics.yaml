@@ -114,3 +114,24 @@ metric:
 # RPEN_ALLOCATION_FACTOR and a summed measure on WELL_VOL_DAILY (different models), which -- like deferred
 # volume (ADR 0017) -- is not one aggregate over separate measures. So OSI governs the allocation_factor
 # metric + the actual_oil_volume measure, and compile.compute_welltest assembles the ratio.
+---
+# --- Asset rollups (theme 6, issue #8, DESIGN.md §6.3 / ADR 0021) ---
+metric:
+  name: actual_gas
+  description: Total measured gas over the window (Mscf) -- the gas leg of the rollup product mix.
+  type: simple
+  type_params:
+    measure: actual_gas_volume
+---
+metric:
+  name: actual_water
+  description: Total measured water over the window (bbl) -- the water leg of the rollup product mix.
+  type: simple
+  type_params:
+    measure: actual_water_volume
+# Period-over-period Δ (§6.3 "period-over-period delta") and contribution-% are compile-assembled KPIs,
+# not pure aggregates: Δ = curr-period volume - prior-period volume for a group (two window-filtered
+# instances of the same measure differenced), and contribution-% = group volume / current-period total
+# (a group-vs-total ratio). Neither is one MetricFlow aggregate, so OSI governs the base measures
+# (actual_oil/gas/water_volume) + the field/operator/facility rollup dimensions, and the reference
+# compile (compile.compute_rollup) assembles the Δ + contribution per group, reproducing gold (ADR 0021).

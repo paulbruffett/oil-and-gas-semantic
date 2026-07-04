@@ -94,8 +94,8 @@ def test_every_implemented_theme_has_its_co_generated_gold(catalog, dataset_dir)
     gold/deferment.json keyed to its catalog gold_id, exactly as theme 1 does.
     """
     implemented = [t for t in catalog.themes if t.status == "implemented"]
-    # surveillance (#3) + deferment (#4) + decline (#5) + well-test/allocation (#6)
-    assert {t.number for t in implemented} >= {1, 2, 3, 4}
+    # surveillance (#3) + deferment (#4) + decline (#5) + well-test/allocation (#6) + rollups (#8)
+    assert {t.number for t in implemented} >= {1, 2, 3, 4, 6}
     for theme in implemented:
         for q in theme.questions:
             artifact = dataset_dir / q.gold_artifact
@@ -121,6 +121,16 @@ def test_decline_theme_matches_the_gold_module(catalog):
     assert theme.status == "implemented"
     (question,) = theme.questions
     assert question.gold_id == DECLINE_QUESTION_ID
+
+
+def test_rollup_theme_matches_the_gold_module(catalog):
+    """Theme 6's catalog id is the single source the generator's rollup gold is keyed off (issue #8)."""
+    from oag_generator.questions import ROLLUP_QUESTION_ID
+
+    theme = next(t for t in catalog.themes if t.number == 6)
+    assert theme.status == "implemented"
+    (question,) = theme.questions
+    assert question.gold_id == ROLLUP_QUESTION_ID
 
 
 def test_welltest_theme_matches_the_gold_module(catalog):

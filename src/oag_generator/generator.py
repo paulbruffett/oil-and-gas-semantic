@@ -29,6 +29,7 @@ from oag_generator.config import (
 from oag_generator.gold import (
     compute_decline_gold,
     compute_deferment_gold,
+    compute_rollup_gold,
     compute_surveillance_gold,
     compute_welltest_gold,
 )
@@ -86,6 +87,12 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     dte = schema.DOWN_TIME_EVENT.empty_columns()
     wt = schema.WELL_TEST.empty_columns()
     paf = schema.RPEN_ALLOCATION_FACTOR.empty_columns()
+    fac = schema.FACILITY.empty_columns()
+
+    # Field centroids drawn in the main loop, remembered (no extra draws) so FACILITY can place its
+    # batteries around them in the byte-stable second pass below.
+    field_centroids: list[tuple[int, str, str, float, float]] = []
+    facilities_per_field = config.facilities_per_field
 
     well_seq = 0
     wvd_seq = 0
@@ -101,11 +108,15 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
 
         cen_lat = rng.uniform(*_LAT_RANGE)
         cen_lon = rng.uniform(*_LON_RANGE)
+        field_centroids.append((field_id, field_name, operator, cen_lat, cen_lon))
 
         for w in range(config.wells_per_field):
             well_seq += 1
             well_id = well_seq
             uwi = f"NO 15/9-F-{well_seq}"
+            # Well -> battery: round-robin across the field's facilities (deterministic, no rng draw,
+            # so the existing per-well draw order -- and every earlier table -- is unchanged).
+            facility_id = f * facilities_per_field + (w % facilities_per_field) + 1
             well["WELL_ID"].append(well_id)
             well["UWI"].append(uwi)
             well["WELL_NAME"].append(f"{field_name}-{w + 1}")
@@ -114,6 +125,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
             well["OPERATOR"].append(operator)
             well["X_COORDINATE"].append(round(cen_lon + rng.uniform(-0.05, 0.05), 6))  # longitude
             well["Y_COORDINATE"].append(round(cen_lat + rng.uniform(-0.05, 0.05), 6))  # latitude
+            well["FACILITY_ID"].append(facility_id)
 
             # One reporting entity per well (volumes report against it).
             re_id = well_id
@@ -211,6 +223,12 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     # unchanged: continuing the same rng here only appends draws, never reorders the existing ones.
     _build_welltest_allocation(config, rng, dates, n_days, field, well, wvd, rentity, wt, paf)
 
+    # --- Facilities / asset hierarchy (issue #8, ADR 0021) ---------------------------------------
+    # Built deterministically from the remembered field centroids -- no rng draw -- so every other
+    # table (and all earlier gold) is byte-for-byte unchanged; only the new FACILITY table and WELL's
+    # FACILITY_ID column appear, and the config hash moves.
+    _build_facilities(facilities_per_field, field_centroids, fac)
+
     return {
         schema.FIELD.key: field,
         schema.WELL.key: well,
@@ -220,7 +238,36 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
         schema.DOWN_TIME_EVENT.key: dte,
         schema.WELL_TEST.key: wt,
         schema.RPEN_ALLOCATION_FACTOR.key: paf,
+        schema.FACILITY.key: fac,
     }
+
+
+def _build_facilities(
+    facilities_per_field: int,
+    field_centroids: list[tuple[int, str, str, float, float]],
+    fac: dict[str, list],
+) -> None:
+    """Emit one FACILITY (battery) row per (field, battery index), placed around the field centroid.
+
+    Facility ids match the round-robin assignment the main loop wrote onto WELL.FACILITY_ID
+    (``field_index * facilities_per_field + battery_index + 1``), so the Well -> Facility -> Field
+    hierarchy joins cleanly. Coordinates are a fixed per-battery offset from the field centroid
+    (no rng), keeping the whole draw sequence -- and every other table -- byte-stable.
+    """
+    for f, (field_id, field_name, operator, cen_lat, cen_lon) in enumerate(field_centroids):
+        for b in range(facilities_per_field):
+            facility_id = f * facilities_per_field + b + 1
+            # Spread batteries east-west around the centroid; symmetric about it for a stable layout.
+            lon = cen_lon + 0.02 * (b - (facilities_per_field - 1) / 2.0)
+            fac["FACILITY_ID"].append(facility_id)
+            fac["FACILITY_TYPE"].append(schema.FACILITY_TYPE_BATTERY)
+            fac["FACILITY_NAME"].append(f"{field_name} Battery {b + 1}")
+            fac["FIELD_ID"].append(field_id)
+            fac["OPERATOR"].append(operator)
+            fac["LATITUDE"].append(round(cen_lat, 6))
+            fac["LATITUDE_OUOM"].append(schema.COORD_UOM)
+            fac["LONGITUDE"].append(round(lon, 6))
+            fac["LONGITUDE_OUOM"].append(schema.COORD_UOM)
 
 
 def _build_welltest_allocation(
@@ -369,6 +416,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         "deferment": compute_deferment_gold(cols, cfg),
         "decline": compute_decline_gold(cols, cfg),
         "welltest": compute_welltest_gold(cols, cfg),
+        "rollups": compute_rollup_gold(cols, cfg),
     }
     gold_paths: dict[str, Path] = {}
     for key, answer in gold_answers.items():

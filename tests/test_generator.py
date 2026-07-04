@@ -17,7 +17,7 @@ from oag_generator import generate_dataset
 
 CANONICAL_TABLES = [
     "field", "well", "reporting_entity", "well_vol_daily", "product_volume_summary", "down_time_event",
-    "well_test", "rpen_allocation_factor",
+    "well_test", "rpen_allocation_factor", "facility",
 ]
 
 
@@ -97,7 +97,7 @@ def test_byte_stable_across_runs(tmp_path, small_config):
         assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
             f"table {name} is not byte-stable across identical runs"
         )
-    for artifact in ("surveillance", "deferment", "decline", "welltest"):
+    for artifact in ("surveillance", "deferment", "decline", "welltest", "rollups"):
         assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes()
 
 
@@ -463,3 +463,71 @@ def test_welltest_gold_matches_kpi_defs(tmp_path, welltest_config):
     assert keys == sorted(keys)
     # Both signals actually fire in this fixture, so the flagging logic is genuinely exercised.
     assert n_stale > 0 and n_anom > 0
+
+
+def test_facility_hierarchy_emitted(tmp_path, small_config):
+    """FACILITY rows (composite PK) exist and every well routes to a facility in its own field (#8)."""
+    m = generate_dataset(small_config, tmp_path)
+    facility = _read(m.tables["facility"])
+    well = _read(m.tables["well"])
+
+    n_fields = small_config["n_fields"]
+    per_field = 2  # Config default facilities_per_field
+    assert len(facility["FACILITY_ID"]) == n_fields * per_field
+    # Composite PK (FACILITY_ID, FACILITY_TYPE): a battery is a FACILITY_TYPE value, not its own table.
+    assert set(facility["FACILITY_TYPE"]) == {"Battery"}
+    assert len(set(zip(facility["FACILITY_ID"], facility["FACILITY_TYPE"]))) == len(facility["FACILITY_ID"])
+    # Per-value OUOM on lat/long.
+    assert set(facility["LATITUDE_OUOM"]) == {"dega"} and set(facility["LONGITUDE_OUOM"]) == {"dega"}
+
+    # Every well's FACILITY_ID resolves, and the facility belongs to the well's own field
+    # (Well -> Facility -> Field is internally consistent).
+    fac_field = dict(zip(facility["FACILITY_ID"], facility["FIELD_ID"]))
+    assert set(well["FACILITY_ID"]) <= set(facility["FACILITY_ID"])
+    for well_id, well_field, fac_id in zip(well["WELL_ID"], well["FIELD_ID"], well["FACILITY_ID"]):
+        assert fac_field[fac_id] == well_field, f"well {well_id} routes to a facility in another field"
+
+
+def test_rollup_gold_matches_kpi_defs(tmp_path, small_config):
+    """Recompute the rollup KPI (§6.3) independently and assert gold matches: oil by field over the
+    current vs prior month, with period-over-period Δ and contribution-% (#8)."""
+    m = generate_dataset(small_config, tmp_path)
+    well = _read(m.tables["well"])
+    wvd = _read(m.tables["well_vol_daily"])
+    gold = json.loads(m.gold["rollups"].read_text())
+
+    curr = gold["current_period"]
+    prior = gold["prior_period"]
+    curr_set = {
+        (date.fromisoformat(curr["start"]) + timedelta(days=i)).isoformat() for i in range(curr["days"])
+    }
+    prior_set = {
+        (date.fromisoformat(prior["start"]) + timedelta(days=i)).isoformat() for i in range(prior["days"])
+    }
+    well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
+
+    oil_curr: dict[int, float] = {}
+    oil_prior: dict[int, float] = {}
+    for well_id, d, oil in zip(wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["OIL_VOLUME"]):
+        fid = well_field[well_id]
+        if d in curr_set:
+            oil_curr[fid] = oil_curr.get(fid, 0.0) + oil
+        elif d in prior_set:
+            oil_prior[fid] = oil_prior.get(fid, 0.0) + oil
+    total_curr = sum(oil_curr.values())
+
+    field_name_of = dict(zip(well["FIELD_ID"], well["FIELD_NAME"]))
+    gold_by_field = {r["field_id"]: r for r in gold["by_field"]}
+    assert set(gold_by_field) == set(oil_curr)
+    for fid, exp in oil_curr.items():
+        g = gold_by_field[fid]
+        assert g["field_name"] == field_name_of[fid]  # each field labelled with its OWN name
+        assert g["oil_curr"] == pytest.approx(exp, rel=1e-9)
+        assert g["oil_delta"] == pytest.approx(exp - oil_prior.get(fid, 0.0), rel=1e-9)
+        assert g["oil_contribution_pct"] == pytest.approx(100.0 * exp / total_curr, rel=1e-9)
+
+    # Biggest movers first: |oil_delta| is non-increasing.
+    deltas = [abs(r["oil_delta"]) for r in gold["by_field"]]
+    assert deltas == sorted(deltas, reverse=True)
+    # by_facility rolls up the same total as by_field (the hierarchy partitions the same wells).
+    assert sum(r["oil_curr"] for r in gold["by_facility"]) == pytest.approx(total_curr, rel=1e-9)

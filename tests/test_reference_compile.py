@@ -24,6 +24,7 @@ from oag_generator import (
 from oag_semantic.compile import (
     compute_decline,
     compute_deferment,
+    compute_rollup,
     compute_surveillance,
     compute_welltest,
 )
@@ -446,3 +447,44 @@ def test_welltest_compile_ignores_non_well_kind_and_non_oil_rows(welltest_datase
             assert w.allocation_variance == pytest.approx(
                 gold_by_id[w.well_id]["allocation_variance"], rel=1e-6
             )
+
+
+# --- asset rollups (issue #8) -------------------------------------------------------------------
+
+
+def test_rollup_reference_compile_reproduces_gold(dataset_dir, rollup_gold):
+    """The OSI-driven reference compile reproduces the co-generated rollup gold (Δ + contribution %)."""
+    result = compute_rollup(dataset_dir)
+    g = rollup_gold
+
+    assert result.curr_start == g["current_period"]["start"]
+    assert result.curr_end == g["current_period"]["end"]
+    assert result.prior_start == g["prior_period"]["start"]
+    assert result.prior_end == g["prior_period"]["end"]
+    for k, v in g["totals"].items():
+        assert result.totals[k] == pytest.approx(v, rel=1e-9)
+
+    def _match(compiled_rows, gold_rows, id_key, name_key=None):
+        assert [r[id_key] for r in compiled_rows] == [r[id_key] for r in gold_rows]  # same order
+        by_id = {r[id_key]: r for r in compiled_rows}
+        for gr in gold_rows:
+            cr = by_id[gr[id_key]]
+            for key in (
+                "oil_curr", "gas_curr", "water_curr", "oil_prior", "gas_prior", "water_prior",
+                "oil_delta", "gas_delta", "water_delta", "oil_contribution_pct",
+            ):
+                assert cr[key] == pytest.approx(gr[key], rel=1e-6), (id_key, gr[id_key], key)
+            # Compile derives names from the FIELD/FACILITY models (by group id); comparing them
+            # guards against gold labelling a group with the wrong name (a keyed-by-WELL_ID bug).
+            if name_key is not None:
+                assert cr[name_key] == gr[name_key], (id_key, gr[id_key], name_key)
+
+    _match(result.by_field, g["by_field"], "field_id", "field_name")
+    _match(result.by_operator, g["by_operator"], "operator")
+    _match(result.by_facility, g["by_facility"], "facility_id", "facility_name")
+
+
+def test_rollup_compile_orders_by_biggest_mover(dataset_dir):
+    result = compute_rollup(dataset_dir)
+    deltas = [abs(r["oil_delta"]) for r in result.by_field]
+    assert deltas == sorted(deltas, reverse=True)

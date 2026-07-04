@@ -12,6 +12,7 @@ from oag_generator.config import (
     decline_months,
     deferment_window,
     load_config,
+    rollup_periods,
     surveillance_window,
 )
 from oag_generator.generator import (
@@ -35,5 +36,6 @@ __all__ = [
     "generate_dataset",
     "load_config",
     "read_dataset_manifest",
+    "rollup_periods",
     "surveillance_window",
 ]

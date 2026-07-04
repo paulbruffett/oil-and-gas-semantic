@@ -110,6 +110,9 @@ class Config:
     end_date: str = "2024-06-30"
     n_fields: int = 3
     wells_per_field: int = 6
+    # Batteries (FACILITY rows) per field; wells distribute round-robin across them, giving the
+    # Well -> Facility -> Field hierarchy the asset-rollups use case navigates (#8).
+    facilities_per_field: int = 2
     operators: list[str] = field(default_factory=lambda: list(DEFAULT_OPERATORS))
     # Trailing window (ending at end_date) used for the surveillance gold question.
     surveillance_window_days: int = 7
@@ -142,6 +145,8 @@ class Config:
     def _validate(self) -> None:
         if self.n_fields < 1 or self.wells_per_field < 1:
             raise ValueError("n_fields and wells_per_field must be >= 1")
+        if self.facilities_per_field < 1:
+            raise ValueError("facilities_per_field must be >= 1")
         if not self.operators:
             raise ValueError("operators must be non-empty")
         if date.fromisoformat(self.end_date) < date.fromisoformat(self.start_date):
@@ -267,6 +272,45 @@ def allocation_period(start_date: str, end_date: str) -> tuple[str, str, int]:
     Returns ``(start_iso, end_iso, n_days)``.
     """
     return deferment_window(start_date, end_date)
+
+
+def _month_end(d: date) -> date:
+    """The last calendar day of ``d``'s month."""
+    first_next = (d.replace(day=1) + timedelta(days=32)).replace(day=1)
+    return first_next - timedelta(days=1)
+
+
+def _prev_month_start(month_start: date) -> date:
+    """The first day of the month before ``month_start`` (which must itself be a first-of-month)."""
+    return (month_start - timedelta(days=1)).replace(day=1)
+
+
+def rollup_periods(start_date: str, end_date: str) -> tuple[tuple[str, str, int], tuple[str, str, int]]:
+    """The (current, prior) monthly periods for the asset-rollups question ("this month vs last", #8).
+
+    Current = the most recent **complete** calendar month at or before ``end_date``; prior = the
+    complete month before it. Using the last *complete* month (not the possibly-partial month of
+    ``end_date``) keeps the two windows the same shape, so a period-over-period Δ is a fair like-for-like
+    comparison rather than a partial-month-vs-full-month artefact. Both are clamped up to the data start;
+    a month lying entirely before ``start_date`` yields ``n_days`` 0 (an empty period -> deltas vs zero).
+    Single source of truth for the two windows shared by the gold and the reference compile. Returns
+    ``((curr_start, curr_end, curr_days), (prior_start, prior_end, prior_days))``.
+    """
+    data_start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    # "This month": the month of end_date if end_date is its last day, else the previous month.
+    end_month_start = end.replace(day=1)
+    curr_month_start = end_month_start if end == _month_end(end) else _prev_month_start(end_month_start)
+    prior_month_start = _prev_month_start(curr_month_start)
+
+    def _clamp(month_start: date) -> tuple[str, str, int]:
+        month_end = _month_end(month_start)
+        if month_end < data_start:  # the whole month precedes the data -> empty period
+            return month_start.isoformat(), month_end.isoformat(), 0
+        start = max(data_start, month_start)
+        return start.isoformat(), month_end.isoformat(), (month_end - start).days + 1
+
+    return _clamp(curr_month_start), _clamp(prior_month_start)
 
 
 def decline_months(start_date: str, end_date: str) -> list[str]:

@@ -31,11 +31,13 @@ from oag_generator.config import (
     decline_boundary_months,
     decline_months,
     deferment_window,
+    rollup_periods,
     surveillance_window,
 )
 from oag_generator.questions import (
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
+    ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
     WELLTEST_QUESTION_ID,
 )
@@ -673,4 +675,178 @@ def _welltest_narrative(
         f"{len(flagged)} of {n_wells} wells need attention as of {as_of.isoformat()}: "
         + " and ".join(parts)
         + "."
+    )
+
+
+def _period_dates(start_iso: str, end_iso: str, n_days: int) -> set[str]:
+    """The set of ISO dates in a rollup period; empty when the period has no days (clamped away)."""
+    if n_days <= 0:
+        return set()
+    start = date.fromisoformat(start_iso)
+    return {(start + timedelta(days=i)).isoformat() for i in range(n_days)}
+
+
+def _rollup_row(values: list[float], total_oil_curr: float) -> dict:
+    """The per-group product block: current/prior oil-gas-water, their deltas, and oil contribution %.
+
+    Values are left unrounded (like every other gold answer) so the DuckDB reference compile
+    reproduces them to floating-point tolerance rather than a rounded copy.
+    """
+    oc, gc, wc, op, gp, wp = values
+    return {
+        "oil_curr": oc, "gas_curr": gc, "water_curr": wc,
+        "oil_prior": op, "gas_prior": gp, "water_prior": wp,
+        "oil_delta": oc - op, "gas_delta": gc - gp, "water_delta": wc - wp,
+        "oil_contribution_pct": (100.0 * oc / total_oil_curr) if total_oil_curr > 0 else 0.0,
+    }
+
+
+def compute_rollup_gold(cols: dict[str, dict[str, list]], config: Config) -> dict:
+    """Deterministic gold for the asset-rollups question (theme 6, issue #8 / ADR 0021).
+
+    Oil/gas/water rolled up by **field**, **operator**, and **facility** (the Well -> Facility -> Field
+    hierarchy) for the current month vs the prior month, with **period-over-period Δ** and
+    **contribution-%** (each group's share of the current-period total). "Biggest movers" order each
+    grouping by absolute oil delta. Operates on the *same* rounded columns the generator writes to
+    Parquet, so the reference compile reproduces these values exactly.
+    """
+    (curr_start, curr_end, curr_days), (prior_start, prior_end, prior_days) = rollup_periods(
+        config.start_date, config.end_date
+    )
+    curr_set = _period_dates(curr_start, curr_end, curr_days)
+    prior_set = _period_dates(prior_start, prior_end, prior_days)
+
+    well = cols[schema.WELL.key]
+    well_field = dict(zip(well["WELL_ID"], well["FIELD_ID"]))
+    well_operator = dict(zip(well["WELL_ID"], well["OPERATOR"]))
+    well_facility = dict(zip(well["WELL_ID"], well["FACILITY_ID"]))
+    # Name lookups keyed by the *group* id (FIELD_ID / FACILITY_ID), not WELL_ID -- so a field/facility
+    # rollup row gets its own name (dict dedups the repeated field name across a field's wells).
+    field_name = dict(zip(well["FIELD_ID"], well["FIELD_NAME"]))
+    facility = cols[schema.FACILITY.key]
+    facility_name = dict(zip(facility["FACILITY_ID"], facility["FACILITY_NAME"]))
+    facility_field = dict(zip(facility["FACILITY_ID"], facility["FIELD_ID"]))
+
+    # key -> [oil_curr, gas_curr, water_curr, oil_prior, gas_prior, water_prior]. The aggregation is
+    # the theme's independent Python re-derivation (the DuckDB compile does the same over SQL, ADR
+    # 0011); only the downstream Δ/contribution/ordering *assembly* is shared via _assemble_rollup.
+    by_field: dict[int, list[float]] = {}
+    by_operator: dict[str, list[float]] = {}
+    by_facility: dict[int, list[float]] = {}
+
+    wvd = cols[schema.WELL_VOL_DAILY.key]
+    for well_id, vdate, oil, gas, water in zip(
+        wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["OIL_VOLUME"], wvd["GAS_VOLUME"], wvd["WATER_VOLUME"]
+    ):
+        if vdate in curr_set:
+            base = 0
+        elif vdate in prior_set:
+            base = 3
+        else:
+            continue
+        for store, key in (
+            (by_field, well_field[well_id]),
+            (by_operator, well_operator[well_id]),
+            (by_facility, well_facility[well_id]),
+        ):
+            v = store.setdefault(key, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            v[base] += oil
+            v[base + 1] += gas
+            v[base + 2] += water
+
+    total, field_rows, operator_rows, facility_rows = assemble_rollup(
+        by_field, by_operator, by_facility, field_name, facility_name, facility_field
+    )
+
+    return {
+        "question_id": ROLLUP_QUESTION_ID,
+        "question": (
+            f"Oil/gas/water by field, operator, and facility (the asset hierarchy) for "
+            f"{curr_start}..{curr_end} vs {prior_start}..{prior_end} -- who are the biggest movers?"
+        ),
+        "current_period": {"start": curr_start, "end": curr_end, "days": curr_days},
+        "prior_period": {"start": prior_start, "end": prior_end, "days": prior_days},
+        "units": {"oil": schema.OIL_UOM, "gas": schema.GAS_UOM, "water": schema.OIL_UOM},
+        "totals": total,
+        "n_fields": len(field_rows),
+        "n_operators": len(operator_rows),
+        "n_facilities": len(facility_rows),
+        "by_field": field_rows,
+        "by_operator": operator_rows,
+        "by_facility": facility_rows,
+        "answer": _rollup_narrative(field_rows, operator_rows, total, curr_start, curr_end),
+    }
+
+
+def assemble_rollup(
+    by_field: dict[int, list[float]],
+    by_operator: dict[str, list[float]],
+    by_facility: dict[int, list[float]],
+    field_name: dict[int, str],
+    facility_name: dict[int, str],
+    facility_field: dict[int, int],
+) -> tuple[dict, list[dict], list[dict], list[dict]]:
+    """Assemble per-group rollup rows (Δ + contribution % + biggest-mover order) from the aggregated
+    ``by_*`` six-tuples. Shared by ``compute_rollup_gold`` and the reference compile so the two agree
+    on the presentation (deltas, contribution, ordering, row shape) while each derives the aggregates
+    independently (ADR 0011). Totals come from the field grouping (every grouping partitions the same
+    wells, so they share one total); "biggest movers" order each grouping by absolute oil delta, with
+    the group id as a deterministic tie-break.
+    """
+    total_oil_curr = sum(v[0] for v in by_field.values())
+    total = {
+        "oil_curr": total_oil_curr,
+        "gas_curr": sum(v[1] for v in by_field.values()),
+        "water_curr": sum(v[2] for v in by_field.values()),
+        "oil_prior": sum(v[3] for v in by_field.values()),
+        "gas_prior": sum(v[4] for v in by_field.values()),
+        "water_prior": sum(v[5] for v in by_field.values()),
+    }
+
+    def _movers(rows: list[dict], id_key: str) -> list[dict]:
+        rows.sort(key=lambda r: (-abs(r["oil_delta"]), r[id_key]))
+        return rows
+
+    field_rows = _movers(
+        [
+            {"field_id": fid, "field_name": field_name.get(fid), **_rollup_row(v, total_oil_curr)}
+            for fid, v in by_field.items()
+        ],
+        "field_id",
+    )
+    operator_rows = _movers(
+        [{"operator": op, **_rollup_row(v, total_oil_curr)} for op, v in by_operator.items()],
+        "operator",
+    )
+    facility_rows = _movers(
+        [
+            {
+                "facility_id": fac_id,
+                "facility_name": facility_name.get(fac_id),
+                "field_id": facility_field.get(fac_id),
+                **_rollup_row(v, total_oil_curr),
+            }
+            for fac_id, v in by_facility.items()
+        ],
+        "facility_id",
+    )
+    return total, field_rows, operator_rows, facility_rows
+
+
+def _rollup_narrative(
+    field_rows: list[dict], operator_rows: list[dict], total: dict, curr_start: str, curr_end: str
+) -> str:
+    if not field_rows:
+        return f"No oil/gas/water volumes were recorded for {curr_start}..{curr_end}."
+    top_field = field_rows[0]
+    direction = "up" if top_field["oil_delta"] >= 0 else "down"
+    lead = (
+        f"{total['oil_curr']:.0f} bbl oil across {len(field_rows)} field(s) and "
+        f"{len(operator_rows)} operator(s) for {curr_start}..{curr_end} "
+        f"(vs {total['oil_prior']:.0f} bbl prior)"
+    )
+    return (
+        f"{lead}; biggest mover {top_field['field_name']} "
+        f"({direction} {abs(top_field['oil_delta']):.0f} bbl, "
+        f"{top_field['oil_contribution_pct']:.1f}% of current oil)."
     )

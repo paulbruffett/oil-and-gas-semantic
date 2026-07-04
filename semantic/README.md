@@ -1,4 +1,4 @@
-# Semantic layer (OSI) — surveillance, deferment, decline, well-test/allocation
+# Semantic layer (OSI) — surveillance, deferment, decline, well-test/allocation, rollups
 
 The governed metrics/semantic-layer for the base collateral (DESIGN.md §3/§6, ADR 0008/0011),
 authored in the OSI v1.0 encoding (MetricFlow's semantic-manifest dialect).
@@ -16,6 +16,9 @@ authored in the OSI v1.0 encoding (MetricFlow's semantic-manifest dialect).
   - *Well-test & allocation* (theme 4, issue #6): `well_tests_recorded`, `allocation_factor`.
     Days-since-last-test (a date-difference vs an as-of date) and allocation variance
     (`allocated / measured`, a row-level factor × measure product) are compile-assembled — see ADR 0019.
+  - *Asset rollups* (theme 6, issue #8): `actual_oil`, `actual_gas`, `actual_water` over the
+    `Well → Facility → Field` hierarchy. Period-over-period Δ (this month vs last) and contribution-%
+    (group ÷ current-period total) are compile-assembled KPIs — see ADR 0021.
 - `project.yaml` — project configuration (no time spine; the metrics are windowed aggregates).
 
 **Two engines, two jobs (ADR 0011):**
