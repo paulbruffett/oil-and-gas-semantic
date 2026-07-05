@@ -401,6 +401,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0020 — Axis-B assessment-harness structure + submission/scorecard contract; objective anchors computed, panel/reproduction as scaffolding](docs/adr/0020-assessment-harness-contract.md)
 - [0021 — FACILITY (composite PK) + Well→Facility→Field hierarchy + asset-rollup KPI definitions (period-over-period Δ, contribution-%)](docs/adr/0021-facility-hierarchy-and-rollup-kpis.md)
 - [0022 — Operational-exceptions / watchlist KPI definitions (water cut, GOR, days-down) over trailing current + leading baseline windows](docs/adr/0022-watchlist-kpi-definitions.md)
+- [0023 — Volve calibration of decline/watercut/GOR defaults (level + trend Volve-fit; performance stays the documented scenario knob)](docs/adr/0023-volve-calibration-of-decline-watercut-gor.md)
 
 ---
 

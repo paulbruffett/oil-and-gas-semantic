@@ -22,3 +22,6 @@ venv/
 dist/
 build/
 *.egg-info/
+
+# Raw Volve production export — calibration source, not vendored (issue #13; see spec/volve/README.md)
+spec/volve/*.xlsx
