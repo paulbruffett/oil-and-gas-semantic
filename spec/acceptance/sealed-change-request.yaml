@@ -1,0 +1,39 @@
+# Acceptance-criteria checklist for contest issue #27 (#50, ADR 0027) -- the objective anchor for
+# rubric dimension 2 (DESIGN §7, ADR 0015/0020) in round 2. Frozen at the fork tag; identical for
+# every contestant; post-tag changes follow the three-class amendment rule (ADR 0015). The issue
+# body mirrors these items; this file is authoritative. The sealed set's *contents* stay private
+# until round-2 release (#24) -- these criteria bind regardless of what the changes turn out to be.
+issue: 27
+slug: sealed-change-request
+title: "Contest: sealed change-request round (round 2)"
+items:
+  - id: r2-applied
+    anchor: evidence
+    verify: "fork history: one identifiable commit series per change request, referencing its id"
+    text: >-
+      All three sealed change requests (#24) are applied to this contestant's own round-1 fork,
+      each as an identifiable change referencing the CR id.
+  - id: r2-post-change-gold
+    anchor: objective
+    verify: "harness re-grade on the held-out eval seed after the changes (dimension 7 anchor)"
+    text: >-
+      After the changes, the fork's answers re-grade correct against the eval-seed gold as
+      redefined by the change set (a KPI redefinition changes the gold; the bug report's failing
+      gold must now pass).
+  - id: r2-locus
+    anchor: objective
+    verify: "oag_harness.locus over each CR's diff vs its declared expected change locus; raw line counts reported only"
+    text: >-
+      Each change request lands at its declared expected change locus; out-of-locus touches are
+      enumerated for review (ADR 0015 -- line counts reported, never scored).
+  - id: r2-tests
+    anchor: panel
+    text: >-
+      The fork's own test suite is updated to cover the changed behavior -- judged with the
+      perturbation probe (dimension 4) still conclusive after the changes.
+  - id: r2-effort
+    anchor: evidence
+    verify: "round-2 effort record present and separate from round 1 (DESIGN §7 recipe)"
+    text: >-
+      Round-2 effort (tokens/cost/wall-clock/turns) is logged separately from the round-1 build --
+      the change-absorption economics signal.

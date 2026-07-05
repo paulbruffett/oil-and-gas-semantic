@@ -1,0 +1,52 @@
+# Acceptance-criteria checklist for contest issue #17 (#50, ADR 0027) -- the objective anchor for
+# rubric dimension 2 (DESIGN §7, ADR 0015/0020). Frozen at the fork tag; identical for every
+# contestant; post-tag changes follow the three-class amendment rule (ADR 0015). The issue body
+# mirrors these items; this file is authoritative.
+issue: 17
+slug: decline-trend
+title: "Contest: decline & trend — LPG/agent/platform wiring"
+items:
+  - id: dec-eval-gold
+    anchor: objective
+    verify: "harness eval run (docs/contest/eval-run.md): decline-12-month-field-oil grades correct"
+    text: >-
+      The agent answers "12-month oil decline for Field X; flag wells declining faster than
+      forecast" correctly against the held-out eval-seed gold (field decline, per-well
+      actual/forecast decline, decline gap, cumulative oil).
+  - id: dec-metric-views
+    anchor: evidence
+    verify: "Metric View definitions committed; decline values match the reference algorithm (ADR 0018) within grading tolerance"
+    text: >-
+      The cumulative-production and annualized-decline KPIs are implemented on Databricks as Unity
+      Catalog Metric Views following the shell's OSI definitions and the ADR 0018 decline algorithm
+      (first/last boundary-month rate ratio, annualized) -- grading tolerance is 1e-6 relative, so
+      the reference convention must be reproduced, not approximated.
+  - id: dec-provenance
+    anchor: objective
+    verify: "collected submissions carry a non-empty provenance block naming the governed metrics"
+    text: >-
+      Every submitted answer includes provenance (metrics/dimensions/filters/entities used), per
+      the answer-submission schema (#14).
+  - id: dec-answering
+    anchor: objective
+    verify: "operator eval run per docs/contest/eval-run.md completes without intervention"
+    text: >-
+      ANSWERING.md names a headless, deterministic, network-free entry point that takes the eval
+      bundle and emits this theme's answer without human help (ADR 0026).
+  - id: dec-guide
+    anchor: evidence
+    verify: "instantiation guide section covers this theme end-to-end; fresh-agent probe (dim 6) exercises it"
+    text: >-
+      The reproducible instantiation guide covers this theme's build: Unity Catalog load, Metric
+      Views, agent wiring.
+  - id: dec-governance
+    anchor: evidence
+    verify: "fork inspection: no credentials committed; grants documented"
+    text: >-
+      The environment is fully rebuildable from the fork with scoped Unity Catalog grants
+      documented and no credentials in the repo (ADR 0015).
+  - id: dec-conformance
+    anchor: panel
+    text: >-
+      Conformance quality on top of the anchors: OSDU-faithful naming, the six-layer separation
+      respected, OSI used as specified rather than bypassed.

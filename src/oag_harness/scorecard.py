@@ -36,8 +36,11 @@ class Scorecard:
     # dimension 1 -- functional correctness (graded on the held-out eval seed, ADR 0016)
     functional: EvalSeedRun | None = None
     functional_forktime: ScoreReport | None = None  # build-time self-check (not the graded number)
-    # dimension 2 -- spec fidelity (checklist anchor) + reported theme breadth
+    # dimension 2 -- spec fidelity (checklist anchor) + reported theme breadth. The per-issue map
+    # scores each spec/acceptance/ artifact (#50, ADR 0027); the aggregate slot remains for ad-hoc
+    # operator checklists.
     spec_fidelity: ChecklistResult | None = None
+    spec_fidelity_by_issue: dict[str, ChecklistResult] = field(default_factory=dict)
     theme_breadth: ThemeBreadth | None = None
     # dimension 4 -- test quality (perturbation anchor)
     test_probe: PerturbationResult | None = None
@@ -63,7 +66,11 @@ class Scorecard:
             dims.setdefault("1_functional_correctness", {})["forktime_self_check_pass_rate"] = (
                 self.functional_forktime.pass_rate
             )
-        if self.spec_fidelity is not None or self.theme_breadth is not None:
+        if (
+            self.spec_fidelity is not None
+            or self.spec_fidelity_by_issue
+            or self.theme_breadth is not None
+        ):
             dims["2_spec_fidelity"] = {}
             if self.spec_fidelity is not None:
                 dims["2_spec_fidelity"]["checklist"] = {
@@ -71,6 +78,16 @@ class Scorecard:
                     "total": self.spec_fidelity.total,
                     "completeness": self.spec_fidelity.completeness,
                     "unmet": self.spec_fidelity.unmet,
+                }
+            if self.spec_fidelity_by_issue:
+                dims["2_spec_fidelity"]["by_issue"] = {
+                    slug: {
+                        "met": r.met,
+                        "total": r.total,
+                        "completeness": r.completeness,
+                        "unmet": r.unmet,
+                    }
+                    for slug, r in sorted(self.spec_fidelity_by_issue.items())
                 }
             if self.theme_breadth is not None:
                 dims["2_spec_fidelity"]["theme_breadth_reported"] = {

@@ -405,6 +405,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0024 — Adversarial question tier: compound (answered) / ambiguous (clarification) / trap (refusal), behavior-graded; compound gold derived from the six straight golds over surveillance × well-test; a deterministically seeded worst-actor well anchors every compound so gold is non-empty by construction](docs/adr/0024-adversarial-question-tier.md)
 - [0025 — Grading-contract hardening: unanswered gradable questions fail (not skip), the graded answer shape is catalog-authored with committed worked examples, submissions are schema-validated at grading time (refines 0020)](docs/adr/0025-grading-contract-hardening.md)
 - [0026 — Eval-run bundle: gold-stripped, seed-redacted dataset + text-only re-keyed question feed; answers produced by a fork-documented headless entry point, operator-run and sandboxed (refines 0016)](docs/adr/0026-eval-run-bundle.md)
+- [0027 — Acceptance-criteria checklists are versioned spec artifacts (spec/acceptance/, one per contest issue, typed objective/evidence/panel anchors), frozen at the fork tag — the dimension-2 anchor exists before any fork does](docs/adr/0027-acceptance-checklists-as-spec-artifacts.md)
 
 ---
 
