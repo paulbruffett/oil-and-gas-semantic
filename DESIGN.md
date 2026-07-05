@@ -402,6 +402,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0021 — FACILITY (composite PK) + Well→Facility→Field hierarchy + asset-rollup KPI definitions (period-over-period Δ, contribution-%)](docs/adr/0021-facility-hierarchy-and-rollup-kpis.md)
 - [0022 — Operational-exceptions / watchlist KPI definitions (water cut, GOR, days-down) over trailing current + leading baseline windows](docs/adr/0022-watchlist-kpi-definitions.md)
 - [0023 — Volve calibration of decline/watercut/GOR defaults (level + trend Volve-fit; performance stays the documented scenario knob)](docs/adr/0023-volve-calibration-of-decline-watercut-gor.md)
+- [0024 — Adversarial question tier: compound (answered) / ambiguous (clarification) / trap (refusal), behavior-graded; compound gold derived from the six straight golds; deterministically seeded trap well](docs/adr/0024-adversarial-question-tier.md)
 
 ---
 

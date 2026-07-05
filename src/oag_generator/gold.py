@@ -37,15 +37,20 @@ from oag_generator.config import (
     deferment_window,
     rollup_periods,
     surveillance_window,
+    trap_test_date,
     watchlist_windows,
 )
 from oag_generator.questions import (
+    ADV_BELOW_EXPECTED_AND_STALE_ID,
+    ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID,
+    ADV_WATERING_OUT_AND_DECLINING_ID,
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
     WATCHLIST_QUESTION_ID,
     WELLTEST_QUESTION_ID,
+    default_catalog,
 )
 
 # Single source for the question id: the catalog (spec/questions/catalog.yaml). Keeping the gold
@@ -1052,3 +1057,169 @@ def _rollup_narrative(
         f"({direction} {abs(top_field['oil_delta']):.0f} bbl, "
         f"{top_field['oil_contribution_pct']:.1f}% of current oil)."
     )
+
+
+# --- Adversarial tier (issue #22, ADR 0024) ------------------------------------------------------
+# Compound gold is the *intersection of two straight golds' per-well flagged sets*, so its values are
+# copied from golds the reference compile already verifies (no new KPI math, no new compile twin).
+# Ambiguous/trap gold carries only the expected behavior + human-readable evidence, graded on behavior.
+
+
+def _compound_gold(
+    question_id: str,
+    question: str,
+    spans: tuple[str, str],
+    a_rows: list[dict],
+    a_keys: tuple[str, ...],
+    b_rows: list[dict],
+    b_keys: tuple[str, ...],
+) -> dict:
+    """Intersect two straight golds' per-well flagged sets on ``well_id``, merging the named keys.
+
+    ``spans`` names the two governed metrics the compound question crosses. A well appears only when
+    it is flagged by *both* sides; each row carries ``well_id``/``uwi`` plus the requested value from
+    each side, so the harness grades it as a set exactly like a straight flagged set.
+    """
+    a = {r["well_id"]: r for r in a_rows}
+    b = {r["well_id"]: r for r in b_rows}
+    flagged = []
+    for well_id in sorted(set(a) & set(b)):
+        row = {"well_id": well_id, "uwi": a[well_id].get("uwi") or b[well_id].get("uwi")}
+        for key in a_keys:
+            row[key] = a[well_id].get(key)
+        for key in b_keys:
+            row[key] = b[well_id].get(key)
+        flagged.append(row)
+    return {
+        "question_id": question_id,
+        "question": question,
+        "tier": "compound",
+        "behavior": "answered",
+        "spans": list(spans),
+        "n_flagged": len(flagged),
+        "flagged": flagged,
+        "answer": _compound_narrative(flagged, spans),
+    }
+
+
+def _compound_narrative(flagged: list[dict], spans: tuple[str, str]) -> str:
+    both = f"both {spans[0]} and {spans[1]}"
+    if not flagged:
+        return f"No wells satisfy {both}."
+    uwis = ", ".join(r["uwi"] for r in flagged if r.get("uwi"))
+    return f"{len(flagged)} well(s) satisfy {both}: {uwis}."
+
+
+def compute_adversarial_gold(
+    cols: dict[str, dict[str, list]], config: Config, straight_golds: dict[str, dict]
+) -> dict[str, dict]:
+    """Gold answers for the adversarial tier, keyed by gold_id (ADR 0024).
+
+    Compound answers intersect two of the six co-generated ``straight_golds`` (passed in, already
+    computed by :func:`generate_dataset`); ambiguous/trap answers encode the expected behavior plus
+    evidence -- the trap answers cite the deterministically seeded trap well. The catalog supplies each
+    question's text + expected behavior, so this stays the single source keyed off the catalog ids.
+    """
+    adv = {q.id: q for q in default_catalog().adversarial}
+    surveillance = straight_golds["surveillance"]
+    welltest = straight_golds["welltest"]
+    watchlist = straight_golds["watchlist"]
+    decline = straight_golds["decline"]
+
+    out: dict[str, dict] = {}
+
+    # -- Compound (answered): span >= 2 governed metrics. --
+    out[ADV_BELOW_EXPECTED_AND_STALE_ID] = _compound_gold(
+        ADV_BELOW_EXPECTED_AND_STALE_ID,
+        adv[ADV_BELOW_EXPECTED_AND_STALE_ID].text.strip(),
+        ("producing below expected oil", "a stale test or anomalous allocation"),
+        surveillance["flagged"], ("shortfall_bbl",),
+        welltest["flagged"], ("days_since_last_test",),
+    )
+    out[ADV_WATERING_OUT_AND_DECLINING_ID] = _compound_gold(
+        ADV_WATERING_OUT_AND_DECLINING_ID,
+        adv[ADV_WATERING_OUT_AND_DECLINING_ID].text.strip(),
+        ("on the operational-exceptions watchlist", "declining faster than forecast"),
+        watchlist["flagged"], ("water_cut",),
+        decline["wells_declining_faster"], ("decline_gap",),
+    )
+    out[ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID] = _compound_gold(
+        ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID,
+        adv[ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID].text.strip(),
+        ("producing below expected oil", "on the operational-exceptions watchlist"),
+        surveillance["flagged"], ("shortfall_bbl",),
+        watchlist["flagged"], ("days_down",),
+    )
+
+    # -- Trap (refused-data-quality): the seeded trap well's allocation rests on an untrustworthy test.
+    trap_id = int(config.adversarial["trap_well_id"])
+    well = cols[schema.WELL.key]
+    trap_uwi = next(u for w, u in zip(well["WELL_ID"], well["UWI"]) if w == trap_id)
+    days = int(config.adversarial["untrustworthy_test_days"])
+    # Same helper the generator uses to seed the row, so the cited date can't drift from the data.
+    last_test = trap_test_date(config.end_date, days)
+    stale_threshold = int(config.welltest["stale_threshold_days"])
+    trap_well = {
+        "well_id": trap_id,
+        "uwi": trap_uwi,
+        "last_test_date": last_test,
+        "days_since_last_test": days,
+        "stale_threshold_days": stale_threshold,
+    }
+    trap_answers = {
+        "adversarial-trap-stale-allocation": (
+            f"No -- {trap_uwi}'s only well test is dated {last_test} ({days} days before period end, "
+            f"far beyond the {stale_threshold}-day staleness threshold). Its allocation factor rests "
+            "on that untrustworthy test, so its allocated volume cannot be booked as production; "
+            "re-test the well first."
+        ),
+        "adversarial-trap-untested-rate": (
+            f"No reliable figure -- {trap_uwi} has no recent well test. Its only test ({last_test}) "
+            "predates the production data and carries no metered rate, so there is no current tested "
+            "oil rate to quote."
+        ),
+        "adversarial-trap-reliability-pick": (
+            f"Neither -- {trap_uwi}'s allocated volume and its last well test both derive from the "
+            f"same untrustworthy test ({last_test}, {days} days old). Refuse to present either as a "
+            "reliable production figure until the well is re-tested."
+        ),
+    }
+    for qid, answer in trap_answers.items():
+        out[adv[qid].gold_id] = _behavior_gold(adv[qid], answer, trap_well=trap_well)
+
+    # -- Ambiguous (clarification-requested): under-specified; the right move is to ask, not guess. --
+    clarifications = {
+        "adversarial-ambiguous-underperformers": (
+            "Underperforming by which measure -- below expected oil (surveillance), watering out "
+            "(water cut), or declining faster than forecast -- and over what period? Please specify "
+            "before I answer."
+        ),
+        "adversarial-ambiguous-recent-production": (
+            "Which phase (oil, gas, or water) and over what window does 'lately' mean -- this week, "
+            "this month, or the trailing quarter? Please specify before I answer."
+        ),
+        "adversarial-ambiguous-worst-field": (
+            "Worst by which measure -- steepest decline, most deferred volume, highest water cut, or "
+            "lowest absolute oil? Please specify before I answer."
+        ),
+    }
+    for qid, answer in clarifications.items():
+        out[adv[qid].gold_id] = _behavior_gold(adv[qid], answer)
+
+    return out
+
+
+def _behavior_gold(question, answer: str, **evidence) -> dict:
+    """A behavior-only gold answer (ambiguous/trap): the expected behavior + rationale, no values.
+
+    The harness grades these on ``behavior`` alone (ADR 0024); ``evidence`` (e.g. the trap well) is
+    carried for a human/agent to resolve the question, never graded.
+    """
+    return {
+        "question_id": question.gold_id,
+        "question": question.text.strip(),
+        "tier": question.tier,
+        "behavior": question.expected_behavior,
+        "answer": answer,
+        **evidence,
+    }

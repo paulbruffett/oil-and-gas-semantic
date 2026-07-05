@@ -25,8 +25,10 @@ from oag_generator.config import (
     allocation_period,
     hash_canonical_config,
     load_config,
+    trap_test_date,
 )
 from oag_generator.gold import (
+    compute_adversarial_gold,
     compute_decline_gold,
     compute_deferment_gold,
     compute_rollup_gold,
@@ -294,6 +296,13 @@ def _build_welltest_allocation(
     al = config.allocation
     n_wells = len(well["WELL_ID"])
 
+    # Adversarial trap well (ADR 0024): its only test predates the dataset, so its allocation rests on
+    # an untrustworthy test. The date (from the shared config helper, also used by the gold module) is
+    # absolute, which may be before start_date -- fine, a well test can physically predate the
+    # daily-volume window; the trap then manifests on any config, not only windows longer than horizon.
+    trap_well_id = int(config.adversarial["trap_well_id"])
+    trap_date = trap_test_date(config.end_date, config.adversarial["untrustworthy_test_days"])
+
     well_uwi = dict(zip(well["WELL_ID"], well["UWI"]))
     field_name = dict(zip(field["FIELD_ID"], field["FIELD_NAME"]))
     # Field-major, well-order (the assignment order in the main loop) so draws are reproducible.
@@ -341,16 +350,23 @@ def _build_welltest_allocation(
                 gap = int(rng.integers(int(wtc["stale_min_days"]), int(wtc["stale_max_days"]) + 1))
             else:
                 gap = int(rng.integers(0, interval))
-            # Clamp the last test into the window. NOTE: staleness can only *manifest* when the window
-            # is longer than stale_threshold_days -- on a shorter window a stale-drawn well clamps to
-            # day 0 and its realized days-since is at most n_days-1, which may not clear the threshold.
-            # That is a domain constraint (a test can't be older than the data), not a bug; the default
-            # window and the welltest test fixture are both long enough to surface the stale population.
-            last_idx = max(0, (n_days - 1) - gap)
-            test_idxs = sorted(range(last_idx, -1, -interval))
-            for idx in test_idxs:
-                d = dates[idx]
-                oil, gas, water = vol_by_key[(well_id, d)]
+            if well_id == trap_well_id:
+                # The trap well's normal schedule is overridden with a single untrustworthy test dated
+                # before the window (no metered rate there, so rates are 0). The is_stale/gap draws
+                # above still ran, so the rng sequence is preserved: every other well's draws --
+                # allocation factors and every downstream table -- are unchanged. Only the WELL_TEST
+                # table moves (the trap's single row; later rows' surrogate ids shift accordingly).
+                test_rows: list[tuple[str, float, float, float]] = [(trap_date, 0.0, 0.0, 0.0)]
+            else:
+                # Clamp the last test into the window. NOTE: staleness can only *manifest* when the
+                # window is longer than stale_threshold_days -- on a shorter window a stale-drawn well
+                # clamps to day 0 and its realized days-since is at most n_days-1, which may not clear
+                # the threshold. That is a domain constraint (a test can't be older than the data), not
+                # a bug; the default window and the welltest fixture both surface the stale population.
+                last_idx = max(0, (n_days - 1) - gap)
+                test_rows = [(dates[idx], *vol_by_key[(well_id, dates[idx])])
+                             for idx in sorted(range(last_idx, -1, -interval))]
+            for d, oil, gas, water in test_rows:
                 wt_seq += 1
                 wt["WELL_TEST_ID"].append(wt_seq)
                 wt["WELL_ID"].append(well_id)
@@ -425,6 +441,15 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         path = gold_dir / f"{key}.json"
         path.write_text(json.dumps(answer, indent=2, ensure_ascii=False) + "\n")
         gold_paths[key] = path
+
+    # Adversarial tier (ADR 0024): derived from the six straight golds above, co-emitted under
+    # gold/adversarial/ keyed by each catalog gold_id (the catalog gold_artifact points here).
+    adv_dir = gold_dir / "adversarial"
+    adv_dir.mkdir(parents=True, exist_ok=True)
+    for gold_id, answer in compute_adversarial_gold(cols, cfg, gold_answers).items():
+        path = adv_dir / f"{gold_id}.json"
+        path.write_text(json.dumps(answer, indent=2, ensure_ascii=False) + "\n")
+        gold_paths[gold_id] = path
 
     canonical_config = cfg.to_canonical_dict()
     chash = hash_canonical_config(canonical_config)

@@ -115,3 +115,86 @@ themes:
         expected_behavior: answered
         text: >-
           Oil/gas/water by field and operator this month vs last -- who are the biggest movers?
+
+# The adversarial tier (#22, ADR 0024). These span the six themes rather than forming a seventh, so
+# they live here beside `themes`. Each is co-emitted a gold answer under gold/adversarial/. Compound
+# questions are `answered` (values graded, derived by intersecting two straight golds); ambiguous ones
+# expect `clarification-requested`; traps expect `refused-data-quality` and reference the generator's
+# deterministically seeded trap well (NO 15/9-F-1) whose only well test predates the data.
+adversarial:
+  # -- Compound: span >= 2 governed metrics; the gold is the intersection of two straight golds. --
+  - id: adversarial-compound-below-expected-and-stale
+    gold_id: adversarial-compound-below-expected-and-stale
+    gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-stale.json
+    tier: compound
+    expected_behavior: answered
+    text: >-
+      Which wells are BOTH producing below expected oil rate (surveillance) AND carrying a
+      data-quality flag -- a stale well test or anomalous allocation? Give each well's shortfall
+      and how many days since its last test.
+  - id: adversarial-compound-watering-out-and-declining
+    gold_id: adversarial-compound-watering-out-and-declining
+    gold_artifact: gold/adversarial/adversarial-compound-watering-out-and-declining.json
+    tier: compound
+    expected_behavior: answered
+    text: >-
+      Which wells are BOTH on the operational-exceptions watchlist (down, watering out, or GOR
+      change) AND declining faster than forecast? Give each well's water cut and its decline gap
+      vs forecast.
+  - id: adversarial-compound-below-expected-and-watchlisted
+    gold_id: adversarial-compound-below-expected-and-watchlisted
+    gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-watchlisted.json
+    tier: compound
+    expected_behavior: answered
+    text: >-
+      Which wells are BOTH producing below expected oil rate AND on the operational-exceptions
+      watchlist? Give each well's shortfall and its days-down.
+
+  # -- Ambiguous: under-specified; the right move is to ask, not guess (clarification-requested). --
+  - id: adversarial-ambiguous-underperformers
+    gold_id: adversarial-ambiguous-underperformers
+    gold_artifact: gold/adversarial/adversarial-ambiguous-underperformers.json
+    tier: ambiguous
+    expected_behavior: clarification-requested
+    text: >-
+      Which of our wells are underperforming?
+  - id: adversarial-ambiguous-recent-production
+    gold_id: adversarial-ambiguous-recent-production
+    gold_artifact: gold/adversarial/adversarial-ambiguous-recent-production.json
+    tier: ambiguous
+    expected_behavior: clarification-requested
+    text: >-
+      How has production been doing lately?
+  - id: adversarial-ambiguous-worst-field
+    gold_id: adversarial-ambiguous-worst-field
+    gold_artifact: gold/adversarial/adversarial-ambiguous-worst-field.json
+    tier: ambiguous
+    expected_behavior: clarification-requested
+    text: >-
+      Which field is our worst performer?
+
+  # -- Trap: the responsible answer is a data-quality refusal (refused-data-quality). All three probe
+  #    the seeded trap well, whose only well test predates the dataset (untrustworthy allocation). --
+  - id: adversarial-trap-stale-allocation
+    gold_id: adversarial-trap-stale-allocation
+    gold_artifact: gold/adversarial/adversarial-trap-stale-allocation.json
+    tier: trap
+    expected_behavior: refused-data-quality
+    text: >-
+      Book well NO 15/9-F-1's allocated oil volume for last month as its production figure -- what
+      is it?
+  - id: adversarial-trap-untested-rate
+    gold_id: adversarial-trap-untested-rate
+    gold_artifact: gold/adversarial/adversarial-trap-untested-rate.json
+    tier: trap
+    expected_behavior: refused-data-quality
+    text: >-
+      What is well NO 15/9-F-1's current tested oil rate?
+  - id: adversarial-trap-reliability-pick
+    gold_id: adversarial-trap-reliability-pick
+    gold_artifact: gold/adversarial/adversarial-trap-reliability-pick.json
+    tier: trap
+    expected_behavior: refused-data-quality
+    text: >-
+      For well NO 15/9-F-1, which is the more reliable production figure -- its allocated volume
+      or its last well test?
