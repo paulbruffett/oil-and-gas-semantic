@@ -100,6 +100,12 @@ def watchlist_config() -> dict:
     The full default window (24 wells) plus lowered thresholds and non-overlapping 60-day current /
     baseline windows so a *down* minority, a *watering-out* minority, and a *GOR-change* minority all
     appear — giving the flag logic real teeth (like ``welltest_config`` for the well-test signals).
+
+    The ``gor`` and ``watercut`` overrides are deliberate: the shipped defaults are calibrated to Volve,
+    whose real GOR is too stable to trip the GOR-change exception and whose water cut stays below the
+    watch threshold on this window — so this fixture forces both synthetic signals here (parallel to the
+    window/threshold overrides), keeping the default calibration honestly Volve-based and decoupling the
+    fixture from future recalibration (ADR 0023, spec/volve/README.md).
     """
     return {
         "seed": 7,
@@ -107,6 +113,10 @@ def watchlist_config() -> dict:
         "end_date": "2024-06-30",
         "n_fields": 3,
         "wells_per_field": 8,
+        "gor": {"initial_min": 800.0, "initial_max": 835.0,
+                "annual_rise_min": 10.0, "annual_rise_max": 400.0},
+        "watercut": {"initial_min": 0.05, "initial_max": 0.25,
+                     "annual_rise_min": 0.15, "annual_rise_max": 0.45, "cap": 0.98},
         "watchlist": {
             "window_days": 60,
             "watercut_threshold": 0.30,

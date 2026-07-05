@@ -17,28 +17,37 @@ from typing import Any
 
 import yaml
 
-# Volve-calibrated defaults (ADR 0002). Ranges are drawn per well; see generator.py.
-# Values are order-of-magnitude representative of Volve production behaviour, not exact.
+# Volve-calibrated defaults (ADR 0002 / ADR 0023). Ranges are drawn ~Uniform(min, max) per well
+# (see generator.py). Fit to the real Volve production dataset (Equinor open data) by
+# spec/volve/fit_calibration.py -- see spec/volve/README.md for the method, provenance, and the
+# per-well fitted values these ranges bracket. The two-population performance model (DEFAULT_PERFORMANCE)
+# stays a documented synthetic scenario knob, not a Volve fit (ADR 0009 / issue #13).
 DEFAULT_DECLINE = {
-    "qi_bopd_min": 800.0,      # initial oil rate range (barrels oil per day)
-    "qi_bopd_max": 6000.0,
-    "di_annual_min": 0.25,     # nominal annual (Arps) decline
-    "di_annual_max": 0.70,
-    "b_min": 0.3,              # hyperbolic exponent (0 -> exponential)
-    "b_max": 1.0,
+    # Range brackets the Volve producer fits (qi 1.9k [15/9-F-15 D] .. 37k [15/9-F-12] bopd). The
+    # generator draws uniformly; Volve's true rate distribution is right-skewed (documented in README).
+    "qi_bopd_min": 1900.0,     # initial oil rate range (barrels oil per day)
+    "qi_bopd_max": 37000.0,
+    "di_annual_min": 0.39,     # nominal annual (Arps) decline; reliable long-record producers 0.39..1.05/yr
+    "di_annual_max": 1.05,
+    "b_min": 0.10,             # hyperbolic exponent (0 -> exponential). Volve's strong aquifer/water-
+    "b_max": 0.50,             # injection support fits near-exponential (reliable fits clamp to ~0.1).
 }
 DEFAULT_WATERCUT = {
-    "initial_min": 0.02,       # fraction water at t0
+    "initial_min": 0.00,       # fraction water at t0; Volve initial water cut 0.00..0.20
     "initial_max": 0.20,
-    "annual_rise_min": 0.10,   # watercut increase per year (breakthrough)
-    "annual_rise_max": 0.45,
+    "annual_rise_min": 0.10,   # watercut increase per year (breakthrough); Volve rise 0.11..0.35/yr
+    "annual_rise_max": 0.35,
     "cap": 0.98,
 }
 DEFAULT_GOR = {
-    "initial_min": 600.0,      # scf/bbl
-    "initial_max": 1400.0,
-    "annual_rise_min": -50.0,
-    "annual_rise_max": 400.0,
+    "initial_min": 800.0,      # scf/bbl; Volve producer GOR clusters tightly (805..835 scf/bbl)
+    "initial_max": 835.0,
+    "annual_rise_min": 10.0,   # Volve GOR rise is small + stable (fits 10..26 scf/bbl/yr)
+    "annual_rise_max": 26.0,
+    # NB: Volve's real GOR rise is far too stable to trip the watchlist GOR-change exception (20%
+    # window-over-window, ADR 0022). Exercising that signal is a synthetic scenario, so the watchlist
+    # engineering fixture (tests/conftest.py::watchlist_config) overrides this range to force it --
+    # the shipped default stays honestly Volve-calibrated. See spec/volve/README.md.
 }
 DEFAULT_PERFORMANCE = {
     # Actual oil = expected * performance factor. Two-population model (ADR 0009):
