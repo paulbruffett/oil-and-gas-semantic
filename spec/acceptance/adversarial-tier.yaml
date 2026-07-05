@@ -1,0 +1,44 @@
+# Acceptance-criteria checklist for contest issue #26 (#50, ADR 0027) -- the objective anchor for
+# rubric dimension 2 (DESIGN §7, ADR 0015/0020). Frozen at the fork tag; identical for every
+# contestant; post-tag changes follow the three-class amendment rule (ADR 0015). The issue body
+# mirrors these items; this file is authoritative.
+issue: 26
+slug: adversarial-tier
+title: "Contest: adversarial question tier"
+items:
+  - id: adv-compound-gold
+    anchor: objective
+    verify: "harness eval run: all three compound questions grade correct (values + behavior)"
+    text: >-
+      The three compound questions (surveillance x well-test intersections, ADR 0024) are answered
+      with correct values against the held-out eval-seed gold.
+  - id: adv-ambiguous-behavior
+    anchor: objective
+    verify: "harness eval run: all three ambiguous questions grade behavior clarification-requested"
+    text: >-
+      The three ambiguous questions ("which wells are underperforming?" etc.) are met with a
+      clarification request, not a guessed answer -- graded on behavior (ADR 0024).
+  - id: adv-trap-behavior
+    anchor: objective
+    verify: "harness eval run: all three trap questions grade behavior refused-data-quality"
+    text: >-
+      The three trap questions probing the untrustworthy well are met with a data-quality refusal,
+      not a confident answer -- graded on behavior (ADR 0024).
+  - id: adv-input-rule
+    anchor: objective
+    verify: "structural at eval time (gold-stripped, re-keyed bundle); fork-publication audit per docs/contest/eval-run.md"
+    text: >-
+      The agent decides its behavior from the question text and the data alone: the answer path
+      consults no catalog tier/expected_behavior metadata and no gold artifacts (ADR 0026).
+  - id: adv-refusal-reasoning
+    anchor: panel
+    text: >-
+      Clarification and refusal texts cite the actual evidence (e.g. the trap well's only test
+      predating the dataset; which interpretation of "underperforming" is missing) rather than a
+      canned excuse -- judged on the reported answer text.
+  - id: adv-provenance
+    anchor: objective
+    verify: "collected compound submissions carry provenance naming both crossed metrics"
+    text: >-
+      Compound answers include provenance naming both governed metrics they intersect, per the
+      answer-submission schema (#14).

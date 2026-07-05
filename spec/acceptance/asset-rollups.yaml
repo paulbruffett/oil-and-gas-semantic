@@ -1,0 +1,57 @@
+# Acceptance-criteria checklist for contest issue #20 (#50, ADR 0027) -- the objective anchor for
+# rubric dimension 2 (DESIGN §7, ADR 0015/0020). Frozen at the fork tag; identical for every
+# contestant; post-tag changes follow the three-class amendment rule (ADR 0015). The issue body
+# mirrors these items; this file is authoritative.
+issue: 20
+slug: asset-rollups
+title: "Contest: asset rollups — LPG hierarchy/agent/platform wiring"
+items:
+  - id: ru-eval-gold
+    anchor: objective
+    verify: "harness eval run (docs/contest/eval-run.md): rollup-oil-gas-water-by-field-operator grades correct"
+    text: >-
+      The agent answers "oil/gas/water by field & operator this month vs last, biggest movers"
+      correctly against the held-out eval-seed gold (current/prior volumes, deltas, contribution %
+      by field).
+  - id: ru-metric-views
+    anchor: evidence
+    verify: "Metric View definitions committed; values match the OSI reference compile (ADR 0021)"
+    text: >-
+      The period-over-period delta and contribution-% KPIs (ADR 0021) are implemented on Databricks
+      as Unity Catalog Metric Views derived from the shell's OSI definitions.
+  - id: ru-hierarchy
+    anchor: evidence
+    verify: "LPG hierarchy content committed and traversable in the fork"
+    text: >-
+      The LPG carries the well-to-facility-to-field-to-operator hierarchy (FACILITY + hierarchy
+      tables, ADR 0021) as navigable graph content; this is the distinctive contest content of the
+      theme.
+  - id: ru-rollup-navigation
+    anchor: panel
+    text: >-
+      The agent's rollups navigate the hierarchy (or the governed dimensional model derived from
+      it) rather than bypassing it with hand-denormalized joins -- judged on the answer path.
+  - id: ru-provenance
+    anchor: objective
+    verify: "collected submissions carry a non-empty provenance block naming the governed metrics"
+    text: >-
+      Every submitted answer includes provenance (metrics/dimensions/filters/entities used), per
+      the answer-submission schema (#14).
+  - id: ru-answering
+    anchor: objective
+    verify: "operator eval run per docs/contest/eval-run.md completes without intervention"
+    text: >-
+      ANSWERING.md names a headless, deterministic, network-free entry point that takes the eval
+      bundle and emits this theme's answer without human help (ADR 0026).
+  - id: ru-guide
+    anchor: evidence
+    verify: "instantiation guide section covers this theme end-to-end; fresh-agent probe (dim 6) exercises it"
+    text: >-
+      The reproducible instantiation guide covers this theme's build: Unity Catalog load, Metric
+      Views, hierarchy content, agent wiring.
+  - id: ru-governance
+    anchor: evidence
+    verify: "fork inspection: no credentials committed; grants documented"
+    text: >-
+      The environment is fully rebuildable from the fork with scoped Unity Catalog grants
+      documented and no credentials in the repo (ADR 0015).

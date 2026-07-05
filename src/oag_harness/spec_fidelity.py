@@ -10,9 +10,22 @@ so breadth never silently inflates a quality number.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable
 
+import yaml
+
 from oag_generator.questions import QuestionCatalog, load_catalog
+
+# The versioned checklist artifacts (#50, ADR 0027): one per axis-b-contest issue, frozen at the
+# fork tag, identical for every contestant. The harness *loads* them -- it deliberately owns no copy
+# that could drift from the artifact (ADR 0020).
+ACCEPTANCE_DIR = Path(__file__).resolve().parents[2] / "spec" / "acceptance"
+
+# Every item declares how it is verified (ADR 0015): `objective` = computed/observed mechanically
+# (harness run, eval-run protocol, file-level check); `evidence` = a committed artifact reviewed for
+# existence; `panel` = judged quality on top of the anchors.
+_ANCHORS = ("objective", "evidence", "panel")
 
 
 @dataclass(frozen=True)
@@ -21,6 +34,8 @@ class ChecklistItem:
 
     id: str
     text: str
+    anchor: str = ""  # objective | evidence | panel (blank for ad-hoc operator lists)
+    verify: str = ""  # how an objective item is checked (command, protocol doc, artifact path)
 
 
 @dataclass(frozen=True)
@@ -55,6 +70,64 @@ def score_checklist(items: Iterable[ChecklistItem], met_ids: Iterable[str]) -> C
     met = {m for m in met_ids if m in ids}
     unmet = sorted(ids - met)
     return ChecklistResult(total=len(items), met=len(met), unmet=unmet)
+
+
+@dataclass(frozen=True)
+class AcceptanceChecklist:
+    """A contest issue's acceptance-criteria checklist, loaded from ``spec/acceptance/`` (#50)."""
+
+    issue: int
+    slug: str
+    title: str
+    items: tuple[ChecklistItem, ...]
+
+
+def load_acceptance_checklist(source: str | Path) -> AcceptanceChecklist:
+    """Load one checklist artifact -- by slug (resolved under ``spec/acceptance/``) or by path.
+
+    Validates the per-item contract (non-blank id/text, a known ``anchor``, unique ids) and raises
+    :class:`RuntimeError` naming the file and the offence, so a bad spec edit fails legibly at load
+    rather than silently mis-scoring dimension 2.
+    """
+    path = Path(source)
+    if not path.suffix:  # a bare slug
+        path = ACCEPTANCE_DIR / f"{source}.yaml"
+    try:
+        raw = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as exc:
+        raise RuntimeError(f"acceptance checklist unreadable at {path}: {exc}") from exc
+    try:
+        items = tuple(
+            ChecklistItem(
+                id=i["id"], text=i["text"], anchor=i["anchor"], verify=i.get("verify", "")
+            )
+            for i in raw["items"]
+        )
+        checklist = AcceptanceChecklist(
+            issue=int(raw["issue"]), slug=raw["slug"], title=raw["title"], items=items
+        )
+    except KeyError as exc:
+        raise RuntimeError(f"acceptance checklist {path} missing required key {exc}") from exc
+    for item in checklist.items:
+        if not item.id.strip() or not item.text.strip():
+            raise RuntimeError(f"acceptance checklist {path}: blank id/text on an item")
+        if item.anchor not in _ANCHORS:
+            raise RuntimeError(
+                f"acceptance checklist {path}: item {item.id!r} has unknown anchor "
+                f"{item.anchor!r} (expected one of {_ANCHORS})"
+            )
+    ids = [item.id for item in checklist.items]
+    if len(ids) != len(set(ids)):
+        raise RuntimeError(f"acceptance checklist {path}: duplicate item ids")
+    return checklist
+
+
+def acceptance_checklists(directory: str | Path = ACCEPTANCE_DIR) -> dict[str, AcceptanceChecklist]:
+    """Every checklist artifact in ``directory``, keyed by slug, in deterministic order."""
+    return {
+        (c := load_acceptance_checklist(path)).slug: c
+        for path in sorted(Path(directory).glob("*.yaml"))
+    }
 
 
 @dataclass(frozen=True)

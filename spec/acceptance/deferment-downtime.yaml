@@ -1,0 +1,56 @@
+# Acceptance-criteria checklist for contest issue #16 (#50, ADR 0027) -- the objective anchor for
+# rubric dimension 2 (DESIGN §7, ADR 0015/0020). Frozen at the fork tag; identical for every
+# contestant; post-tag changes follow the three-class amendment rule (ADR 0015). The issue body
+# mirrors these items; this file is authoritative.
+issue: 16
+slug: deferment-downtime
+title: "Contest: deferment & downtime attribution — LPG/agent/platform wiring"
+items:
+  - id: def-eval-gold
+    anchor: objective
+    verify: "harness eval run (docs/contest/eval-run.md): deferment-top-downtime-causes grades correct"
+    text: >-
+      The agent answers "what did we defer last month and the top downtime causes?" correctly
+      against the held-out eval-seed gold (deferred oil by cause, downtime hours, event counts).
+  - id: def-metric-views
+    anchor: evidence
+    verify: "Metric View definitions committed in the fork; values match the OSI reference compile"
+    text: >-
+      The deferred-volume and uptime KPIs are implemented on Databricks as Unity Catalog Metric
+      Views derived from the shell's OSI definitions (semantic/metrics.yaml, ADR 0017) -- the agent
+      selects governed metrics rather than authoring ad-hoc SQL.
+  - id: def-lpg
+    anchor: evidence
+    verify: "LPG content committed and queryable in the fork"
+    text: >-
+      The LPG is extended with downtime causes and related business vocabulary so the agent can
+      resolve cause terminology through the knowledge layer (ADR 0004).
+  - id: def-provenance
+    anchor: objective
+    verify: "collected submissions carry a non-empty provenance block naming the governed metrics"
+    text: >-
+      Every submitted answer includes provenance (metrics/dimensions/filters/entities used), per
+      the answer-submission schema (#14).
+  - id: def-answering
+    anchor: objective
+    verify: "operator eval run per docs/contest/eval-run.md completes without intervention"
+    text: >-
+      ANSWERING.md names a headless, deterministic, network-free entry point that takes the eval
+      bundle and emits this theme's answer without human help (ADR 0026).
+  - id: def-guide
+    anchor: evidence
+    verify: "instantiation guide section covers this theme end-to-end; fresh-agent probe (dim 6) exercises it"
+    text: >-
+      The reproducible instantiation guide covers this theme's build: Unity Catalog load, Metric
+      Views, LPG content, agent wiring.
+  - id: def-governance
+    anchor: evidence
+    verify: "fork inspection: no credentials committed; grants documented"
+    text: >-
+      The environment is fully rebuildable from the fork with scoped Unity Catalog grants
+      documented and no credentials in the repo (ADR 0015).
+  - id: def-conformance
+    anchor: panel
+    text: >-
+      Conformance quality on top of the anchors: OSDU-faithful naming, the six-layer separation
+      respected, OSI + LPG used as specified rather than bypassed.

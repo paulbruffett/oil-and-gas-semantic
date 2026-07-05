@@ -1,0 +1,50 @@
+# Acceptance-criteria checklist for contest issue #18 (#50, ADR 0027) -- the objective anchor for
+# rubric dimension 2 (DESIGN §7, ADR 0015/0020). Frozen at the fork tag; identical for every
+# contestant; post-tag changes follow the three-class amendment rule (ADR 0015). The issue body
+# mirrors these items; this file is authoritative.
+issue: 18
+slug: welltest-allocation
+title: "Contest: well-test & allocation validation — LPG/agent/platform wiring"
+items:
+  - id: wt-eval-gold
+    anchor: objective
+    verify: "harness eval run (docs/contest/eval-run.md): welltest-stale-or-anomalous-allocation grades correct"
+    text: >-
+      The agent answers "which wells have stale tests or anomalous allocation?" correctly against
+      the held-out eval-seed gold (days since last test, allocation factor, measured oil,
+      allocation variance -- including None where a variance is undefined).
+  - id: wt-metric-views
+    anchor: evidence
+    verify: "Metric View definitions committed; values match the OSI reference compile (ADR 0019)"
+    text: >-
+      The days-since-test and allocation-variance KPIs are implemented on Databricks as Unity
+      Catalog Metric Views derived from the shell's OSI definitions (ADR 0019).
+  - id: wt-provenance
+    anchor: objective
+    verify: "collected submissions carry a non-empty provenance block naming the governed metrics"
+    text: >-
+      Every submitted answer includes provenance (metrics/dimensions/filters/entities used), per
+      the answer-submission schema (#14).
+  - id: wt-answering
+    anchor: objective
+    verify: "operator eval run per docs/contest/eval-run.md completes without intervention"
+    text: >-
+      ANSWERING.md names a headless, deterministic, network-free entry point that takes the eval
+      bundle and emits this theme's answer without human help (ADR 0026).
+  - id: wt-guide
+    anchor: evidence
+    verify: "instantiation guide section covers this theme end-to-end; fresh-agent probe (dim 6) exercises it"
+    text: >-
+      The reproducible instantiation guide covers this theme's build: Unity Catalog load, Metric
+      Views, agent wiring.
+  - id: wt-governance
+    anchor: evidence
+    verify: "fork inspection: no credentials committed; grants documented"
+    text: >-
+      The environment is fully rebuildable from the fork with scoped Unity Catalog grants
+      documented and no credentials in the repo (ADR 0015).
+  - id: wt-conformance
+    anchor: panel
+    text: >-
+      Conformance quality on top of the anchors: OSDU PDM-faithful naming (WELL_TEST,
+      RPEN_ALLOCATION_FACTOR), the six-layer separation respected, OSI used as specified.

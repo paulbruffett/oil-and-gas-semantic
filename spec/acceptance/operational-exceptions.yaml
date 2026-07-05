@@ -1,0 +1,58 @@
+# Acceptance-criteria checklist for contest issue #19 (#50, ADR 0027) -- the objective anchor for
+# rubric dimension 2 (DESIGN §7, ADR 0015/0020). Frozen at the fork tag; identical for every
+# contestant; post-tag changes follow the three-class amendment rule (ADR 0015). The issue body
+# mirrors these items; this file is authoritative.
+issue: 19
+slug: operational-exceptions
+title: "Contest: operational exceptions / watchlist — LPG vocabulary/agent/platform wiring"
+items:
+  - id: wl-eval-gold
+    anchor: objective
+    verify: "harness eval run (docs/contest/eval-run.md): watchlist-down-watering-out-gor-change grades correct"
+    text: >-
+      The agent answers "which wells are down, watering out, or showing GOR change?" correctly
+      against the held-out eval-seed gold (days down, water cut, GOR change % -- including None
+      where a KPI is undefined for a flagged well).
+  - id: wl-metric-views
+    anchor: evidence
+    verify: "Metric View definitions committed; values match the OSI reference compile (ADR 0022)"
+    text: >-
+      The water-cut, GOR-change, and days-down KPIs over the trailing-current / leading-baseline
+      windows (ADR 0022) are implemented on Databricks as Unity Catalog Metric Views derived from
+      the shell's OSI definitions.
+  - id: wl-vocabulary
+    anchor: evidence
+    verify: "LPG vocabulary content committed; the mappings are absent from the shell (knowledge/vocabulary.yaml) so this is fork-authored"
+    text: >-
+      The LPG business vocabulary maps watchlist phrasings -- "watering out" to the governed
+      water-cut metric, "GOR change", "down" -- so natural language resolves to governed metrics
+      (ADR 0004); this is the distinctive contest content of the theme.
+  - id: wl-nl-resolution
+    anchor: panel
+    text: >-
+      The agent resolves the question's phrasing through the vocabulary/knowledge layer rather
+      than hard-coded keyword routing -- judged on the answer path, not just the artifact.
+  - id: wl-provenance
+    anchor: objective
+    verify: "collected submissions carry a non-empty provenance block naming the governed metrics"
+    text: >-
+      Every submitted answer includes provenance (metrics/dimensions/filters/entities used), per
+      the answer-submission schema (#14).
+  - id: wl-answering
+    anchor: objective
+    verify: "operator eval run per docs/contest/eval-run.md completes without intervention"
+    text: >-
+      ANSWERING.md names a headless, deterministic, network-free entry point that takes the eval
+      bundle and emits this theme's answer without human help (ADR 0026).
+  - id: wl-guide
+    anchor: evidence
+    verify: "instantiation guide section covers this theme end-to-end; fresh-agent probe (dim 6) exercises it"
+    text: >-
+      The reproducible instantiation guide covers this theme's build: Unity Catalog load, Metric
+      Views, vocabulary content, agent wiring.
+  - id: wl-governance
+    anchor: evidence
+    verify: "fork inspection: no credentials committed; grants documented"
+    text: >-
+      The environment is fully rebuildable from the fork with scoped Unity Catalog grants
+      documented and no credentials in the repo (ADR 0015).
