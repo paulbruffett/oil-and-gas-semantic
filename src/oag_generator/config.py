@@ -120,6 +120,15 @@ DEFAULT_WATCHLIST = {
     "days_down_threshold": 1,      # "down" when fully-off-stream days in the window >= this
 }
 
+# Adversarial question tier (issue #22 / ADR 0024). The generator seeds one deterministic **trap
+# well** whose only well test predates the dataset, so its allocation rests on an untrustworthy test
+# -- the data-quality condition the trap questions expect an agent to refuse over. Well identity is
+# structural (seed-independent), so the trap survives the held-out evaluation seed (ADR 0016).
+DEFAULT_ADVERSARIAL = {
+    "trap_well_id": 1,               # the designated trap well (structural WELL_ID, seed-independent)
+    "untrustworthy_test_days": 400,  # its only test is this many days before end_date (>> staleness)
+}
+
 DEFAULT_OPERATORS = ["Equinor", "AkerBP", "Wintershall"]
 
 
@@ -152,6 +161,7 @@ class Config:
     welltest: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WELLTEST))
     allocation: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_ALLOCATION))
     watchlist: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WATCHLIST))
+    adversarial: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_ADVERSARIAL))
 
     def __post_init__(self) -> None:
         # Nested calibration dicts: fill any missing keys from defaults so a partial
@@ -164,6 +174,7 @@ class Config:
         self.welltest = {**DEFAULT_WELLTEST, **self.welltest}
         self.allocation = {**DEFAULT_ALLOCATION, **self.allocation}
         self.watchlist = {**DEFAULT_WATCHLIST, **self.watchlist}
+        self.adversarial = {**DEFAULT_ADVERSARIAL, **self.adversarial}
         self._validate()
 
     def _validate(self) -> None:
@@ -236,6 +247,17 @@ class Config:
             raise ValueError("watchlist.gor_change_threshold must be > 0")
         if wl["days_down_threshold"] < 1:
             raise ValueError("watchlist.days_down_threshold must be >= 1")
+        # Adversarial trap well: a real structural well, seeded with a test far beyond mere staleness
+        # so its "the allocation is untrustworthy" condition is unambiguous (ADR 0024).
+        adv = self.adversarial
+        if not 1 <= adv["trap_well_id"] <= self.n_wells:
+            raise ValueError(
+                f"adversarial.trap_well_id must be in [1, {self.n_wells}] (n_wells)"
+            )
+        if adv["untrustworthy_test_days"] <= wt["stale_threshold_days"]:
+            raise ValueError(
+                "adversarial.untrustworthy_test_days must exceed welltest.stale_threshold_days"
+            )
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
         # silently samples the reversed interval, so reject min > max up front.
         for group, keys in (
@@ -370,6 +392,19 @@ def watchlist_windows(
         (curr_start.isoformat(), end.isoformat(), (end - curr_start).days + 1),
         (data_start.isoformat(), base_end.isoformat(), (base_end - data_start).days + 1),
     )
+
+
+def trap_test_date(end_date: str, untrustworthy_test_days: int) -> str:
+    """The date of the adversarial trap well's only well test (theme #22, ADR 0024).
+
+    Far enough before ``end_date`` (by ``untrustworthy_test_days``) that the well's allocation rests on
+    an untrustworthy test -- the data-quality condition the trap questions expect an agent to refuse
+    over. Single source shared by the generator (which seeds the WELL_TEST row) and the gold module
+    (which cites the date in the trap answer), so the seeded row and the stated evidence cannot diverge.
+    """
+    return (
+        date.fromisoformat(end_date) - timedelta(days=int(untrustworthy_test_days))
+    ).isoformat()
 
 
 def decline_months(start_date: str, end_date: str) -> list[str]:

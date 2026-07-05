@@ -89,6 +89,78 @@ def test_emits_osdu_pdm_tables(tmp_path, small_config):
     assert manifest["tables"]["product_volume_summary"]["osdu_table"] == "PRODUCT_VOLUME_SUMMARY"
 
 
+def test_trap_well_is_seeded_deterministically(tmp_path, small_config):
+    """The adversarial trap well (ADR 0024): its only well test predates the dataset, so its allocation
+    rests on an untrustworthy test regardless of window length or seed."""
+    m = generate_dataset(small_config, tmp_path)
+    wt = _read(m.tables["well_test"])
+
+    trap_id = 1  # default adversarial.trap_well_id
+    trap_dates = [d for wid, d in zip(wt["WELL_ID"], wt["TEST_DATE"]) if wid == trap_id]
+    assert len(trap_dates) == 1, "trap well must carry exactly one (ancient) well test"
+    expected = (date.fromisoformat(small_config["end_date"]) - timedelta(days=400)).isoformat()
+    assert trap_dates[0] == expected
+
+    # Gold flags the trap well as (extremely) stale: days-since equals the untrustworthy horizon.
+    welltest_gold = json.loads(m.gold["welltest"].read_text())
+    trap = next(r for r in welltest_gold["flagged"] if r["well_id"] == trap_id)
+    assert trap["is_stale"] and trap["days_since_last_test"] == 400
+    assert trap["last_test_date"] == expected
+
+
+def test_trap_seeding_only_moves_the_trap_wells_tests(tmp_path, small_config):
+    """Seeding the trap draws the same rng a normal well would, so every OTHER well's tests (and every
+    other table) are byte-for-byte what they'd be without the trap -- the trap is surgical."""
+    m = generate_dataset(small_config, tmp_path)
+    wt = _read(m.tables["well_test"])
+    # Non-trap wells still get their normal multi-test cadence history (>= 1 test each, in-window).
+    window = {small_config["start_date"], small_config["end_date"]}
+    for wid in set(wt["WELL_ID"]) - {1}:
+        dates = [d for w, d in zip(wt["WELL_ID"], wt["TEST_DATE"]) if w == wid]
+        assert dates, f"well {wid} lost its tests"
+        assert all(d >= small_config["start_date"] for d in dates), "non-trap tests stay in-window"
+
+
+def test_compound_adversarial_gold_is_never_empty(tmp_path, small_config):
+    """Each compound question's gold must be non-empty, by construction, on ANY config/seed (ADR 0024).
+
+    The compounds cross the surveillance x well-test signals, and the seeded worst-actor well is a
+    member of every side (impaired + stale test + anomalous allocation), so each intersection always
+    contains at least that well. Without this the tier could silently ship a *vacuous* question -- an
+    empty gold set an oracle trivially matches -- that tests no recall. Asserted on both the tiny
+    small_config and the fuller default config, and the anchor well is checked to be present."""
+    compound = [
+        "adversarial-compound-below-expected-and-stale",
+        "adversarial-compound-below-expected-and-anomalous",
+        "adversarial-compound-stale-and-anomalous",
+    ]
+    from oag_generator.config import Config
+
+    for label, cfg in (("small_config", dict(small_config)), ("default", {})):
+        m = generate_dataset(cfg, tmp_path / label)
+        trap_id = Config(**cfg).adversarial["trap_well_id"]
+        for qid in compound:
+            gold = json.loads((m.output_dir / "gold" / "adversarial" / f"{qid}.json").read_text())
+            assert gold["n_flagged"] >= 1, f"{label}: compound {qid} has an empty (vacuous) gold set"
+            assert trap_id in [r["well_id"] for r in gold["flagged"]], (
+                f"{label}: worst-actor well {trap_id} must anchor {qid}"
+            )
+
+
+def test_trap_survives_a_held_out_seed(tmp_path, small_config):
+    """The trap is structural, not random (ADR 0024 / ADR 0016): regenerating with a different seed --
+    the held-out eval-seed path -- yields the *same* trap well and the *same* trap gold, so a
+    contestant cannot fit to it."""
+    a = generate_dataset(small_config, tmp_path / "a")
+    b = generate_dataset({**small_config, "seed": small_config["seed"] + 1}, tmp_path / "b")
+    assert a.config_hash != b.config_hash  # the seed genuinely changed
+    trap = "gold/adversarial/adversarial-trap-stale-allocation.json"
+    ga = json.loads((a.output_dir / trap).read_text())
+    gb = json.loads((b.output_dir / trap).read_text())
+    assert ga["trap_well"] == gb["trap_well"]  # same well, same untrustworthy test date
+    assert ga["answer"] == gb["answer"]
+
+
 def test_byte_stable_across_runs(tmp_path, small_config):
     a = generate_dataset(small_config, tmp_path / "a")
     b = generate_dataset(small_config, tmp_path / "b")
@@ -99,6 +171,12 @@ def test_byte_stable_across_runs(tmp_path, small_config):
         )
     for artifact in ("surveillance", "deferment", "decline", "welltest", "watchlist", "rollups"):
         assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes()
+    # The adversarial tier (ADR 0024) is co-generated deterministically too -- byte-stable as well.
+    adv_a = sorted((a.output_dir / "gold" / "adversarial").glob("*.json"))
+    adv_b = sorted((b.output_dir / "gold" / "adversarial").glob("*.json"))
+    assert [p.name for p in adv_a] == [p.name for p in adv_b] and len(adv_a) == 9
+    for pa_, pb_ in zip(adv_a, adv_b):
+        assert pa_.read_bytes() == pb_.read_bytes(), f"adversarial gold {pa_.name} not byte-stable"
 
 
 def test_config_hash_stamped_and_sensitive(tmp_path, small_config):

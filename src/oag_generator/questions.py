@@ -69,9 +69,13 @@ class QuestionCatalog:
     version: int
     behaviors: tuple[str, ...]
     themes: tuple[Theme, ...]
+    # The adversarial tier (ADR 0024): compound/ambiguous/trap questions that span the six themes
+    # rather than forming a seventh, so they live beside the themes, not inside one.
+    adversarial: tuple[Question, ...] = ()
 
     def questions(self) -> list[Question]:
-        return [q for t in self.themes for q in t.questions]
+        """Every catalog question: the six themes' straight questions, then the adversarial tier."""
+        return [q for t in self.themes for q in t.questions] + list(self.adversarial)
 
 
 def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
@@ -85,6 +89,16 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
         raw = yaml.safe_load(Path(path).read_text())
     except (OSError, yaml.YAMLError) as exc:
         raise RuntimeError(f"question catalog unreadable at {path}: {exc}") from exc
+    def _question(q: dict) -> Question:
+        return Question(
+            id=q["id"],
+            gold_id=q["gold_id"],
+            gold_artifact=q["gold_artifact"],
+            tier=q["tier"],
+            expected_behavior=q["expected_behavior"],
+            text=q["text"],
+        )
+
     try:
         themes = tuple(
             Theme(
@@ -95,17 +109,7 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
                 status=t["status"],
                 kpis=tuple(t.get("kpis", [])),
                 osdu_entities=tuple(t.get("osdu_entities", [])),
-                questions=tuple(
-                    Question(
-                        id=q["id"],
-                        gold_id=q["gold_id"],
-                        gold_artifact=q["gold_artifact"],
-                        tier=q["tier"],
-                        expected_behavior=q["expected_behavior"],
-                        text=q["text"],
-                    )
-                    for q in t["questions"]
-                ),
+                questions=tuple(_question(q) for q in t["questions"]),
             )
             for t in raw["themes"]
         )
@@ -113,6 +117,7 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
             version=raw["version"],
             behaviors=tuple(raw["behaviors"]),
             themes=themes,
+            adversarial=tuple(_question(q) for q in raw.get("adversarial", [])),
         )
     except KeyError as exc:
         raise RuntimeError(f"question catalog {path} missing required key {exc}") from exc
@@ -126,6 +131,13 @@ def load_submission_schema(path: str | Path = SUBMISSION_SCHEMA_PATH) -> dict:
 # Loaded once so downstream modules import stable ids from the catalog, not string literals.
 _CATALOG = load_catalog()
 BEHAVIORS: tuple[str, ...] = _CATALOG.behaviors
+
+
+def default_catalog() -> QuestionCatalog:
+    """The shipped catalog, parsed once at import. Modules that only need the default catalog reuse
+    this instead of re-reading ``catalog.yaml`` from disk on every call (the generator co-generates
+    gold for every dataset; tests generate many)."""
+    return _CATALOG
 
 
 def question_id(theme_number: int, *, tier: str = "straight") -> str:
@@ -155,3 +167,27 @@ WELLTEST_QUESTION_ID = question_id(4)
 WATCHLIST_QUESTION_ID = question_id(5)
 # The asset-rollups question (theme 6); imported by the gold + rollup compile (issue #8).
 ROLLUP_QUESTION_ID = question_id(6)
+
+
+def adversarial_id(qid: str) -> str:
+    """The gold id of an adversarial-tier question, resolved from the catalog (ADR 0024).
+
+    Verifies the id exists in the ``adversarial`` list so the gold module and harness import a
+    checked constant rather than a bare literal that could drift from the catalog.
+    """
+    matches = [q for q in _CATALOG.adversarial if q.id == qid]
+    if len(matches) != 1:
+        raise ValueError(
+            f"adversarial catalog has {len(matches)} question(s) with id {qid!r}, expected 1"
+        )
+    return matches[0].gold_id
+
+
+# Adversarial tier ids (ADR 0024). Compound questions (answered) intersect two straight golds; the
+# gold module keys each derived answer off these. Ambiguous/trap ids are behavior-only and resolved
+# by the harness through the catalog walk, so only the compound ids need a named import here.
+ADV_BELOW_EXPECTED_AND_STALE_ID = adversarial_id("adversarial-compound-below-expected-and-stale")
+ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID = adversarial_id(
+    "adversarial-compound-below-expected-and-anomalous"
+)
+ADV_STALE_AND_ANOMALOUS_ID = adversarial_id("adversarial-compound-stale-and-anomalous")

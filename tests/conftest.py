@@ -141,6 +141,29 @@ def watchlist_gold(watchlist_dataset_dir) -> dict:
     return json.loads((watchlist_dataset_dir / "gold" / "watchlist.json").read_text())
 
 
+@pytest.fixture(scope="session")
+def adversarial_dataset_dir(tmp_path_factory) -> Path:
+    """A fuller dataset for grading the adversarial tier (#22, ADR 0024).
+
+    Full default window + 24 wells so the surveillance and well-test minorities each flag several
+    wells and the compound intersections carry more than just the anchor -- a realistic grading target.
+    (Non-emptiness itself is guaranteed by construction via the seeded worst-actor well on *any* config,
+    per ``test_compound_adversarial_gold_is_never_empty``; this fixture just gives the proof test teeth.)
+    """
+    from oag_generator import generate_dataset
+
+    config = {
+        "seed": 7,
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-30",
+        "n_fields": 3,
+        "wells_per_field": 8,
+    }
+    out = tmp_path_factory.mktemp("adversarial_dataset")
+    generate_dataset(config, out)
+    return out
+
+
 @pytest.fixture
 def build_oracle_submissions():
     """A factory that builds the *oracle* submission set (gold values) for a generated dataset.
@@ -154,14 +177,13 @@ def build_oracle_submissions():
     def _build(dataset_dir) -> dict:
         catalog = load_catalog()
         subs: dict = {}
-        for theme in catalog.themes:
-            for q in theme.questions:
-                spec = SPECS.get(q.gold_id)
-                gold_path = dataset_dir / q.gold_artifact
-                if spec is None or not gold_path.exists():
-                    continue
-                gold = json.loads(gold_path.read_text())
-                subs[q.id] = submission_from_gold(gold, spec, q.id, q.expected_behavior)
+        for q in catalog.questions():  # six straight themes + the adversarial tier (ADR 0024)
+            spec = SPECS.get(q.gold_id)
+            gold_path = dataset_dir / q.gold_artifact
+            if spec is None or not gold_path.exists():
+                continue
+            gold = json.loads(gold_path.read_text())
+            subs[q.id] = submission_from_gold(gold, spec, q.id, q.expected_behavior)
         return subs
 
     return _build

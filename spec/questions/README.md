@@ -7,11 +7,11 @@ Axis-B assessment harness (#9) and each competing implementation can consume the
 
 ## Files
 
-- **`catalog.yaml`** — the six use-case themes (`DESIGN.md` §6.2). Each theme lists its question(s); each
-  question carries a `gold_id` (the join key to a co-generated gold answer), a `tier`
-  (`straight` today; the adversarial tier arrives with #22), and an `expected_behavior`.
-  `status: implemented` means the generator already co-emits that theme's gold (theme 1, the hero);
-  `status: planned` themes get their gold in the shell-half issues #4–#8.
+- **`catalog.yaml`** — the six use-case themes (`DESIGN.md` §6.2) plus the **adversarial tier** (a
+  top-level `adversarial:` list, #22 / ADR 0024). Each question carries a `gold_id` (the join key to a
+  co-generated gold answer), a `tier` (`straight` for the six themes; `compound` / `ambiguous` / `trap`
+  for the adversarial tier), and an `expected_behavior`. `status: implemented` means the generator
+  co-emits that theme's gold (all six themes today); adversarial gold co-emits under `gold/adversarial/`.
 - **`answer_submission.schema.json`** — JSON Schema (Draft 2020-12) for a single answer submission:
   natural-language `answer` + `key_values` (graded against gold) + optional `provenance` + optional
   `behavior`.
@@ -29,3 +29,15 @@ against a freshly generated dataset.
 `answered`, `assumptions-stated`, `clarification-requested`, `refused-data-quality`. This lets an
 ambiguous or trap question encode the *right response* — a stated assumption, a clarification request, or
 a data-quality refusal — as gold, so it is graded as objectively as a straight numeric question.
+
+The adversarial tier (ADR 0024) uses this: **compound** questions span ≥2 governed metrics and are
+`answered` (their gold is the intersection of two straight golds, so its values are inherited from
+compile-verified gold); they cross the **surveillance × well-test** signals (below-expected ∩ stale,
+below-expected ∩ anomalous, stale ∩ anomalous). **ambiguous** questions are `clarification-requested`
+(behavior graded, no values); **trap** questions are `refused-data-quality` and cite the generator's
+deterministically seeded **worst-actor well** (`NO 15/9-F-1`) — its only well test predates the dataset
+(untrustworthy allocation), and it is also pinned to be a below-expected producer with an anomalous
+allocation. Being a member of every compound side, it makes each compound intersection **non-empty by
+construction** on any config/seed. Because well identity is structural, the whole construction survives
+the held-out evaluation seed (ADR 0016). The harness (`oag_harness.functional`) grades all of these off
+the same catalog walk.

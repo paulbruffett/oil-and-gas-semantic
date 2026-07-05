@@ -22,15 +22,16 @@ from oag_semantic.grading import grade_surveillance
 
 def test_oracle_scores_100_percent_across_themes(dataset_dir, build_oracle_submissions):
     report = score_submissions(build_oracle_submissions(dataset_dir), dataset_dir)
-    assert report.n_graded == 6  # surveillance, deferment, decline, welltest, watchlist, rollups
+    # Six straight themes + the nine adversarial-tier questions (#22) all grade off co-generated gold.
+    assert report.n_graded == 6 + 9
     assert report.pass_rate == 1.0
     assert all(g.correct for g in report.grades)
 
 
-def test_all_six_themes_are_gradable(dataset_dir, build_oracle_submissions):
+def test_all_themes_and_adversarial_tier_are_gradable(dataset_dir, build_oracle_submissions):
     report = score_submissions(build_oracle_submissions(dataset_dir), dataset_dir)
-    # Every straight-tier theme now has a spec + co-generated gold, so nothing is skipped. A future
-    # adversarial-tier question (#22) with no spec would surface here as skipped rather than failing.
+    # Every straight theme and every adversarial question now has a spec + co-generated gold, so
+    # nothing is skipped -- the tier lands with grading wired, not deferred.
     assert report.skipped == []
 
 
@@ -54,9 +55,10 @@ def test_theme_without_a_grading_spec_is_skipped(
 
 def test_missing_submission_is_skipped(dataset_dir, build_oracle_submissions):
     subs = build_oracle_submissions(dataset_dir)
+    full = score_submissions(subs, dataset_dir).n_graded
     del subs[SURVEILLANCE_QUESTION_ID]
     report = score_submissions(subs, dataset_dir)
-    assert report.n_graded == 5
+    assert report.n_graded == full - 1
     assert SURVEILLANCE_QUESTION_ID in report.skipped
 
 
@@ -69,8 +71,8 @@ def test_wrong_value_fails_that_question_only(dataset_dir, build_oracle_submissi
     assert report.pass_rate < 1.0
     bad = next(g for g in report.grades if g.question_id == DEFERMENT_QUESTION_ID)
     assert not bad.correct and bad.value_mismatches
-    # Only deferment is affected; the other five still pass.
-    assert report.n_correct == 5
+    # Only deferment is affected; every other graded question still passes.
+    assert report.n_correct == report.n_graded - 1
 
 
 def test_missing_and_extra_rows_are_reported(dataset_dir):
@@ -119,6 +121,28 @@ def test_answered_tier_also_requires_correct_behavior():
     assert grade.values_correct and not grade.behavior_correct and not grade.correct
 
 
+def test_assumptions_stated_grades_both_behavior_and_values():
+    """`assumptions-stated` (ADR 0013) is *answered under an explicit assumption*: unlike clarification/
+    refusal it is NOT behavior-only, so a question expecting it grades on BOTH the behavior and the
+    values. Proves that path end-to-end (ADR 0024 §1) even though no shipped catalog question mandates
+    it -- so the enum's fourth behavior isn't a dead branch at the grading seam."""
+    spec = SPECS[SURVEILLANCE_QUESTION_ID]
+    row = {"well_id": 1, "expected_oil_bbl": 10.0, "actual_oil_bbl": 4.0,
+           "shortfall_bbl": 6.0, "efficiency": 0.4}
+    gold = {"question_id": "q", "flagged": [row]}
+
+    good = {"question_id": "q", "behavior": "assumptions-stated",
+            "key_values": {"flagged": [dict(row)]}}
+    grade = grade_answer(good, gold, spec, expected_behavior="assumptions-stated")
+    assert grade.correct and grade.behavior_correct and grade.values_correct
+
+    # Right behavior, wrong values still fails -- it is value-graded, not behavior-only.
+    bad = {"question_id": "q", "behavior": "assumptions-stated",
+           "key_values": {"flagged": [{**row, "shortfall_bbl": 999.0}]}}
+    grade_bad = grade_answer(bad, gold, spec, expected_behavior="assumptions-stated")
+    assert not grade_bad.correct and grade_bad.behavior_correct and not grade_bad.values_correct
+
+
 def test_harness_surveillance_spec_matches_hero_grading_constants():
     """Guard the duplicated grading constants: if the hero's grader changes its graded keys or
     tolerance, this fails loudly rather than letting the two graders silently drift (cleanup)."""
@@ -152,6 +176,53 @@ def test_row_missing_id_key_is_dropped_not_crash():
     grade = grade_answer(sub, gold, spec)
     assert not grade.correct
     assert 1 in grade.missing_ids
+
+
+# --- adversarial tier: the grading seam is proven per category (#22 AC, ADR 0024) -----------------
+
+# One representative question per category (compound / ambiguous / trap).
+_ADV_PER_CATEGORY = {
+    "compound": "adversarial-compound-below-expected-and-stale",
+    "ambiguous": "adversarial-ambiguous-underperformers",
+    "trap": "adversarial-trap-stale-allocation",
+}
+
+
+def test_adversarial_oracle_scores_every_category(adversarial_dataset_dir, build_oracle_submissions):
+    """An oracle (gold values + expected behavior) scores 100% across all three adversarial categories
+    -- so each category is genuinely graded, not skipped."""
+    subs = build_oracle_submissions(adversarial_dataset_dir)
+    report = score_submissions(subs, adversarial_dataset_dir)
+    graded = {g.question_id: g for g in report.grades}
+    for category, qid in _ADV_PER_CATEGORY.items():
+        assert qid in graded, f"{category} question {qid} was not graded"
+        assert graded[qid].correct, f"oracle should pass {category} question {qid}"
+    # The compound intersection has real teeth here (non-empty), not a vacuous empty set.
+    compound = graded[_ADV_PER_CATEGORY["compound"]]
+    assert compound.n_gold > 0
+    assert report.pass_rate == 1.0
+
+
+def test_adversarial_wrong_submission_fails_per_category(
+    adversarial_dataset_dir, build_oracle_submissions
+):
+    """A wrong submission fails in each category: compound on a bad value, ambiguous/trap on behavior
+    (answering when the right move was to ask or refuse) -- so the tier discriminates, objectively."""
+    subs = build_oracle_submissions(adversarial_dataset_dir)
+
+    compound_id = _ADV_PER_CATEGORY["compound"]
+    assert subs[compound_id]["key_values"]["flagged"], "fixture should intersect >= 1 well"
+    subs[compound_id]["key_values"]["flagged"][0]["shortfall_bbl"] += 5000.0  # wrong value
+    subs[_ADV_PER_CATEGORY["ambiguous"]]["behavior"] = "answered"  # guessed instead of asking
+    subs[_ADV_PER_CATEGORY["trap"]]["behavior"] = "answered"       # answered instead of refusing
+
+    grades = {g.question_id: g for g in score_submissions(subs, adversarial_dataset_dir).grades}
+
+    compound = grades[compound_id]
+    assert not compound.correct and compound.value_mismatches  # values graded, and caught
+    for key in ("ambiguous", "trap"):
+        g = grades[_ADV_PER_CATEGORY[key]]
+        assert not g.correct and not g.behavior_correct, f"{key} should fail on behavior"
 
 
 def test_none_value_does_not_match_number():

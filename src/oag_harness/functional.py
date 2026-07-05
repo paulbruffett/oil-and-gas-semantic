@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Any
 
 from oag_generator.questions import (
+    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID,
+    ADV_BELOW_EXPECTED_AND_STALE_ID,
+    ADV_STALE_AND_ANOMALOUS_ID,
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
@@ -28,6 +31,7 @@ from oag_generator.questions import (
     WATCHLIST_QUESTION_ID,
     WELLTEST_QUESTION_ID,
     QuestionCatalog,
+    default_catalog,
     load_catalog,
 )
 
@@ -83,7 +87,27 @@ SPECS: dict[str, GradingSpec] = {
         "field_id",
         ("oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"),
     ),
+    # Adversarial compound tier (#22, ADR 0024): the intersection of two straight golds, graded as a
+    # flagged set keyed by well_id on the two crossed metrics (values copied from compile-verified gold).
+    ADV_BELOW_EXPECTED_AND_STALE_ID: GradingSpec(
+        "flagged", "well_id", ("shortfall_bbl", "days_since_last_test")
+    ),
+    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID: GradingSpec(
+        "flagged", "well_id", ("shortfall_bbl", "allocation_variance")
+    ),
+    ADV_STALE_AND_ANOMALOUS_ID: GradingSpec(
+        "flagged", "well_id", ("days_since_last_test", "allocation_variance")
+    ),
 }
+
+# Ambiguous/trap adversarial questions grade on the reported *behavior* only (ADR 0024): the spec's
+# set_key/value_keys go unused (grade_answer short-circuits on _NON_VALUE_BEHAVIORS), but a spec must
+# be present or the question would be skipped rather than graded. Registered from the catalog so the
+# six behavior-only ids stay catalog-driven, not literals.
+_BEHAVIOR_ONLY_SPEC = GradingSpec(set_key="", id_key="", value_keys=())
+for _q in default_catalog().adversarial:
+    if _q.tier in ("ambiguous", "trap"):
+        SPECS.setdefault(_q.gold_id, _BEHAVIOR_ONLY_SPEC)
 
 
 @dataclass(frozen=True)
@@ -263,17 +287,16 @@ def score_submissions(
     grades: list[QuestionGrade] = []
     skipped: list[str] = []
 
-    for theme in catalog.themes:
-        for q in theme.questions:
-            spec = SPECS.get(q.gold_id)
-            gold_path = dataset_dir / q.gold_artifact
-            if spec is None or not gold_path.exists() or q.id not in submissions:
-                skipped.append(q.id)
-                continue
-            gold = json.loads(gold_path.read_text())
-            grades.append(
-                grade_answer(submissions[q.id], gold, spec, q.expected_behavior)
-            )
+    # Walk every catalog question -- the six themes' straight questions and the adversarial tier
+    # (ADR 0024) alike -- so a new tier grades without a special case here.
+    for q in catalog.questions():
+        spec = SPECS.get(q.gold_id)
+        gold_path = dataset_dir / q.gold_artifact
+        if spec is None or not gold_path.exists() or q.id not in submissions:
+            skipped.append(q.id)
+            continue
+        gold = json.loads(gold_path.read_text())
+        grades.append(grade_answer(submissions[q.id], gold, spec, q.expected_behavior))
 
     return ScoreReport(grades=grades, skipped=skipped)
 
