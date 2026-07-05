@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import Any
 
 from oag_generator.questions import (
+    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID,
     ADV_BELOW_EXPECTED_AND_STALE_ID,
-    ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID,
-    ADV_WATERING_OUT_AND_DECLINING_ID,
+    ADV_STALE_AND_ANOMALOUS_ID,
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
@@ -92,11 +92,11 @@ SPECS: dict[str, GradingSpec] = {
     ADV_BELOW_EXPECTED_AND_STALE_ID: GradingSpec(
         "flagged", "well_id", ("shortfall_bbl", "days_since_last_test")
     ),
-    ADV_WATERING_OUT_AND_DECLINING_ID: GradingSpec(
-        "flagged", "well_id", ("water_cut", "decline_gap")
+    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID: GradingSpec(
+        "flagged", "well_id", ("shortfall_bbl", "allocation_variance")
     ),
-    ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID: GradingSpec(
-        "flagged", "well_id", ("shortfall_bbl", "days_down")
+    ADV_STALE_AND_ANOMALOUS_ID: GradingSpec(
+        "flagged", "well_id", ("days_since_last_test", "allocation_variance")
     ),
 }
 

@@ -143,12 +143,12 @@ def watchlist_gold(watchlist_dataset_dir) -> dict:
 
 @pytest.fixture(scope="session")
 def adversarial_dataset_dir(tmp_path_factory) -> Path:
-    """A dataset sized so all three adversarial compound intersections are non-empty (#22, ADR 0024).
+    """A fuller dataset for grading the adversarial tier (#22, ADR 0024).
 
-    Full default window + 24 wells (like ``welltest_config``) so surveillance, well-test, watchlist,
-    and decline each flag enough wells that their pairwise intersections have teeth -- the proof test
-    grades a real (non-empty) compound set, not a vacuously-empty one. The trap well + behavior-only
-    tiers are present on any config.
+    Full default window + 24 wells so the surveillance and well-test minorities each flag several
+    wells and the compound intersections carry more than just the anchor -- a realistic grading target.
+    (Non-emptiness itself is guaranteed by construction via the seeded worst-actor well on *any* config,
+    per ``test_compound_adversarial_gold_is_never_empty``; this fixture just gives the proof test teeth.)
     """
     from oag_generator import generate_dataset
 

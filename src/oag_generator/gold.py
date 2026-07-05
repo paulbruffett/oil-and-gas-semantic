@@ -41,9 +41,9 @@ from oag_generator.config import (
     watchlist_windows,
 )
 from oag_generator.questions import (
+    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID,
     ADV_BELOW_EXPECTED_AND_STALE_ID,
-    ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID,
-    ADV_WATERING_OUT_AND_DECLINING_ID,
+    ADV_STALE_AND_ANOMALOUS_ID,
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
@@ -1123,32 +1123,34 @@ def compute_adversarial_gold(
     adv = {q.id: q for q in default_catalog().adversarial}
     surveillance = straight_golds["surveillance"]
     welltest = straight_golds["welltest"]
-    watchlist = straight_golds["watchlist"]
-    decline = straight_golds["decline"]
+    # The two well-test sub-populations, split by the flags the straight gold already carries.
+    stale = [r for r in welltest["flagged"] if r.get("is_stale")]
+    anomalous = [r for r in welltest["flagged"] if r.get("is_anomalous")]
 
     out: dict[str, dict] = {}
 
-    # -- Compound (answered): span >= 2 governed metrics. --
+    # -- Compound (answered): each crosses two governed metrics over the reliably-populated
+    #    surveillance x well-test signals; the seeded worst-actor well is in every side (ADR 0024). --
     out[ADV_BELOW_EXPECTED_AND_STALE_ID] = _compound_gold(
         ADV_BELOW_EXPECTED_AND_STALE_ID,
         adv[ADV_BELOW_EXPECTED_AND_STALE_ID].text.strip(),
-        ("producing below expected oil", "a stale test or anomalous allocation"),
+        ("producing below expected oil", "overdue for a well test"),
         surveillance["flagged"], ("shortfall_bbl",),
-        welltest["flagged"], ("days_since_last_test",),
+        stale, ("days_since_last_test",),
     )
-    out[ADV_WATERING_OUT_AND_DECLINING_ID] = _compound_gold(
-        ADV_WATERING_OUT_AND_DECLINING_ID,
-        adv[ADV_WATERING_OUT_AND_DECLINING_ID].text.strip(),
-        ("on the operational-exceptions watchlist", "declining faster than forecast"),
-        watchlist["flagged"], ("water_cut",),
-        decline["wells_declining_faster"], ("decline_gap",),
-    )
-    out[ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID] = _compound_gold(
-        ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID,
-        adv[ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID].text.strip(),
-        ("producing below expected oil", "on the operational-exceptions watchlist"),
+    out[ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID] = _compound_gold(
+        ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID,
+        adv[ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID].text.strip(),
+        ("producing below expected oil", "allocating anomalously"),
         surveillance["flagged"], ("shortfall_bbl",),
-        watchlist["flagged"], ("days_down",),
+        anomalous, ("allocation_variance",),
+    )
+    out[ADV_STALE_AND_ANOMALOUS_ID] = _compound_gold(
+        ADV_STALE_AND_ANOMALOUS_ID,
+        adv[ADV_STALE_AND_ANOMALOUS_ID].text.strip(),
+        ("carrying a stale well test", "allocating anomalously"),
+        stale, ("days_since_last_test",),
+        anomalous, ("allocation_variance",),
     )
 
     # -- Trap (refused-data-quality): the seeded trap well's allocation rests on an untrustworthy test.

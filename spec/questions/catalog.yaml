@@ -122,33 +122,36 @@ themes:
 # expect `clarification-requested`; traps expect `refused-data-quality` and reference the generator's
 # deterministically seeded trap well (NO 15/9-F-1) whose only well test predates the data.
 adversarial:
-  # -- Compound: span >= 2 governed metrics; the gold is the intersection of two straight golds. --
+  # -- Compound: span >= 2 governed metrics; the gold is the intersection of two straight golds. These
+  #    cross the surveillance and well-test signals (both reliably populated two-population minorities,
+  #    ADR 0009) rather than the noise-driven decline (#35) or Volve-dark watchlist (#44) signals, and
+  #    the seeded worst-actor well is a member of every side, so each intersection is non-empty by
+  #    construction on any config/seed (ADR 0024). --
   - id: adversarial-compound-below-expected-and-stale
     gold_id: adversarial-compound-below-expected-and-stale
     gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-stale.json
     tier: compound
     expected_behavior: answered
     text: >-
-      Which wells are BOTH producing below expected oil rate (surveillance) AND carrying a
-      data-quality flag -- a stale well test or anomalous allocation? Give each well's shortfall
-      and how many days since its last test.
-  - id: adversarial-compound-watering-out-and-declining
-    gold_id: adversarial-compound-watering-out-and-declining
-    gold_artifact: gold/adversarial/adversarial-compound-watering-out-and-declining.json
+      Which wells are BOTH producing below expected oil rate (surveillance) AND overdue for a well
+      test (stale)? Give each well's oil shortfall and how many days since its last test.
+  - id: adversarial-compound-below-expected-and-anomalous
+    gold_id: adversarial-compound-below-expected-and-anomalous
+    gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-anomalous.json
     tier: compound
     expected_behavior: answered
     text: >-
-      Which wells are BOTH on the operational-exceptions watchlist (down, watering out, or GOR
-      change) AND declining faster than forecast? Give each well's water cut and its decline gap
-      vs forecast.
-  - id: adversarial-compound-below-expected-and-watchlisted
-    gold_id: adversarial-compound-below-expected-and-watchlisted
-    gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-watchlisted.json
+      Which wells are BOTH producing below expected oil rate AND allocating anomalously (allocated
+      volume out of line with what they measured)? Give each well's oil shortfall and its allocation
+      variance.
+  - id: adversarial-compound-stale-and-anomalous
+    gold_id: adversarial-compound-stale-and-anomalous
+    gold_artifact: gold/adversarial/adversarial-compound-stale-and-anomalous.json
     tier: compound
     expected_behavior: answered
     text: >-
-      Which wells are BOTH producing below expected oil rate AND on the operational-exceptions
-      watchlist? Give each well's shortfall and its days-down.
+      Which wells have BOTH a stale well test AND an anomalous allocation? Give each well's days
+      since its last test and its allocation variance.
 
   # -- Ambiguous: under-specified; the right move is to ask, not guess (clarification-requested). --
   - id: adversarial-ambiguous-underperformers

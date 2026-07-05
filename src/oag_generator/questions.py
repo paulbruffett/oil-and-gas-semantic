@@ -187,7 +187,7 @@ def adversarial_id(qid: str) -> str:
 # gold module keys each derived answer off these. Ambiguous/trap ids are behavior-only and resolved
 # by the harness through the catalog walk, so only the compound ids need a named import here.
 ADV_BELOW_EXPECTED_AND_STALE_ID = adversarial_id("adversarial-compound-below-expected-and-stale")
-ADV_WATERING_OUT_AND_DECLINING_ID = adversarial_id("adversarial-compound-watering-out-and-declining")
-ADV_BELOW_EXPECTED_AND_WATCHLISTED_ID = adversarial_id(
-    "adversarial-compound-below-expected-and-watchlisted"
+ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID = adversarial_id(
+    "adversarial-compound-below-expected-and-anomalous"
 )
+ADV_STALE_AND_ANOMALOUS_ID = adversarial_id("adversarial-compound-stale-and-anomalous")

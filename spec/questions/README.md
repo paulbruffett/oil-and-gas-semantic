@@ -32,8 +32,12 @@ a data-quality refusal — as gold, so it is graded as objectively as a straight
 
 The adversarial tier (ADR 0024) uses this: **compound** questions span ≥2 governed metrics and are
 `answered` (their gold is the intersection of two straight golds, so its values are inherited from
-compile-verified gold); **ambiguous** questions are `clarification-requested` (behavior graded, no
-values); **trap** questions are `refused-data-quality` and cite the generator's deterministically seeded
-**trap well** (`NO 15/9-F-1`), whose only well test predates the dataset so its allocation is
-untrustworthy. Because well identity is structural, the trap survives the held-out evaluation seed
-(ADR 0016). The harness (`oag_harness.functional`) grades all of these off the same catalog walk.
+compile-verified gold); they cross the **surveillance × well-test** signals (below-expected ∩ stale,
+below-expected ∩ anomalous, stale ∩ anomalous). **ambiguous** questions are `clarification-requested`
+(behavior graded, no values); **trap** questions are `refused-data-quality` and cite the generator's
+deterministically seeded **worst-actor well** (`NO 15/9-F-1`) — its only well test predates the dataset
+(untrustworthy allocation), and it is also pinned to be a below-expected producer with an anomalous
+allocation. Being a member of every compound side, it makes each compound intersection **non-empty by
+construction** on any config/seed. Because well identity is structural, the whole construction survives
+the held-out evaluation seed (ADR 0016). The harness (`oag_harness.functional`) grades all of these off
+the same catalog walk.

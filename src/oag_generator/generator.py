@@ -76,6 +76,11 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     dcl, wcc, gor, perf, dtc = (
         config.decline, config.watercut, config.gor, config.performance, config.downtime
     )
+    # The adversarial worst-actor well (ADR 0024): the same seeded well that carries the untrustworthy
+    # test is also forced to be a genuine underperformer (impaired) and, below, an anomalously allocated
+    # one -- so it is a member of the surveillance *and* well-test flagged populations at once, which is
+    # what makes every compound intersection non-empty by construction (not by luck of the draw).
+    trap_well_id = int(config.adversarial["trap_well_id"])
     # Downtime cause pool -> parallel value/weight arrays for deterministic weighted sampling.
     cause_values = [c["cause"] for c in config.downtime_causes]
     cause_weights = np.array([c["weight"] for c in config.downtime_causes], dtype=np.float64)
@@ -151,6 +156,11 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
                 bias = rng.normal(perf["impaired_bias_mean"], perf["impaired_bias_sd"])
             else:
                 bias = rng.normal(perf["bias_mean"], perf["bias_sd"])
+            if well_id == trap_well_id:
+                # Pin the worst-actor's bias to the impaired mean (deterministic, well below the
+                # surveillance materiality band) so it is *always* flagged below-expected regardless of
+                # seed -- the draws above still ran, so every other well stays byte-identical (ADR 0024).
+                bias = perf["impaired_bias_mean"]
             daily_noise = rng.normal(0.0, perf["daily_noise_sd"], size=n_days)
 
             # Down Time Events (ADR 0017): draw a Poisson count of single-day outages, place them on
@@ -392,6 +402,12 @@ def _build_welltest_allocation(
                 factor = ideal * (1.0 + sign * mag)
             else:
                 factor = ideal * (1.0 + rng.normal(0.0, al["healthy_noise_sd"]))
+            if well_id == trap_well_id:
+                # Pin the worst-actor's allocation factor beyond the anomaly threshold (deterministic)
+                # so it is *always* flagged anomalous too -- with its impaired production + untrustworthy
+                # test, it anchors the surveillance x well-test compound intersections (ADR 0024). The
+                # is_mis/mag/sign draws above still ran, so every other well is byte-identical.
+                factor = ideal * (1.0 + al["misalloc_bias_max"])
             factor = max(factor, 0.0)
             paf_seq += 1
             paf["RPEN_ALLOCATION_FACTOR_ID"].append(paf_seq)

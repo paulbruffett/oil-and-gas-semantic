@@ -121,6 +121,32 @@ def test_trap_seeding_only_moves_the_trap_wells_tests(tmp_path, small_config):
         assert all(d >= small_config["start_date"] for d in dates), "non-trap tests stay in-window"
 
 
+def test_compound_adversarial_gold_is_never_empty(tmp_path, small_config):
+    """Each compound question's gold must be non-empty, by construction, on ANY config/seed (ADR 0024).
+
+    The compounds cross the surveillance x well-test signals, and the seeded worst-actor well is a
+    member of every side (impaired + stale test + anomalous allocation), so each intersection always
+    contains at least that well. Without this the tier could silently ship a *vacuous* question -- an
+    empty gold set an oracle trivially matches -- that tests no recall. Asserted on both the tiny
+    small_config and the fuller default config, and the anchor well is checked to be present."""
+    compound = [
+        "adversarial-compound-below-expected-and-stale",
+        "adversarial-compound-below-expected-and-anomalous",
+        "adversarial-compound-stale-and-anomalous",
+    ]
+    from oag_generator.config import Config
+
+    for label, cfg in (("small_config", dict(small_config)), ("default", {})):
+        m = generate_dataset(cfg, tmp_path / label)
+        trap_id = Config(**cfg).adversarial["trap_well_id"]
+        for qid in compound:
+            gold = json.loads((m.output_dir / "gold" / "adversarial" / f"{qid}.json").read_text())
+            assert gold["n_flagged"] >= 1, f"{label}: compound {qid} has an empty (vacuous) gold set"
+            assert trap_id in [r["well_id"] for r in gold["flagged"]], (
+                f"{label}: worst-actor well {trap_id} must anchor {qid}"
+            )
+
+
 def test_trap_survives_a_held_out_seed(tmp_path, small_config):
     """The trap is structural, not random (ADR 0024 / ADR 0016): regenerating with a different seed --
     the held-out eval-seed path -- yields the *same* trap well and the *same* trap gold, so a
