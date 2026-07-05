@@ -20,12 +20,14 @@ from oag_generator import (
     canonical_table_paths,
     deferment_window,
     read_dataset_manifest,
+    watchlist_windows,
 )
 from oag_semantic.compile import (
     compute_decline,
     compute_deferment,
     compute_rollup,
     compute_surveillance,
+    compute_watchlist,
     compute_welltest,
 )
 from oag_semantic.manifest import load_semantic_layer
@@ -488,3 +490,164 @@ def test_rollup_compile_orders_by_biggest_mover(dataset_dir):
     result = compute_rollup(dataset_dir)
     deltas = [abs(r["oil_delta"]) for r in result.by_field]
     assert deltas == sorted(deltas, reverse=True)
+
+
+# --- operational exceptions / watchlist (issue #7) ----------------------------------------------
+
+
+def test_watchlist_reference_compile_reproduces_gold(watchlist_dataset_dir, watchlist_gold):
+    """The OSI-driven reference compile reproduces the co-generated watchlist gold (water cut/GOR/days-down)."""
+    result = compute_watchlist(watchlist_dataset_dir)
+    g = watchlist_gold
+
+    assert result.curr_start == g["current_window"]["start"]
+    assert result.curr_end == g["current_window"]["end"]
+    assert result.base_start == g["baseline_window"]["start"]
+    assert result.base_end == g["baseline_window"]["end"]
+    assert result.watercut_threshold == g["watercut_threshold"]
+    assert result.gor_change_threshold == g["gor_change_threshold"]
+    assert result.days_down_threshold == g["days_down_threshold"]
+    assert result.n_wells_evaluated == g["n_wells_evaluated"]
+    assert (result.n_down, result.n_watering_out, result.n_gor_change) == (
+        g["n_down"], g["n_watering_out"], g["n_gor_change"]
+    )
+
+    # Flagged set matches exactly (order + per-well values).
+    assert [w["well_id"] for w in result.flagged] == [r["well_id"] for r in g["flagged"]]
+    gold_by_id = {r["well_id"]: r for r in g["flagged"]}
+    for w in result.flagged:
+        r = gold_by_id[w["well_id"]]
+        assert w["uwi"] == r["uwi"]
+        assert w["field_id"] == r["field_id"]
+        assert w["days_down"] == r["days_down"]
+        assert w["is_down"] == r["is_down"]
+        assert w["is_watering_out"] == r["is_watering_out"]
+        assert w["is_gor_change"] == r["is_gor_change"]
+        assert w["reasons"] == r["reasons"]
+        for key in ("water_cut", "gor_curr", "gor_baseline", "gor_change_pct"):
+            if r[key] is None:
+                assert w[key] is None
+            else:
+                assert w[key] == pytest.approx(r[key], rel=1e-6)
+
+
+def test_watchlist_compile_orders_and_every_flag_is_justified(watchlist_dataset_dir):
+    result = compute_watchlist(watchlist_dataset_dir)
+    # Deterministic order: most days-down first, then water cut, then GOR change, then well_id.
+    keys = [
+        (-w["days_down"], -(w["water_cut"] or 0.0), -abs(w["gor_change_pct"] or 0.0), w["well_id"])
+        for w in result.flagged
+    ]
+    assert keys == sorted(keys)
+    # Every flagged well is genuinely down, watering out, or GOR-changed (no spurious flags).
+    for w in result.flagged:
+        assert w["is_down"] or w["is_watering_out"] or w["is_gor_change"]
+        assert w["reasons"]
+        if w["is_down"]:
+            assert w["days_down"] >= result.days_down_threshold
+        if w["is_watering_out"]:
+            assert w["water_cut"] > result.watercut_threshold
+        if w["is_gor_change"]:
+            assert abs(w["gor_change_pct"]) > result.gor_change_threshold
+    # All three signals fire in this fixture, so the flag logic is exercised, not vacuously green.
+    assert result.n_down > 0 and result.n_watering_out > 0 and result.n_gor_change > 0
+
+
+def test_water_cut_metric_formula_matches_compile(watchlist_dataset_dir):
+    """The governed water_cut derived-metric formula (metrics.yaml), executed over its base measures,
+    must reproduce the compile's per-well current-window water cut. Without this the formula is only
+    asserted to exist (its type), never executed, so a bad edit -- inverting the ratio, or dropping a
+    term of the denominator -- would ship silently to any MetricFlow consumer while gold/compile (a
+    separate code path) stayed correct."""
+    layer = load_semantic_layer()
+    config = read_dataset_manifest(watchlist_dataset_dir)["config"]
+    (curr_start, curr_end, _), _ = watchlist_windows(
+        config["start_date"], config["end_date"], int(config["watchlist"]["window_days"])
+    )
+
+    water_cut = layer.metrics["water_cut"]
+    assert water_cut.type == "derived"
+    measure_of = {
+        m["name"]: layer.metrics[m["name"]].type_params["measure"]
+        for m in water_cut.type_params["metrics"]
+    }
+    wvd_model, oil_measure = layer.measure(measure_of["actual_oil"])
+    _, water_measure = layer.measure(measure_of["actual_water"])
+    paths = canonical_table_paths(watchlist_dataset_dir)
+
+    con = duckdb.connect()
+    try:
+        con.register(wvd_model.table, pq.read_table(paths[wvd_model.table]))
+        by_well = dict(
+            con.execute(
+                f"""SELECT {wvd_model.entity('well').expr}                       AS well_id,
+                           (SUM({oil_measure.expr}), SUM({water_measure.expr}))  AS ow
+                    FROM {wvd_model.table}
+                    WHERE {wvd_model.time_dimension().expr} BETWEEN ? AND ?
+                    GROUP BY 1""",
+                [curr_start, curr_end],
+            ).fetchall()
+        )
+    finally:
+        con.close()
+
+    result = compute_watchlist(watchlist_dataset_dir)
+    flagged = [w for w in result.flagged if w["is_watering_out"]]
+    assert flagged, "fixture should flag watering-out wells"
+    for w in flagged:
+        actual_oil, actual_water = (float(x) for x in by_well[w["well_id"]])
+        evaluated = eval(  # evaluate the governed formula string itself (no builtins)
+            water_cut.type_params["expr"],
+            {"__builtins__": {}},
+            {"actual_oil": actual_oil, "actual_water": actual_water},
+        )
+        assert evaluated == pytest.approx(w["water_cut"], rel=1e-9)
+
+
+def test_gor_metric_formula_matches_compile(watchlist_dataset_dir):
+    """The governed gor derived-metric formula (metrics.yaml), executed over its base measures, must
+    reproduce the compile's per-well current-window GOR (scf/bbl). Guards the ``* 1000`` Mscf->scf
+    factor and the gas/oil orientation against a silent bad edit, mirroring water_cut above."""
+    layer = load_semantic_layer()
+    config = read_dataset_manifest(watchlist_dataset_dir)["config"]
+    (curr_start, curr_end, _), _ = watchlist_windows(
+        config["start_date"], config["end_date"], int(config["watchlist"]["window_days"])
+    )
+
+    gor = layer.metrics["gor"]
+    assert gor.type == "derived"
+    measure_of = {
+        m["name"]: layer.metrics[m["name"]].type_params["measure"]
+        for m in gor.type_params["metrics"]
+    }
+    wvd_model, oil_measure = layer.measure(measure_of["actual_oil"])
+    _, gas_measure = layer.measure(measure_of["actual_gas"])
+    paths = canonical_table_paths(watchlist_dataset_dir)
+
+    con = duckdb.connect()
+    try:
+        con.register(wvd_model.table, pq.read_table(paths[wvd_model.table]))
+        by_well = dict(
+            con.execute(
+                f"""SELECT {wvd_model.entity('well').expr}                     AS well_id,
+                           (SUM({oil_measure.expr}), SUM({gas_measure.expr}))  AS og
+                    FROM {wvd_model.table}
+                    WHERE {wvd_model.time_dimension().expr} BETWEEN ? AND ?
+                    GROUP BY 1""",
+                [curr_start, curr_end],
+            ).fetchall()
+        )
+    finally:
+        con.close()
+
+    result = compute_watchlist(watchlist_dataset_dir)
+    flagged = [w for w in result.flagged if w["gor_curr"] is not None]
+    assert flagged
+    for w in flagged:
+        actual_oil, actual_gas = (float(x) for x in by_well[w["well_id"]])
+        evaluated = eval(
+            gor.type_params["expr"],
+            {"__builtins__": {}},
+            {"actual_oil": actual_oil, "actual_gas": actual_gas},
+        )
+        assert evaluated == pytest.approx(w["gor_curr"], rel=1e-9)

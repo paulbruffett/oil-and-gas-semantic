@@ -400,6 +400,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0019 — WELL_TEST + RPEN_ALLOCATION_FACTOR model + well-test/allocation KPI definitions](docs/adr/0019-welltest-allocation-model-and-kpis.md)
 - [0020 — Axis-B assessment-harness structure + submission/scorecard contract; objective anchors computed, panel/reproduction as scaffolding](docs/adr/0020-assessment-harness-contract.md)
 - [0021 — FACILITY (composite PK) + Well→Facility→Field hierarchy + asset-rollup KPI definitions (period-over-period Δ, contribution-%)](docs/adr/0021-facility-hierarchy-and-rollup-kpis.md)
+- [0022 — Operational-exceptions / watchlist KPI definitions (water cut, GOR, days-down) over trailing current + leading baseline windows](docs/adr/0022-watchlist-kpi-definitions.md)
 
 ---
 

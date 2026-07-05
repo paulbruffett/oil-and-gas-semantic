@@ -14,6 +14,7 @@ from oag_generator.config import (
     load_config,
     rollup_periods,
     surveillance_window,
+    watchlist_windows,
 )
 from oag_generator.generator import (
     GENERATOR_VERSION,
@@ -38,4 +39,5 @@ __all__ = [
     "read_dataset_manifest",
     "rollup_periods",
     "surveillance_window",
+    "watchlist_windows",
 ]

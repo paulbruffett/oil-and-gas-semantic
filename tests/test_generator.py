@@ -97,7 +97,7 @@ def test_byte_stable_across_runs(tmp_path, small_config):
         assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
             f"table {name} is not byte-stable across identical runs"
         )
-    for artifact in ("surveillance", "deferment", "decline", "welltest", "rollups"):
+    for artifact in ("surveillance", "deferment", "decline", "welltest", "watchlist", "rollups"):
         assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes()
 
 
@@ -463,6 +463,81 @@ def test_welltest_gold_matches_kpi_defs(tmp_path, welltest_config):
     assert keys == sorted(keys)
     # Both signals actually fire in this fixture, so the flagging logic is genuinely exercised.
     assert n_stale > 0 and n_anom > 0
+
+
+def test_watchlist_gold_matches_kpi_defs(tmp_path, watchlist_config):
+    """Recompute the watchlist KPIs (§6.3, ADR 0022) independently and assert gold matches.
+
+    water cut = Σwater / (Σoil + Σwater); GOR = Σgas x 1000 / Σoil (scf/bbl); days-down = # days with
+    HOURS_ON == 0; over the trailing current window. A well is flagged when down (days-down >= thr),
+    watering out (water cut > thr), or GOR-changed (|current/baseline GOR - 1| > thr).
+    """
+    m = generate_dataset(watchlist_config, tmp_path)
+    well = _read(m.tables["well"])
+    wvd = _read(m.tables["well_vol_daily"])
+    gold = json.loads(m.gold["watchlist"].read_text())
+
+    wl = watchlist_config["watchlist"]
+    end = date.fromisoformat(watchlist_config["end_date"])
+    data_start = date.fromisoformat(watchlist_config["start_date"])
+    curr_start = max(data_start, end - timedelta(days=wl["window_days"] - 1))
+    base_end = min(end, data_start + timedelta(days=wl["window_days"] - 1))
+    assert gold["current_window"] == {
+        "start": curr_start.isoformat(), "end": end.isoformat(), "days": (end - curr_start).days + 1
+    }
+    assert gold["baseline_window"] == {
+        "start": data_start.isoformat(), "end": base_end.isoformat(), "days": (base_end - data_start).days + 1
+    }
+    curr = {(curr_start + timedelta(days=i)).isoformat() for i in range((end - curr_start).days + 1)}
+    base = {(data_start + timedelta(days=i)).isoformat() for i in range((base_end - data_start).days + 1)}
+
+    agg = {wid: [0.0, 0.0, 0.0, 0, 0.0, 0.0] for wid in well["WELL_ID"]}
+    for wid, d, hours, oil, gas, water in zip(
+        wvd["WELL_ID"], wvd["VOLUME_DATE"], wvd["HOURS_ON"],
+        wvd["OIL_VOLUME"], wvd["GAS_VOLUME"], wvd["WATER_VOLUME"],
+    ):
+        a = agg[wid]
+        if d in curr:
+            a[0] += oil; a[1] += water; a[2] += gas
+            if hours == 0.0:
+                a[3] += 1
+        if d in base:
+            a[4] += oil; a[5] += gas
+
+    n_down = n_water = n_gor = 0
+    expected_flagged = []
+    for wid, (oil_c, water_c, gas_c, dd, oil_b, gas_b) in agg.items():
+        water_cut = water_c / (oil_c + water_c) if (oil_c + water_c) > 0 else None
+        gor_c = 1000.0 * gas_c / oil_c if oil_c > 0 else None
+        gor_b = 1000.0 * gas_b / oil_b if oil_b > 0 else None
+        gor_change = gor_c / gor_b - 1.0 if gor_c is not None and gor_b else None
+        is_down = dd >= wl["days_down_threshold"]
+        is_water = water_cut is not None and water_cut > wl["watercut_threshold"]
+        is_gor = gor_change is not None and abs(gor_change) > wl["gor_change_threshold"]
+        n_down += is_down; n_water += is_water; n_gor += is_gor
+        if is_down or is_water or is_gor:
+            expected_flagged.append({"well_id": wid, "days_down": dd, "water_cut": water_cut,
+                                     "gor_change": gor_change})
+
+    assert (gold["n_down"], gold["n_watering_out"], gold["n_gor_change"]) == (n_down, n_water, n_gor)
+    assert gold["n_flagged"] == len(expected_flagged)
+    assert {f["well_id"] for f in gold["flagged"]} == {f["well_id"] for f in expected_flagged}
+
+    exp_by_id = {f["well_id"]: f for f in expected_flagged}
+    for row in gold["flagged"]:
+        e = exp_by_id[row["well_id"]]
+        assert row["days_down"] == e["days_down"]
+        if e["water_cut"] is not None:
+            assert row["water_cut"] == pytest.approx(e["water_cut"], rel=1e-9)
+        if e["gor_change"] is not None:
+            assert row["gor_change_pct"] == pytest.approx(e["gor_change"], rel=1e-9)
+
+    # "Most urgent first" ordering (days-down, water cut, |GOR change|, well_id).
+    keys = [(-r["days_down"], -(r["water_cut"] or 0.0), -abs(r["gor_change_pct"] or 0.0), r["well_id"])
+            for r in gold["flagged"]]
+    assert keys == sorted(keys)
+    # All three signals genuinely fire in this fixture, so the flagging logic is exercised.
+    assert n_down > 0 and n_water > 0 and n_gor > 0
 
 
 def test_facility_hierarchy_emitted(tmp_path, small_config):

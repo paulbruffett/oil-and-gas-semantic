@@ -93,6 +93,44 @@ def welltest_gold(welltest_dataset_dir) -> dict:
     return json.loads((welltest_dataset_dir / "gold" / "welltest.json").read_text())
 
 
+@pytest.fixture(scope="session")
+def watchlist_config() -> dict:
+    """A config sized so all three watchlist signals fire (issue #7).
+
+    The full default window (24 wells) plus lowered thresholds and non-overlapping 60-day current /
+    baseline windows so a *down* minority, a *watering-out* minority, and a *GOR-change* minority all
+    appear — giving the flag logic real teeth (like ``welltest_config`` for the well-test signals).
+    """
+    return {
+        "seed": 7,
+        "start_date": "2024-01-01",
+        "end_date": "2024-06-30",
+        "n_fields": 3,
+        "wells_per_field": 8,
+        "watchlist": {
+            "window_days": 60,
+            "watercut_threshold": 0.30,
+            "gor_change_threshold": 0.10,
+            "days_down_threshold": 1,
+        },
+    }
+
+
+@pytest.fixture(scope="session")
+def watchlist_dataset_dir(tmp_path_factory, watchlist_config) -> Path:
+    """A generated dataset with a real watchlist signal, built once for the suite."""
+    from oag_generator import generate_dataset
+
+    out = tmp_path_factory.mktemp("watchlist_dataset")
+    generate_dataset(watchlist_config, out)
+    return out
+
+
+@pytest.fixture
+def watchlist_gold(watchlist_dataset_dir) -> dict:
+    return json.loads((watchlist_dataset_dir / "gold" / "watchlist.json").read_text())
+
+
 @pytest.fixture
 def build_oracle_submissions():
     """A factory that builds the *oracle* submission set (gold values) for a generated dataset.

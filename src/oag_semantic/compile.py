@@ -31,8 +31,9 @@ from oag_generator import (
     rollup_periods,
     schema,
     surveillance_window,
+    watchlist_windows,
 )
-from oag_generator.gold import _annualized_decline, assemble_rollup
+from oag_generator.gold import _annualized_decline, assemble_rollup, assemble_watchlist
 from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 
 _AGG_SQL = {"sum": "SUM", "min": "MIN", "max": "MAX", "count": "COUNT", "average": "AVG"}
@@ -848,4 +849,125 @@ def compute_rollup(dataset_dir: str | Path, layer: SemanticLayer | None = None) 
         by_field=tuple(field_rows),
         by_operator=tuple(operator_rows),
         by_facility=tuple(facility_rows),
+    )
+
+
+# --- operational exceptions / watchlist (issue #7) ----------------------------------------------
+
+
+@dataclass(frozen=True)
+class WatchlistResult:
+    """Operational-exceptions watchlist computed by the reference compile over the OSI (issue #7).
+
+    ``flagged`` mirrors the co-generated gold's rows exactly (same per-well water cut, GOR, days-down,
+    flags, reasons, and "most urgent first" ordering), so the reference compile reproduces gold. Rows
+    are plain dicts keyed as in gold.
+    """
+
+    curr_start: str
+    curr_end: str
+    base_start: str
+    base_end: str
+    watercut_threshold: float
+    gor_change_threshold: float
+    days_down_threshold: int
+    n_wells_evaluated: int
+    n_down: int
+    n_watering_out: int
+    n_gor_change: int
+    flagged: tuple[dict, ...]
+
+
+def compute_watchlist(dataset_dir: str | Path, layer: SemanticLayer | None = None) -> WatchlistResult:
+    """Compute the operational-exceptions watchlist (water cut, GOR, days-down) driven by the OSI.
+
+    Mirrors ``gold.compute_watchlist_gold`` exactly (same current/baseline windows, per-well
+    aggregation, water-cut/GOR/days-down KPIs, flag thresholds, "most urgent first" ordering) so the
+    reference compile reproduces the co-generated gold. Only the tokens (table alias, column exprs,
+    aggregations) come from the manifest; the flag + ordering assembly is the shared
+    ``gold.assemble_watchlist`` so the two cannot diverge. water cut and GOR are governed derived
+    metrics; days-down (a fully-off-stream-day count) and the GOR-change ratio are compile-assembled,
+    per metrics.yaml / ADR 0022.
+    """
+    dataset_dir = Path(dataset_dir)
+    config = read_dataset_manifest(dataset_dir)["config"]
+    paths = canonical_table_paths(dataset_dir)
+    layer = layer or load_semantic_layer()
+
+    wl = config["watchlist"]
+    (curr_start, curr_end, _), (base_start, base_end, _) = watchlist_windows(
+        config["start_date"], config["end_date"], int(wl["window_days"])
+    )
+
+    wvd_model, oil = layer.measure("actual_oil_volume")
+    _, gas = layer.measure("actual_gas_volume")
+    _, water = layer.measure("actual_water_volume")
+    _, on_stream = layer.measure("on_stream_hours")
+    well_model = layer.model("well")
+
+    wvd_well = wvd_model.entity("well").expr
+    wvd_date = wvd_model.time_dimension().expr
+    well_id_col = well_model.entity("well").expr
+    well_field_col = well_model.entity("field").expr
+
+    con = duckdb.connect()
+    try:
+        for model in (wvd_model, well_model):
+            con.register(model.table, pq.read_table(paths[model.table]))
+
+        # Per-well current-window oil/water/gas + fully-down-day count (HOURS_ON = 0), plus
+        # baseline-window oil/gas -- the six inputs gold aggregates, computed here with conditional
+        # sums over the two windows in one pass (mirrors gold's single scan of WELL_VOL_DAILY).
+        rows = con.execute(
+            f"""
+            SELECT v.{wvd_well}                                                          AS well_id,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{oil.expr}   ELSE 0 END)   AS oil_c,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{water.expr} ELSE 0 END)   AS water_c,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{gas.expr}   ELSE 0 END)   AS gas_c,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? AND v.{on_stream.expr} = 0
+                            THEN 1 ELSE 0 END)                                          AS days_down,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{oil.expr}   ELSE 0 END)   AS oil_b,
+                   SUM(CASE WHEN v.{wvd_date} BETWEEN ? AND ? THEN v.{gas.expr}   ELSE 0 END)   AS gas_b
+            FROM {wvd_model.table} v
+            GROUP BY v.{wvd_well}
+            """,
+            [curr_start, curr_end] * 4 + [base_start, base_end] * 2,
+        ).fetchall()
+
+        well_rows = con.execute(
+            f"SELECT {well_id_col}, {well_model.dimension('uwi').expr}, {well_field_col} "
+            f"FROM {well_model.table}"
+        ).fetchall()
+    finally:
+        con.close()
+
+    well_uwi = {int(w): u for w, u, _f in well_rows}
+    well_field = {int(w): int(f) for w, _u, f in well_rows}
+    # Every well in the WELL master is evaluated, defaulting to zeros -- the SAME evaluated-set source
+    # gold uses (it seeds its aggregates from the WELL rows too), so n_wells_evaluated agrees even for a
+    # well with no WELL_VOL_DAILY rows in the windows (the GROUP BY below simply wouldn't emit it).
+    inputs = {well_id: (0.0, 0.0, 0.0, 0, 0.0, 0.0) for well_id in well_uwi}
+    for well_id, oil_c, water_c, gas_c, days_down, oil_b, gas_b in rows:
+        inputs[int(well_id)] = (
+            float(oil_c), float(water_c), float(gas_c), int(days_down), float(oil_b), float(gas_b)
+        )
+
+    flagged, n_down, n_watering_out, n_gor_change = assemble_watchlist(
+        inputs, well_uwi, well_field,
+        wl["watercut_threshold"], wl["gor_change_threshold"], int(wl["days_down_threshold"]),
+    )
+
+    return WatchlistResult(
+        curr_start=curr_start,
+        curr_end=curr_end,
+        base_start=base_start,
+        base_end=base_end,
+        watercut_threshold=wl["watercut_threshold"],
+        gor_change_threshold=wl["gor_change_threshold"],
+        days_down_threshold=int(wl["days_down_threshold"]),
+        n_wells_evaluated=len(inputs),
+        n_down=n_down,
+        n_watering_out=n_watering_out,
+        n_gor_change=n_gor_change,
+        flagged=tuple(flagged),
     )

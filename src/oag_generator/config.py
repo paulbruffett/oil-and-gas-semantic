@@ -98,6 +98,19 @@ DEFAULT_ALLOCATION = {
     "healthy_noise_sd": 0.02,    # small symmetric factor noise for correctly-allocated wells
 }
 
+# Operational exceptions / watchlist (theme 5, issue #7 / ADR 0022). A well lands on the watchlist
+# when it is *down* (>= days_down_threshold fully-off-stream days in the current window), *watering
+# out* (window water cut over watercut_threshold), or shows a *GOR change* (|current-vs-baseline GOR
+# ratio - 1| over gor_change_threshold). The current window is a trailing window ending at end_date;
+# the GOR baseline is the leading window of the same length (start of data), so the change is the
+# window-over-window shift a rising gas-oil ratio produces (mirrors decline's first-vs-last framing).
+DEFAULT_WATCHLIST = {
+    "window_days": 30,             # trailing current window (also the leading GOR baseline length)
+    "watercut_threshold": 0.50,    # "watering out" when current-window water cut exceeds this
+    "gor_change_threshold": 0.20,  # "GOR change" when |GOR_curr / GOR_baseline - 1| exceeds this
+    "days_down_threshold": 1,      # "down" when fully-off-stream days in the window >= this
+}
+
 DEFAULT_OPERATORS = ["Equinor", "AkerBP", "Wintershall"]
 
 
@@ -129,6 +142,7 @@ class Config:
     )
     welltest: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WELLTEST))
     allocation: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_ALLOCATION))
+    watchlist: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WATCHLIST))
 
     def __post_init__(self) -> None:
         # Nested calibration dicts: fill any missing keys from defaults so a partial
@@ -140,6 +154,7 @@ class Config:
         self.downtime = {**DEFAULT_DOWNTIME, **self.downtime}
         self.welltest = {**DEFAULT_WELLTEST, **self.welltest}
         self.allocation = {**DEFAULT_ALLOCATION, **self.allocation}
+        self.watchlist = {**DEFAULT_WATCHLIST, **self.watchlist}
         self._validate()
 
     def _validate(self) -> None:
@@ -201,6 +216,17 @@ class Config:
             raise ValueError("allocation.misalloc_bias_min must exceed anomaly_threshold")
         if al["healthy_noise_sd"] < 0.0:
             raise ValueError("allocation.healthy_noise_sd must be >= 0")
+        # Watchlist: a valid trailing window, a water-cut threshold that is a fraction, positive GOR
+        # threshold, and a days-down threshold of at least one day.
+        wl = self.watchlist
+        if wl["window_days"] < 1:
+            raise ValueError("watchlist.window_days must be >= 1")
+        if not 0.0 < wl["watercut_threshold"] < 1.0:
+            raise ValueError("watchlist.watercut_threshold must be in (0, 1)")
+        if wl["gor_change_threshold"] <= 0.0:
+            raise ValueError("watchlist.gor_change_threshold must be > 0")
+        if wl["days_down_threshold"] < 1:
+            raise ValueError("watchlist.days_down_threshold must be >= 1")
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
         # silently samples the reversed interval, so reject min > max up front.
         for group, keys in (
@@ -311,6 +337,30 @@ def rollup_periods(start_date: str, end_date: str) -> tuple[tuple[str, str, int]
         return start.isoformat(), month_end.isoformat(), (month_end - start).days + 1
 
     return _clamp(curr_month_start), _clamp(prior_month_start)
+
+
+def watchlist_windows(
+    start_date: str, end_date: str, window_days: int
+) -> tuple[tuple[str, str, int], tuple[str, str, int]]:
+    """The (current, baseline) windows for the operational-exceptions watchlist (theme 5, issue #7).
+
+    Current = the trailing ``window_days`` ending at ``end_date`` (the well's present state); baseline
+    = the leading ``window_days`` starting at ``start_date`` (its earlier state), against which the GOR
+    change is measured. Both are clamped to the dataset range, so on a dataset shorter than
+    ``2 * window_days`` the two windows overlap and the GOR ratio trends toward 1 (fewer GOR flags) --
+    a domain effect (too little history to see a change), never a crash. Single source of truth for the
+    two windows shared by the gold computation and the reference compile (mirrors
+    :func:`rollup_periods`). Returns ``((curr_start, curr_end, curr_days), (base_start, base_end,
+    base_days))``.
+    """
+    data_start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    curr_start = max(data_start, end - timedelta(days=window_days - 1))
+    base_end = min(end, data_start + timedelta(days=window_days - 1))
+    return (
+        (curr_start.isoformat(), end.isoformat(), (end - curr_start).days + 1),
+        (data_start.isoformat(), base_end.isoformat(), (base_end - data_start).days + 1),
+    )
 
 
 def decline_months(start_date: str, end_date: str) -> list[str]:

@@ -45,6 +45,36 @@ def test_rollup_periods_uses_last_complete_month():
     assert (ps, pe, pd) == ("2024-04-01", "2024-04-30", 30)
 
 
+def test_watchlist_thresholds_are_validated():
+    with pytest.raises(ValueError, match="watchlist.watercut_threshold"):
+        load_config({"watchlist": {"watercut_threshold": 1.0}})
+    with pytest.raises(ValueError, match="watchlist.gor_change_threshold"):
+        load_config({"watchlist": {"gor_change_threshold": 0.0}})
+    with pytest.raises(ValueError, match="watchlist.days_down_threshold"):
+        load_config({"watchlist": {"days_down_threshold": 0}})
+    with pytest.raises(ValueError, match="watchlist.window_days"):
+        load_config({"watchlist": {"window_days": 0}})
+
+
+def test_watchlist_windows_trailing_current_and_leading_baseline():
+    """Current = trailing window ending at end_date; baseline = leading window from start (issue #7)."""
+    from oag_generator import watchlist_windows
+
+    (cs, ce, cd), (bs, be, bd) = watchlist_windows("2024-01-01", "2024-06-30", 30)
+    assert (cs, ce, cd) == ("2024-06-01", "2024-06-30", 30)
+    assert (bs, be, bd) == ("2024-01-01", "2024-01-30", 30)
+
+
+def test_watchlist_windows_overlap_when_data_is_shorter_than_two_windows():
+    """A dataset shorter than 2*window_days yields overlapping windows, not a crash (issue #7)."""
+    from oag_generator import watchlist_windows
+
+    (cs, ce, cd), (bs, be, bd) = watchlist_windows("2024-01-01", "2024-02-15", 40)
+    # 46-day span, 40-day windows: current is the trailing 40 days, baseline the leading 40 -- overlap.
+    assert (cs, ce) == ("2024-01-07", "2024-02-15") and cd == 40
+    assert (bs, be) == ("2024-01-01", "2024-02-09") and bd == 40
+
+
 def test_rollup_periods_clamps_and_empties_prior_before_data():
     """A month entirely before the data start is an empty period (Δ vs zero)."""
     from oag_generator import rollup_periods
