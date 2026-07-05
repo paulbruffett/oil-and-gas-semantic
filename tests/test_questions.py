@@ -50,6 +50,20 @@ def test_every_question_is_keyed_to_a_gold_id_and_a_known_behavior(catalog):
         assert q.text.strip(), f"question {q.id!r} has no text"
 
 
+def test_every_question_declares_its_grading_shape(catalog):
+    """#48: the graded `key_values` shape is a spec artifact, not harness-internal. Every shipped
+    question either declares a full grading block (set/id/value keys) or is explicitly
+    behavior-only (clarification/refusal -- no graded values, ADR 0024)."""
+    for q in catalog.questions():
+        assert q.grading is not None, f"{q.id!r}: no grading shape declared in catalog.yaml"
+        if q.expected_behavior in ("clarification-requested", "refused-data-quality"):
+            assert q.grading.behavior_only, f"{q.id!r}: expected behavior-only grading"
+        else:
+            assert q.grading.set_key and q.grading.id_key and q.grading.value_keys, (
+                f"{q.id!r}: value-graded question must declare set_key/id_key/value_keys"
+            )
+
+
 def test_question_id_equals_gold_id(catalog):
     # Submissions and gold are both keyed on gold_id, but the catalog identifies questions by id.
     # Until the harness joins id -> gold_id explicitly, the two must be equal or a correct answer

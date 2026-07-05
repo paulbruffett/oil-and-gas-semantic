@@ -403,6 +403,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0022 — Operational-exceptions / watchlist KPI definitions (water cut, GOR, days-down) over trailing current + leading baseline windows](docs/adr/0022-watchlist-kpi-definitions.md)
 - [0023 — Volve calibration of decline/watercut/GOR defaults (level + trend Volve-fit; performance stays the documented scenario knob)](docs/adr/0023-volve-calibration-of-decline-watercut-gor.md)
 - [0024 — Adversarial question tier: compound (answered) / ambiguous (clarification) / trap (refusal), behavior-graded; compound gold derived from the six straight golds over surveillance × well-test; a deterministically seeded worst-actor well anchors every compound so gold is non-empty by construction](docs/adr/0024-adversarial-question-tier.md)
+- [0025 — Grading-contract hardening: unanswered gradable questions fail (not skip), the graded answer shape is catalog-authored with committed worked examples, submissions are schema-validated at grading time (refines 0020)](docs/adr/0025-grading-contract-hardening.md)
 
 ---
 

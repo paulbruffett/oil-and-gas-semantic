@@ -1,0 +1,44 @@
+{
+  "question_id": "decline-12-month-field-oil",
+  "answer": "Sleipner oil is declining ~51.8%/yr (actual) vs ~48.8%/yr forecast over 2024-01-01..2024-06-30; 5 of 6 wells are declining faster than forecast, led by NO 15/9-F-10 (+8.3 pts/yr).",
+  "key_values": {
+    "wells_declining_faster": [
+      {
+        "well_id": 10,
+        "actual_annual_decline": 0.4574155803900587,
+        "forecast_annual_decline": 0.37483473639877607,
+        "decline_gap": 0.08258084399128263,
+        "cumulative_oil_bbl": 3005629.959999999
+      },
+      {
+        "well_id": 7,
+        "actual_annual_decline": 0.5870461661782871,
+        "forecast_annual_decline": 0.5357617876699758,
+        "decline_gap": 0.051284378508311246,
+        "cumulative_oil_bbl": 4910873.600000001
+      },
+      {
+        "well_id": 11,
+        "actual_annual_decline": 0.6508128130093869,
+        "forecast_annual_decline": 0.6099037178960112,
+        "decline_gap": 0.040909095113375704,
+        "cumulative_oil_bbl": 1671798.4700000002
+      },
+      {
+        "well_id": 12,
+        "actual_annual_decline": 0.41390250339975365,
+        "forecast_annual_decline": 0.37835277662178024,
+        "decline_gap": 0.03554972677797341,
+        "cumulative_oil_bbl": 5031683.1899999995
+      },
+      {
+        "well_id": 9,
+        "actual_annual_decline": 0.420003368611234,
+        "forecast_annual_decline": 0.4076481408292756,
+        "decline_gap": 0.012355227781958411,
+        "cumulative_oil_bbl": 892342.01
+      }
+    ]
+  },
+  "behavior": "answered"
+}

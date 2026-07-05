@@ -34,8 +34,13 @@ def test_seed_agnostic_oracle_passes_on_eval_seed(small_config, tmp_path, build_
     subs = build_oracle_submissions(m.output_dir)
     run = grade_on_eval_seed(subs, small_config, _EVAL_SEED, tmp_path / "eval2")
     assert run.score.pass_rate == 1.0
-    assert run.published()["eval_seed"] == _EVAL_SEED
-    assert run.published()["config_hash"] == run.config_hash
+    published = run.published()
+    assert published["eval_seed"] == _EVAL_SEED
+    assert published["config_hash"] == run.config_hash
+    # The published record carries the full denominator (#48): what was skipped (shell-side
+    # not-yet-gradable) and the catalog size, so omissions can't hide behind the pass rate.
+    assert published["skipped"] == []
+    assert published["n_catalog"] == run.score.n_graded
 
 
 def test_forktime_hardcoded_answers_fail_on_eval_seed(

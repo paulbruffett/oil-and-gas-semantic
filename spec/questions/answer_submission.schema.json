@@ -18,7 +18,7 @@
     },
     "key_values": {
       "type": "object",
-      "description": "The key numeric value(s) graded against gold. Shape is per-question (e.g. flagged rows for surveillance); may be empty {} when behavior is a clarification request or a refusal."
+      "description": "The key numeric value(s) graded against gold. The exact per-question shape is declared in catalog.yaml's `grading` block (set_key/id_key/value_keys) with a worked example under spec/questions/examples/; empty {} when behavior is a clarification request or a refusal (grading: behavior-only)."
     },
     "behavior": {
       "type": "string",

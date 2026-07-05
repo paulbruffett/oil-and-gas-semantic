@@ -1,0 +1,39 @@
+{
+  "question_id": "deferment-top-downtime-causes",
+  "answer": "~157583 bbl of oil was deferred during 2024-06-01..2024-06-30 at 97.8% fleet uptime; the top downtime cause was Planned Maintenance (55139 bbl over 95.7 h).",
+  "key_values": {
+    "causes": [
+      {
+        "cause": "Planned Maintenance",
+        "deferred_oil_bbl": 55139.14104666667,
+        "downtime_hours": 95.72,
+        "n_events": 6
+      },
+      {
+        "cause": "Facility Constraint",
+        "deferred_oil_bbl": 46456.830187083324,
+        "downtime_hours": 92.47,
+        "n_events": 7
+      },
+      {
+        "cause": "Power Outage",
+        "deferred_oil_bbl": 37575.1457025,
+        "downtime_hours": 47.79,
+        "n_events": 3
+      },
+      {
+        "cause": "Well Integrity",
+        "deferred_oil_bbl": 10777.326007499998,
+        "downtime_hours": 21.06,
+        "n_events": 1
+      },
+      {
+        "cause": "Weather",
+        "deferred_oil_bbl": 7634.062000000001,
+        "downtime_hours": 24.0,
+        "n_events": 1
+      }
+    ]
+  },
+  "behavior": "answered"
+}

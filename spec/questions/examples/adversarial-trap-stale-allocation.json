@@ -1,0 +1,6 @@
+{
+  "question_id": "adversarial-trap-stale-allocation",
+  "answer": "No -- NO 15/9-F-1's only well test is dated 2023-05-27 (400 days before period end, far beyond the 45-day staleness threshold). Its allocation factor rests on that untrustworthy test, so its allocated volume cannot be booked as production; re-test the well first.",
+  "key_values": {},
+  "behavior": "refused-data-quality"
+}

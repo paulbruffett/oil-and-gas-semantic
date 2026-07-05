@@ -1,0 +1,19 @@
+{
+  "question_id": "adversarial-compound-below-expected-and-stale",
+  "answer": "2 well(s) satisfy both producing below expected oil and overdue for a well test: NO 15/9-F-1, NO 15/9-F-10.",
+  "key_values": {
+    "flagged": [
+      {
+        "well_id": 1,
+        "shortfall_bbl": 6236.749000000003,
+        "days_since_last_test": 400
+      },
+      {
+        "well_id": 10,
+        "shortfall_bbl": 21242.911000000007,
+        "days_since_last_test": 107
+      }
+    ]
+  },
+  "behavior": "answered"
+}

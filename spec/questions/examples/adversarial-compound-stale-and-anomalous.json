@@ -1,0 +1,14 @@
+{
+  "question_id": "adversarial-compound-stale-and-anomalous",
+  "answer": "1 well(s) satisfy both carrying a stale well test and allocating anomalously: NO 15/9-F-1.",
+  "key_values": {
+    "flagged": [
+      {
+        "well_id": 1,
+        "days_since_last_test": 400,
+        "allocation_variance": 1.4000000259408218
+      }
+    ]
+  },
+  "behavior": "answered"
+}

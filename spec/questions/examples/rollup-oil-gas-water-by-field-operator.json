@@ -1,0 +1,36 @@
+{
+  "question_id": "rollup-oil-gas-water-by-field-operator",
+  "answer": "6733241 bbl oil across 3 field(s) and 3 operator(s) for 2024-06-01..2024-06-30 (vs 7365884 bbl prior); biggest mover Sleipner (down 290885 bbl, 40.0% of current oil).",
+  "key_values": {
+    "by_field": [
+      {
+        "field_id": 2,
+        "oil_curr": 2690076.81,
+        "gas_curr": 2209499.05,
+        "water_curr": 626290.52,
+        "oil_prior": 2980962.0600000015,
+        "oil_delta": -290885.2500000014,
+        "oil_contribution_pct": 39.952182405180764
+      },
+      {
+        "field_id": 3,
+        "oil_curr": 2262081.939999999,
+        "gas_curr": 1875132.1400000013,
+        "water_curr": 618978.7300000004,
+        "oil_prior": 2437428.629999999,
+        "oil_delta": -175346.68999999994,
+        "oil_contribution_pct": 33.59573598284918
+      },
+      {
+        "field_id": 1,
+        "oil_curr": 1781082.4600000004,
+        "gas_curr": 1486250.3400000003,
+        "water_curr": 458958.43999999994,
+        "oil_prior": 1947493.3899999985,
+        "oil_delta": -166410.92999999807,
+        "oil_contribution_pct": 26.452081611970062
+      }
+    ]
+  },
+  "behavior": "answered"
+}

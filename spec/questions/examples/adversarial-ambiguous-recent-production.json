@@ -1,0 +1,6 @@
+{
+  "question_id": "adversarial-ambiguous-recent-production",
+  "answer": "Which phase (oil, gas, or water) and over what window does 'lately' mean -- this week, this month, or the trailing quarter? Please specify before I answer.",
+  "key_values": {},
+  "behavior": "clarification-requested"
+}

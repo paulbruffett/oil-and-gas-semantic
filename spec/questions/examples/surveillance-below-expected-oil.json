@@ -1,0 +1,65 @@
+{
+  "question_id": "surveillance-below-expected-oil",
+  "answer": "8 of 18 wells produced below 90% of expected oil during 2024-06-24..2024-06-30; NO 15/9-F-16 missed by the most (40442.8 bbl, 76.1% of expected).",
+  "key_values": {
+    "flagged": [
+      {
+        "well_id": 16,
+        "expected_oil_bbl": 169250.278,
+        "actual_oil_bbl": 128807.43,
+        "shortfall_bbl": 40442.848,
+        "efficiency": 0.7610470808207476
+      },
+      {
+        "well_id": 14,
+        "expected_oil_bbl": 110395.55399999999,
+        "actual_oil_bbl": 82405.77999999998,
+        "shortfall_bbl": 27989.774000000005,
+        "efficiency": 0.7464592278779631
+      },
+      {
+        "well_id": 13,
+        "expected_oil_bbl": 129671.735,
+        "actual_oil_bbl": 104846.12,
+        "shortfall_bbl": 24825.615000000005,
+        "efficiency": 0.8085502981817896
+      },
+      {
+        "well_id": 10,
+        "expected_oil_bbl": 103377.231,
+        "actual_oil_bbl": 82134.31999999999,
+        "shortfall_bbl": 21242.911000000007,
+        "efficiency": 0.7945107370887114
+      },
+      {
+        "well_id": 15,
+        "expected_oil_bbl": 50493.422,
+        "actual_oil_bbl": 36857.3,
+        "shortfall_bbl": 13636.121999999996,
+        "efficiency": 0.7299426051971681
+      },
+      {
+        "well_id": 9,
+        "expected_oil_bbl": 44733.969,
+        "actual_oil_bbl": 31287.35,
+        "shortfall_bbl": 13446.618999999999,
+        "efficiency": 0.6994092118228991
+      },
+      {
+        "well_id": 6,
+        "expected_oil_bbl": 66737.394,
+        "actual_oil_bbl": 59505.0,
+        "shortfall_bbl": 7232.394,
+        "efficiency": 0.8916290618120329
+      },
+      {
+        "well_id": 1,
+        "expected_oil_bbl": 23036.629,
+        "actual_oil_bbl": 16799.879999999997,
+        "shortfall_bbl": 6236.749000000003,
+        "efficiency": 0.7292681581146268
+      }
+    ]
+  },
+  "behavior": "answered"
+}

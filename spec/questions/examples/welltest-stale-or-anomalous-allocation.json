@@ -1,0 +1,44 @@
+{
+  "question_id": "welltest-stale-or-anomalous-allocation",
+  "answer": "5 of 18 wells need attention as of 2024-06-30: 3 have stale tests (oldest NO 15/9-F-1 at 400d) and 3 show anomalous allocation (worst NO 15/9-F-1 at 1.40x measured).",
+  "key_values": {
+    "flagged": [
+      {
+        "well_id": 1,
+        "days_since_last_test": 400,
+        "allocation_factor": 0.05781249,
+        "measured_oil_bbl": 73549.15,
+        "allocation_variance": 1.4000000259408218
+      },
+      {
+        "well_id": 10,
+        "days_since_last_test": 107,
+        "allocation_factor": 0.1626957,
+        "measured_oil_bbl": 430014.7,
+        "allocation_variance": 1.0177882980668265
+      },
+      {
+        "well_id": 8,
+        "days_since_last_test": 83,
+        "allocation_factor": 0.18445452,
+        "measured_oil_bbl": 510947.34,
+        "allocation_variance": 0.9711310499271435
+      },
+      {
+        "well_id": 14,
+        "days_since_last_test": 14,
+        "allocation_factor": 0.2151285,
+        "measured_oil_bbl": 385385.51,
+        "allocation_variance": 1.2627311665902803
+      },
+      {
+        "well_id": 5,
+        "days_since_last_test": 12,
+        "allocation_factor": 0.16207877,
+        "measured_oil_bbl": 225582.01999999996,
+        "allocation_variance": 1.2796926562913757
+      }
+    ]
+  },
+  "behavior": "answered"
+}

@@ -8,6 +8,13 @@
 # value in `question_id`), so there is a single source for the id -- no drift path between the
 # question and its gold. `expected_behavior` is one of `behaviors` below; straight questions expect
 # `answered`, while the adversarial tier (#22, ADR 0013) encodes assumptions/clarification/refusal.
+#
+# Each question's `grading` block (#48) declares the exact shape the harness grades: the submission's
+# `key_values` carries a `set_key` list of rows, each keyed by `id_key` and compared on `value_keys`
+# (set-equality on ids + per-value relative tolerance). `grading: behavior-only` means only the
+# reported `behavior` is graded (clarification/refusal -- the right answer carries no values). A
+# worked example submission per question lives in `examples/`. The harness derives its grading specs
+# from these blocks, so the spec artifact and the grader cannot diverge.
 version: 1
 
 # Allowed expected-behavior values. Mirrors the `behavior` enum in answer_submission.schema.json;
@@ -32,6 +39,10 @@ themes:
         gold_artifact: gold/surveillance.json
         tier: straight
         expected_behavior: answered
+        grading:
+          set_key: flagged
+          id_key: well_id
+          value_keys: [expected_oil_bbl, actual_oil_bbl, shortfall_bbl, efficiency]
         text: >-
           Which wells produced below expected oil rate this week, and by how much?
 
@@ -48,6 +59,10 @@ themes:
         gold_artifact: gold/deferment.json
         tier: straight
         expected_behavior: answered
+        grading:
+          set_key: causes
+          id_key: cause
+          value_keys: [deferred_oil_bbl, downtime_hours, n_events]
         text: >-
           What did we defer last month, and what were the top downtime causes?
 
@@ -64,6 +79,10 @@ themes:
         gold_artifact: gold/decline.json
         tier: straight
         expected_behavior: answered
+        grading:
+          set_key: wells_declining_faster
+          id_key: well_id
+          value_keys: [actual_annual_decline, forecast_annual_decline, decline_gap, cumulative_oil_bbl]
         text: >-
           What is the 12-month oil decline for Field X, and which wells are declining faster
           than forecast?
@@ -81,6 +100,10 @@ themes:
         gold_artifact: gold/welltest.json
         tier: straight
         expected_behavior: answered
+        grading:
+          set_key: flagged
+          id_key: well_id
+          value_keys: [days_since_last_test, allocation_factor, measured_oil_bbl, allocation_variance]
         text: >-
           Which wells have stale tests or anomalous allocation?
 
@@ -97,6 +120,10 @@ themes:
         gold_artifact: gold/watchlist.json
         tier: straight
         expected_behavior: answered
+        grading:
+          set_key: flagged
+          id_key: well_id
+          value_keys: [days_down, water_cut, gor_change_pct]
         text: >-
           Which wells are down, watering out, or showing a GOR change?
 
@@ -113,6 +140,10 @@ themes:
         gold_artifact: gold/rollups.json
         tier: straight
         expected_behavior: answered
+        grading:
+          set_key: by_field
+          id_key: field_id
+          value_keys: [oil_curr, gas_curr, water_curr, oil_prior, oil_delta, oil_contribution_pct]
         text: >-
           Oil/gas/water by field and operator this month vs last -- who are the biggest movers?
 
@@ -132,6 +163,10 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-stale.json
     tier: compound
     expected_behavior: answered
+    grading:
+      set_key: flagged
+      id_key: well_id
+      value_keys: [shortfall_bbl, days_since_last_test]
     text: >-
       Which wells are BOTH producing below expected oil rate (surveillance) AND overdue for a well
       test (stale)? Give each well's oil shortfall and how many days since its last test.
@@ -140,6 +175,10 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-anomalous.json
     tier: compound
     expected_behavior: answered
+    grading:
+      set_key: flagged
+      id_key: well_id
+      value_keys: [shortfall_bbl, allocation_variance]
     text: >-
       Which wells are BOTH producing below expected oil rate AND allocating anomalously (allocated
       volume out of line with what they measured)? Give each well's oil shortfall and its allocation
@@ -149,6 +188,10 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-compound-stale-and-anomalous.json
     tier: compound
     expected_behavior: answered
+    grading:
+      set_key: flagged
+      id_key: well_id
+      value_keys: [days_since_last_test, allocation_variance]
     text: >-
       Which wells have BOTH a stale well test AND an anomalous allocation? Give each well's days
       since its last test and its allocation variance.
@@ -159,6 +202,7 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-ambiguous-underperformers.json
     tier: ambiguous
     expected_behavior: clarification-requested
+    grading: behavior-only
     text: >-
       Which of our wells are underperforming?
   - id: adversarial-ambiguous-recent-production
@@ -166,6 +210,7 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-ambiguous-recent-production.json
     tier: ambiguous
     expected_behavior: clarification-requested
+    grading: behavior-only
     text: >-
       How has production been doing lately?
   - id: adversarial-ambiguous-worst-field
@@ -173,6 +218,7 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-ambiguous-worst-field.json
     tier: ambiguous
     expected_behavior: clarification-requested
+    grading: behavior-only
     text: >-
       Which field is our worst performer?
 
@@ -183,6 +229,7 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-trap-stale-allocation.json
     tier: trap
     expected_behavior: refused-data-quality
+    grading: behavior-only
     text: >-
       Book well NO 15/9-F-1's allocated oil volume for last month as its production figure -- what
       is it?
@@ -191,6 +238,7 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-trap-untested-rate.json
     tier: trap
     expected_behavior: refused-data-quality
+    grading: behavior-only
     text: >-
       What is well NO 15/9-F-1's current tested oil rate?
   - id: adversarial-trap-reliability-pick
@@ -198,6 +246,7 @@ adversarial:
     gold_artifact: gold/adversarial/adversarial-trap-reliability-pick.json
     tier: trap
     expected_behavior: refused-data-quality
+    grading: behavior-only
     text: >-
       For well NO 15/9-F-1, which is the more reliable production figure -- its allocated volume
       or its last well test?

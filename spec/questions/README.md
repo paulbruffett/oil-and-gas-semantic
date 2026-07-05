@@ -10,11 +10,29 @@ Axis-B assessment harness (#9) and each competing implementation can consume the
 - **`catalog.yaml`** — the six use-case themes (`DESIGN.md` §6.2) plus the **adversarial tier** (a
   top-level `adversarial:` list, #22 / ADR 0024). Each question carries a `gold_id` (the join key to a
   co-generated gold answer), a `tier` (`straight` for the six themes; `compound` / `ambiguous` / `trap`
-  for the adversarial tier), and an `expected_behavior`. `status: implemented` means the generator
-  co-emits that theme's gold (all six themes today); adversarial gold co-emits under `gold/adversarial/`.
+  for the adversarial tier), an `expected_behavior`, and a **`grading` block** (#48 / ADR 0025) — the
+  exact shape the harness grades: `key_values` carries a `set_key` list of rows keyed by `id_key`,
+  compared on `value_keys` (set-equality on ids + per-value relative tolerance); `grading:
+  behavior-only` means only the reported `behavior` is graded. The harness derives its grading specs
+  from these blocks, so this artifact and the grader cannot diverge. `status: implemented` means the
+  generator co-emits that theme's gold (all six themes today); adversarial gold co-emits under
+  `gold/adversarial/`.
 - **`answer_submission.schema.json`** — JSON Schema (Draft 2020-12) for a single answer submission:
   natural-language `answer` + `key_values` (graded against gold) + optional `provenance` + optional
-  `behavior`.
+  `behavior`. **Enforced at grading time** (ADR 0025): a submission the schema rejects grades
+  incorrect, so the published contract is the graded contract.
+- **`examples/`** — one committed **worked example submission per gradable question** (#48): exactly
+  what an oracle implementation would submit for the default-config dataset. Copy-paste-true — the
+  shape, key names, and behavior are what the harness grades. Regenerate after a gold/catalog change
+  with `python -m oag_harness.examples`; `tests/test_question_examples.py` pins them to freshly
+  generated gold.
+
+## Grading semantics (ADR 0025)
+
+Every **gradable** catalog question is graded: an unanswered one grades *incorrect* (`not
+submitted`), as does one the schema rejects (`schema-invalid`). A question is *skipped* only when
+the shell itself can't grade it yet (no `grading` block / no gold artifact). The published
+eval-seed record carries `n_catalog` and the skip list, so the denominator is always visible.
 
 ## No drift between questions and gold
 

@@ -5,13 +5,21 @@ from __future__ import annotations
 import json
 
 from oag_generator.questions import (
+    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID,
+    ADV_BELOW_EXPECTED_AND_STALE_ID,
+    ADV_STALE_AND_ANOMALOUS_ID,
+    DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
+    WATCHLIST_QUESTION_ID,
+    WELLTEST_QUESTION_ID,
+    default_catalog,
 )
 from oag_harness.functional import (
     _REL_TOL,
     SPECS,
+    GradingSpec,
     grade_answer,
     score_submissions,
     submission_from_gold,
@@ -53,13 +61,37 @@ def test_theme_without_a_grading_spec_is_skipped(
     assert all(g.question_id != ROLLUP_QUESTION_ID for g in report.grades)
 
 
-def test_missing_submission_is_skipped(dataset_dir, build_oracle_submissions):
+def test_missing_submission_for_gradable_question_fails(dataset_dir, build_oracle_submissions):
+    """A gradable question (spec + gold both present) with no submission grades INCORRECT, never
+    skipped -- otherwise a contestant submitting only their surest answer scores 100% (#48, the
+    omission loophole). `skipped` stays reserved for shell-side not-yet-gradable questions."""
     subs = build_oracle_submissions(dataset_dir)
     full = score_submissions(subs, dataset_dir).n_graded
     del subs[SURVEILLANCE_QUESTION_ID]
     report = score_submissions(subs, dataset_dir)
-    assert report.n_graded == full - 1
-    assert SURVEILLANCE_QUESTION_ID in report.skipped
+    assert report.n_graded == full  # still graded -- as a failure
+    assert SURVEILLANCE_QUESTION_ID not in report.skipped
+    grade = next(g for g in report.grades if g.question_id == SURVEILLANCE_QUESTION_ID)
+    assert not grade.correct and grade.n_submitted == 0
+    assert grade.note == "not submitted"
+    gold = json.loads((dataset_dir / "gold" / "surveillance.json").read_text())
+    assert grade.n_gold == len(gold["flagged"])  # the unanswered gold is what was dodged
+    assert report.pass_rate < 1.0
+    assert "not submitted" in grade.summary()  # legible in the per-question CLI output
+
+
+def test_score_report_counts_the_full_catalog(dataset_dir, build_oracle_submissions):
+    """`n_catalog` = graded (incl. not-submitted failures) + shell-side skipped, so the published
+    denominator is the catalog, not whatever the contestant chose to attempt (#48)."""
+    subs = build_oracle_submissions(dataset_dir)
+    n_questions = len(default_catalog().questions())
+    full = score_submissions(subs, dataset_dir)
+    assert full.n_catalog == n_questions
+    del subs[SURVEILLANCE_QUESTION_ID]
+    del subs[ROLLUP_QUESTION_ID]
+    partial = score_submissions(subs, dataset_dir)
+    assert partial.n_catalog == n_questions  # omissions don't shrink the denominator
+    assert partial.pass_rate == (n_questions - 2) / n_questions
 
 
 def test_wrong_value_fails_that_question_only(dataset_dir, build_oracle_submissions):
@@ -223,6 +255,92 @@ def test_adversarial_wrong_submission_fails_per_category(
     for key in ("ambiguous", "trap"):
         g = grades[_ADV_PER_CATEGORY[key]]
         assert not g.correct and not g.behavior_correct, f"{key} should fail on behavior"
+
+
+# --- the grading shape is a spec artifact (#48) ---------------------------------------------------
+
+
+def test_specs_are_catalog_derived_and_match_the_pinned_shapes():
+    """Migration pin (#48): SPECS derive from catalog.yaml's `grading` blocks. This pins every shape
+    to the pre-migration Python dict verbatim, so promoting the shapes into the spec artifact
+    provably changed no grading behavior."""
+    pinned = {
+        SURVEILLANCE_QUESTION_ID: GradingSpec(
+            "flagged", "well_id", ("expected_oil_bbl", "actual_oil_bbl", "shortfall_bbl", "efficiency")
+        ),
+        DEFERMENT_QUESTION_ID: GradingSpec(
+            "causes", "cause", ("deferred_oil_bbl", "downtime_hours", "n_events")
+        ),
+        DECLINE_QUESTION_ID: GradingSpec(
+            "wells_declining_faster",
+            "well_id",
+            ("actual_annual_decline", "forecast_annual_decline", "decline_gap", "cumulative_oil_bbl"),
+        ),
+        WELLTEST_QUESTION_ID: GradingSpec(
+            "flagged",
+            "well_id",
+            ("days_since_last_test", "allocation_factor", "measured_oil_bbl", "allocation_variance"),
+        ),
+        WATCHLIST_QUESTION_ID: GradingSpec(
+            "flagged", "well_id", ("days_down", "water_cut", "gor_change_pct")
+        ),
+        ROLLUP_QUESTION_ID: GradingSpec(
+            "by_field",
+            "field_id",
+            ("oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"),
+        ),
+        ADV_BELOW_EXPECTED_AND_STALE_ID: GradingSpec(
+            "flagged", "well_id", ("shortfall_bbl", "days_since_last_test")
+        ),
+        ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID: GradingSpec(
+            "flagged", "well_id", ("shortfall_bbl", "allocation_variance")
+        ),
+        ADV_STALE_AND_ANOMALOUS_ID: GradingSpec(
+            "flagged", "well_id", ("days_since_last_test", "allocation_variance")
+        ),
+    }
+    for gold_id, spec in pinned.items():
+        assert SPECS[gold_id] == spec, f"{gold_id}: catalog grading block drifted from pinned shape"
+    # Ambiguous/trap questions are behavior-only: declared in the catalog, empty shape here.
+    for q in default_catalog().adversarial:
+        if q.tier in ("ambiguous", "trap"):
+            assert SPECS[q.gold_id] == GradingSpec("", "", ())
+    assert len(SPECS) == len(pinned) + 6  # nothing gradable beyond the pinned + behavior-only set
+
+
+# --- the published schema is enforced at grading time (#48) ----------------------------------------
+
+
+def test_schema_invalid_submission_grades_wrong_not_crash(dataset_dir, build_oracle_submissions):
+    """A submission the published answer-submission schema rejects grades incorrect with a legible
+    note -- so the spec contract and the de-facto grading contract cannot silently diverge (#48)."""
+    subs = build_oracle_submissions(dataset_dir)
+    del subs[SURVEILLANCE_QUESTION_ID]["answer"]  # schema requires `answer`
+    subs[DEFERMENT_QUESTION_ID]["made_up_field"] = 1  # schema: additionalProperties false
+    report = score_submissions(subs, dataset_dir)
+    for qid in (SURVEILLANCE_QUESTION_ID, DEFERMENT_QUESTION_ID):
+        grade = next(g for g in report.grades if g.question_id == qid)
+        assert not grade.correct, qid
+        assert grade.note.startswith("schema-invalid"), grade.note
+        assert "schema-invalid" in grade.summary()
+    # Only the two malformed submissions fail; the rest of the oracle set still passes.
+    assert report.n_correct == report.n_graded - 2
+
+
+def test_oracle_submissions_validate_against_the_schema(dataset_dir, build_oracle_submissions):
+    """The contracts coincide: every submission the harness grades 100% is also valid under the
+    published schema -- including the behavior-only (clarification/refusal) shapes (#48)."""
+    import jsonschema
+
+    from oag_generator.questions import load_submission_schema
+
+    validator = jsonschema.Draft202012Validator(load_submission_schema())
+    subs = build_oracle_submissions(dataset_dir)
+    assert len(subs) == 6 + 9
+    for qid, sub in subs.items():
+        validator.validate(sub)  # raises on failure
+    report = score_submissions(subs, dataset_dir)
+    assert report.pass_rate == 1.0
 
 
 def test_none_value_does_not_match_number():

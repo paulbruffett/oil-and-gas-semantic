@@ -1,0 +1,33 @@
+{
+  "question_id": "watchlist-down-watering-out-gor-change",
+  "answer": "4 of 18 wells are on the watchlist as of 2024-06-30 (4 down); most urgent is NO 15/9-F-5 (down).",
+  "key_values": {
+    "flagged": [
+      {
+        "well_id": 5,
+        "days_down": 1,
+        "water_cut": 0.32390588403414355,
+        "gor_change_pct": 0.012833032361797558
+      },
+      {
+        "well_id": 13,
+        "days_down": 1,
+        "water_cut": 0.23420459554294157,
+        "gor_change_pct": 0.00789713361474842
+      },
+      {
+        "well_id": 4,
+        "days_down": 1,
+        "water_cut": 0.21412770376647314,
+        "gor_change_pct": 0.011112351316470814
+      },
+      {
+        "well_id": 11,
+        "days_down": 1,
+        "water_cut": 0.2027061710373581,
+        "gor_change_pct": 0.005460197129432132
+      }
+    ]
+  },
+  "behavior": "answered"
+}
