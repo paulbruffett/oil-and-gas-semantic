@@ -37,6 +37,23 @@ SUBMISSION_SCHEMA_PATH = _spec_file("answer_submission.schema.json")
 
 
 @dataclass(frozen=True)
+class GradingShape:
+    """How a question's ``key_values`` are graded (#48): a set of ``set_key`` rows keyed by
+    ``id_key``, each compared on ``value_keys``. Declared in the catalog so the graded answer shape
+    is a versioned spec artifact every implementation reads -- not a harness internal it would have
+    to reverse-engineer. A behavior-only question (clarification/refusal, ADR 0024) carries the
+    empty shape: only its reported ``behavior`` is graded."""
+
+    set_key: str = ""
+    id_key: str = ""
+    value_keys: tuple[str, ...] = ()
+
+    @property
+    def behavior_only(self) -> bool:
+        return not self.set_key
+
+
+@dataclass(frozen=True)
 class Question:
     """A single catalog question, keyed to its gold answer via ``gold_id``."""
 
@@ -46,6 +63,8 @@ class Question:
     tier: str
     expected_behavior: str
     text: str
+    # None = not yet gradable (a planned theme's shell half hasn't landed); the harness skips it.
+    grading: GradingShape | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +108,15 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
         raw = yaml.safe_load(Path(path).read_text())
     except (OSError, yaml.YAMLError) as exc:
         raise RuntimeError(f"question catalog unreadable at {path}: {exc}") from exc
+    def _grading(g: dict | str | None) -> GradingShape | None:
+        if g is None:
+            return None
+        if g == "behavior-only":  # clarification/refusal: graded on behavior alone (ADR 0024)
+            return GradingShape()
+        return GradingShape(
+            set_key=g["set_key"], id_key=g["id_key"], value_keys=tuple(g["value_keys"])
+        )
+
     def _question(q: dict) -> Question:
         return Question(
             id=q["id"],
@@ -97,6 +125,7 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
             tier=q["tier"],
             expected_behavior=q["expected_behavior"],
             text=q["text"],
+            grading=_grading(q.get("grading")),
         )
 
     try:

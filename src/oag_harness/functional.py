@@ -20,19 +20,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import jsonschema
+
 from oag_generator.questions import (
-    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID,
-    ADV_BELOW_EXPECTED_AND_STALE_ID,
-    ADV_STALE_AND_ANOMALOUS_ID,
-    DECLINE_QUESTION_ID,
-    DEFERMENT_QUESTION_ID,
-    ROLLUP_QUESTION_ID,
-    SURVEILLANCE_QUESTION_ID,
-    WATCHLIST_QUESTION_ID,
-    WELLTEST_QUESTION_ID,
     QuestionCatalog,
     default_catalog,
     load_catalog,
+    load_submission_schema,
 )
 
 # Relative tolerance for numeric key-values: the reference compile sums via DuckDB while gold sums in
@@ -54,60 +48,22 @@ class GradingSpec:
     value_keys: tuple[str, ...]
 
 
-# One spec per gradable theme, keyed by the catalog gold_id (imported, never a string literal, so the
-# harness and the gold module cannot drift). A planned theme gets a spec when its shell half lands;
-# until then the scorer reports it as not-yet-gradable rather than failing.
+# One spec per gradable question, derived from the catalog's `grading` blocks (#48) -- the shape a
+# submission is graded against is a versioned spec artifact every implementation reads, and the
+# harness consumes it rather than owning a copy that could drift. A question with no `grading` block
+# (a planned theme whose shell half hasn't landed) gets no spec; the scorer reports it as
+# not-yet-gradable rather than failing. Behavior-only questions (clarification/refusal, ADR 0024)
+# carry the empty shape: grade_answer short-circuits on _NON_VALUE_BEHAVIORS and grades the behavior.
 SPECS: dict[str, GradingSpec] = {
-    SURVEILLANCE_QUESTION_ID: GradingSpec(
-        "flagged", "well_id", ("expected_oil_bbl", "actual_oil_bbl", "shortfall_bbl", "efficiency")
-    ),
-    DEFERMENT_QUESTION_ID: GradingSpec(
-        "causes", "cause", ("deferred_oil_bbl", "downtime_hours", "n_events")
-    ),
-    DECLINE_QUESTION_ID: GradingSpec(
-        "wells_declining_faster",
-        "well_id",
-        ("actual_annual_decline", "forecast_annual_decline", "decline_gap", "cumulative_oil_bbl"),
-    ),
-    WELLTEST_QUESTION_ID: GradingSpec(
-        "flagged",
-        "well_id",
-        ("days_since_last_test", "allocation_factor", "measured_oil_bbl", "allocation_variance"),
-    ),
-    # Operational exceptions / watchlist (#7): the flagged set keyed by well_id, graded on the three
-    # KPIs (days-down, water cut, GOR change). Undefined KPIs (no producing volume) are None in gold
-    # and grade as None==None, so an implementation can't paper a missing value over with 0.
-    WATCHLIST_QUESTION_ID: GradingSpec(
-        "flagged", "well_id", ("days_down", "water_cut", "gor_change_pct")
-    ),
-    # Asset rollups (#8): the headline grouping is by field; operator/facility rollups travel in the
-    # gold for the narrative + the hierarchy contest (#20) but the graded anchor is the field rollup.
-    ROLLUP_QUESTION_ID: GradingSpec(
-        "by_field",
-        "field_id",
-        ("oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"),
-    ),
-    # Adversarial compound tier (#22, ADR 0024): the intersection of two straight golds, graded as a
-    # flagged set keyed by well_id on the two crossed metrics (values copied from compile-verified gold).
-    ADV_BELOW_EXPECTED_AND_STALE_ID: GradingSpec(
-        "flagged", "well_id", ("shortfall_bbl", "days_since_last_test")
-    ),
-    ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID: GradingSpec(
-        "flagged", "well_id", ("shortfall_bbl", "allocation_variance")
-    ),
-    ADV_STALE_AND_ANOMALOUS_ID: GradingSpec(
-        "flagged", "well_id", ("days_since_last_test", "allocation_variance")
-    ),
+    q.gold_id: GradingSpec(q.grading.set_key, q.grading.id_key, tuple(q.grading.value_keys))
+    for q in default_catalog().questions()
+    if q.grading is not None
 }
 
-# Ambiguous/trap adversarial questions grade on the reported *behavior* only (ADR 0024): the spec's
-# set_key/value_keys go unused (grade_answer short-circuits on _NON_VALUE_BEHAVIORS), but a spec must
-# be present or the question would be skipped rather than graded. Registered from the catalog so the
-# six behavior-only ids stay catalog-driven, not literals.
-_BEHAVIOR_ONLY_SPEC = GradingSpec(set_key="", id_key="", value_keys=())
-for _q in default_catalog().adversarial:
-    if _q.tier in ("ambiguous", "trap"):
-        SPECS.setdefault(_q.gold_id, _BEHAVIOR_ONLY_SPEC)
+# The published answer-submission schema, enforced at grading time (#48) so the spec contract and
+# the de-facto grading contract cannot silently diverge. Submissions are untrusted input: a
+# schema-invalid file grades incorrect with a legible note, never a crash and never silent leniency.
+_SUBMISSION_VALIDATOR = jsonschema.Draft202012Validator(load_submission_schema())
 
 
 @dataclass(frozen=True)
@@ -128,6 +84,9 @@ class QuestionGrade:
     def summary(self) -> str:
         if self.correct:
             return f"PASS {self.question_id} ({self.n_submitted}/{self.n_gold} rows)"
+        if self.note.startswith(("not submitted", "schema-invalid")):
+            # Structural failures (#48): the submission never reached value/behavior grading.
+            return f"FAIL {self.question_id}; {self.note}"
         parts = [f"FAIL {self.question_id}"]
         if not self.behavior_correct:
             parts.append("behavior mismatch")
@@ -157,8 +116,17 @@ class ScoreReport:
 
     @property
     def pass_rate(self) -> float:
-        """Fraction of graded questions answered correctly (0.0 when nothing was graded)."""
+        """Fraction of graded questions answered correctly (0.0 when nothing was graded).
+
+        Every *gradable* catalog question is graded -- an unanswered one grades incorrect (#48) --
+        so the denominator is the catalog minus shell-side skips, not whatever was attempted.
+        """
         return self.n_correct / self.n_graded if self.n_graded else 0.0
+
+    @property
+    def n_catalog(self) -> int:
+        """Every catalog question the walk saw: graded (incl. not-submitted failures) + skipped."""
+        return self.n_graded + len(self.skipped)
 
     def summary(self) -> str:
         pct = f"{self.pass_rate * 100:.0f}%"
@@ -279,8 +247,11 @@ def score_submissions(
 
     ``submissions`` maps question_id -> answer-submission dict. Gold is loaded per question from the
     dataset's ``gold/`` artifact named in the catalog, so there is a single source for the id and its
-    gold location. A catalog question is *skipped* (not failed) when it has no grading spec yet, no
-    gold artifact on disk, or no submission -- keeping the scorer forward-compatible as themes land.
+    gold location. A catalog question is *skipped* (not failed) only when the shell can't grade it
+    yet -- no grading spec or no gold artifact on disk -- keeping the scorer forward-compatible as
+    themes land. A gradable question with **no submission grades incorrect** (#48): skipping it would
+    let a contestant inflate the pass rate by answering only their surest questions. A submission the
+    published answer-submission schema rejects also grades incorrect, with the validator's message.
     """
     catalog = catalog or load_catalog()
     dataset_dir = Path(dataset_dir)
@@ -292,13 +263,41 @@ def score_submissions(
     for q in catalog.questions():
         spec = SPECS.get(q.gold_id)
         gold_path = dataset_dir / q.gold_artifact
-        if spec is None or not gold_path.exists() or q.id not in submissions:
-            skipped.append(q.id)
+        if spec is None or not gold_path.exists():
+            skipped.append(q.id)  # shell-side: the harness can't grade this yet
             continue
         gold = json.loads(gold_path.read_text())
+        n_gold = len(gold.get(spec.set_key, [])) if spec.set_key else 0
+        if q.id not in submissions:
+            grades.append(_structural_failure(q.id, n_gold, "not submitted"))
+            continue
+        error = _schema_error(submissions[q.id])
+        if error is not None:
+            grades.append(_structural_failure(q.id, n_gold, f"schema-invalid: {error}"))
+            continue
         grades.append(grade_answer(submissions[q.id], gold, spec, q.expected_behavior))
 
     return ScoreReport(grades=grades, skipped=skipped)
+
+
+def _structural_failure(question_id: str, n_gold: int, note: str) -> QuestionGrade:
+    """A grade for a submission that never reached value/behavior grading (#48): missing entirely,
+    or rejected by the published schema. Counts against the pass rate like any wrong answer."""
+    return QuestionGrade(
+        question_id=question_id,
+        correct=False,
+        behavior_correct=False,
+        values_correct=False,
+        n_gold=n_gold,
+        n_submitted=0,
+        note=note,
+    )
+
+
+def _schema_error(submission: dict[str, Any]) -> str | None:
+    """The first (deterministically ordered) schema violation's message, or None if valid."""
+    errors = sorted(_SUBMISSION_VALIDATOR.iter_errors(submission), key=lambda e: str(e.path))
+    return errors[0].message if errors else None
 
 
 def load_submissions(directory: str | Path) -> dict[str, dict[str, Any]]:
@@ -325,9 +324,18 @@ def submission_from_gold(
     """Build the answer-submission an *oracle* implementation would return from a gold answer.
 
     Documents the submission<->gold shape contract in code, and is the fixture the harness's own
-    tests and the perturbation probe (:mod:`oag_harness.probes`) submit -- an implementation that
-    returns exactly the gold values must score 100%.
+    tests, the committed worked examples (:mod:`oag_harness.examples`), and the perturbation probe
+    (:mod:`oag_harness.probes`) submit -- an implementation that returns exactly the gold values
+    must score 100%.
     """
+    if not spec.set_key:
+        # Behavior-only (clarification/refusal, ADR 0024): the right answer carries no values.
+        return {
+            "question_id": question_id,
+            "answer": gold.get("answer", ""),
+            "key_values": {},
+            "behavior": behavior,
+        }
     rows = [
         {k: r.get(k) for k in (spec.id_key, *spec.value_keys)} for r in gold.get(spec.set_key, [])
     ]

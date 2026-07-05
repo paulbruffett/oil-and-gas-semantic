@@ -1,0 +1,6 @@
+{
+  "question_id": "adversarial-trap-reliability-pick",
+  "answer": "Neither -- NO 15/9-F-1's allocated volume and its last well test both derive from the same untrustworthy test (2023-05-27, 400 days old). Refuse to present either as a reliable production figure until the well is re-tested.",
+  "key_values": {},
+  "behavior": "refused-data-quality"
+}

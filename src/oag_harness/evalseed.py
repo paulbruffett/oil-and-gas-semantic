@@ -31,13 +31,20 @@ class EvalSeedRun:
     score: ScoreReport
 
     def published(self) -> dict[str, Any]:
-        """The reproducibility record published with results: the seed + hash the grade ran on."""
+        """The reproducibility record published with results: the seed + hash the grade ran on.
+
+        Carries the full denominator (#48): ``n_catalog`` and the shell-side ``skipped`` list, so a
+        reader can see exactly what was gradable -- omitted answers already grade incorrect inside
+        ``n_graded``/``pass_rate`` and cannot hide behind a shrunken denominator.
+        """
         return {
             "eval_seed": self.seed,
             "config_hash": self.config_hash,
             "pass_rate": self.score.pass_rate,
             "n_correct": self.score.n_correct,
             "n_graded": self.score.n_graded,
+            "n_catalog": self.score.n_catalog,
+            "skipped": list(self.score.skipped),
         }
 
 

@@ -1,0 +1,19 @@
+{
+  "question_id": "adversarial-compound-below-expected-and-anomalous",
+  "answer": "2 well(s) satisfy both producing below expected oil and allocating anomalously: NO 15/9-F-1, NO 15/9-F-14.",
+  "key_values": {
+    "flagged": [
+      {
+        "well_id": 1,
+        "shortfall_bbl": 6236.749000000003,
+        "allocation_variance": 1.4000000259408218
+      },
+      {
+        "well_id": 14,
+        "shortfall_bbl": 27989.774000000005,
+        "allocation_variance": 1.2627311665902803
+      }
+    ]
+  },
+  "behavior": "answered"
+}
