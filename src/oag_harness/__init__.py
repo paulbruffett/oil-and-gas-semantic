@@ -28,15 +28,27 @@ from oag_harness.probes import (
     perturb_gold_value,
     run_perturbation_probe,
 )
+from oag_harness.custody import (
+    SEAL_ALGORITHM,
+    SealBlock,
+    parse_seal_block,
+    seal_digest,
+    verify_seal,
+)
 from oag_harness.round2 import (
     ChangeRequestSet,
     ChangeRequestSpec,
     assemble_round2,
     load_change_request_set,
-    seal_digest,
-    verify_seal,
 )
 from oag_harness.scorecard import Round2Result, Scorecard
+from oag_harness.variants import (
+    ParaphraseVariant,
+    VariantManifest,
+    VariantSet,
+    load_sealed_variants,
+    load_variant_manifest,
+)
 from oag_harness.spec_fidelity import (
     ChecklistItem,
     ChecklistResult,
@@ -75,13 +87,23 @@ __all__ = [
     "LocusReport",
     "locus_adherence",
     "parse_numstat",
-    # round 2 -- sealed change-request set + custody + re-grade assembly
+    # sealed-artifact custody (shared by round 2 and the paraphrase variants)
+    "SEAL_ALGORITHM",
+    "SealBlock",
+    "parse_seal_block",
+    "seal_digest",
+    "verify_seal",
+    # round 2 -- sealed change-request set + re-grade assembly
     "ChangeRequestSet",
     "ChangeRequestSpec",
     "assemble_round2",
     "load_change_request_set",
-    "seal_digest",
-    "verify_seal",
+    # sealed adversarial paraphrase variants (#51)
+    "ParaphraseVariant",
+    "VariantManifest",
+    "VariantSet",
+    "load_variant_manifest",
+    "load_sealed_variants",
     # assessor panel (dimensions 2--6 panel portions)
     "PanelScore",
     "PairwiseVote",

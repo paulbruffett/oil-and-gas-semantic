@@ -394,6 +394,22 @@ def watchlist_windows(
     )
 
 
+def well_uwi(well_seq: int) -> str:
+    """The UWI assigned to the well at 1-based sequence ``well_seq`` (which equals its ``WELL_ID``).
+
+    Single source for the UWI scheme, shared by the generator (which stamps every well's ``UWI``) and
+    the adversarial paraphrase variants (#51), which template the trap well's mention from
+    ``adversarial.trap_well_id``. Keeping one function means the question text and the seeded row can
+    never drift on how a well is named.
+    """
+    return f"NO 15/9-F-{int(well_seq)}"
+
+
+def trap_well_uwi(adversarial: dict) -> str:
+    """The UWI of the seeded adversarial trap well, from ``adversarial.trap_well_id`` (ADR 0024)."""
+    return well_uwi(int(adversarial["trap_well_id"]))
+
+
 def trap_test_date(end_date: str, untrustworthy_test_days: int) -> str:
     """The date of the adversarial trap well's only well test (theme #22, ADR 0024).
 

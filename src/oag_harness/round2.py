@@ -6,12 +6,12 @@ The set has three change requests -- a KPI redefinition, an OSDU schema migratio
 expressed as a failing gold answer -- whose *categories and declared loci are public* but whose
 *exact contents stay sealed until round close* (ADR 0015). This module owns the public side:
 
-* :func:`seal_digest` / :func:`verify_seal` -- the custody primitive. The sealed contents are held
-  outside version control; only their digest is committed pre-tag, so "the set wasn't tailored to
-  observed outputs" is verifiable rather than asserted. The digest is a **file-manifest sha256**
-  (hash over the sorted ``relpath -> sha256(content)`` list), not a tar hash -- deterministic across
-  machines and re-derivable by hand, with no archive-timestamp pitfalls (ADR 0028 refines ADR 0015's
-  "archive sha256" clause).
+* The **custody primitive** (:func:`~oag_harness.custody.seal_digest` /
+  :func:`~oag_harness.custody.verify_seal`) lives in :mod:`oag_harness.custody` -- shared with the
+  paraphrase variants (#51) -- and is re-exported here so ``round2.seal_digest`` stays a stable
+  reference. The sealed contents are held outside version control; only their digest is committed
+  pre-tag, so "the set wasn't tailored to observed outputs" is verifiable rather than asserted
+  (ADR 0028 refines ADR 0015's "archive sha256" clause).
 * :func:`load_change_request_set` -- parse the public manifest (``spec/contest/change-requests/``)
   into :class:`ChangeRequestSpec`s carrying each request's declared **expected change locus**.
 * :func:`assemble_round2` -- bind a post-change re-grade (:mod:`oag_harness.evalseed`) and each
@@ -25,53 +25,35 @@ shell-layout glob is a meaningful seam for a fork's diff.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 import yaml
 
+# The seal primitive is shared with the paraphrase variants (#51), so it lives in `custody`; imported
+# here (and re-exported) so `oag_harness.round2.seal_digest` stays a stable reference.
+from oag_harness.custody import SEAL_ALGORITHM, parse_seal_block, seal_digest, verify_seal
 from oag_harness.evalseed import EvalSeedRun
 from oag_harness.locus import ChangeRequest, FileDelta, locus_adherence
 from oag_harness.scorecard import Round2Result
+
+__all__ = [
+    "CHANGE_REQUEST_DIR",
+    "SEAL_ALGORITHM",
+    "ChangeRequestSpec",
+    "ChangeRequestSet",
+    "assemble_round2",
+    "load_change_request_set",
+    "seal_digest",
+    "verify_seal",
+]
 
 # The public custody artifact. Categories + declared loci are public here; the exact change contents
 # are sealed (held outside version control) until round close -- release = committing them (ADR 0015).
 CHANGE_REQUEST_DIR = Path(__file__).resolve().parents[2] / "spec" / "contest" / "change-requests"
 
-SEAL_ALGORITHM = "sha256-file-manifest-v1"
 _CATEGORIES = ("kpi-redefinition", "schema-migration", "bug-report")
-
-
-# --- sealed custody ------------------------------------------------------------------------------
-
-
-def _iter_files(root: Path) -> list[Path]:
-    """Every regular file under ``root``, sorted by POSIX relpath (stable across filesystems)."""
-    return sorted((p for p in root.rglob("*") if p.is_file()), key=lambda p: p.relative_to(root).as_posix())
-
-
-def seal_digest(src_dir: str | Path) -> str:
-    """Deterministic ``sha256-file-manifest-v1`` digest of a directory's contents.
-
-    Hashes the sorted list of ``"<relpath>\\0<sha256(content)>"`` lines -- filenames and bytes both
-    bind, ordering is fixed, and there is no archive metadata (mtime/uid) to make the result
-    machine-dependent. Two directories digest equal iff they hold the same files with the same bytes.
-    """
-    root = Path(src_dir)
-    if not root.is_dir():
-        raise FileNotFoundError(f"seal source is not a directory: {root}")
-    lines = [
-        f"{p.relative_to(root).as_posix()}\0{hashlib.sha256(p.read_bytes()).hexdigest()}"
-        for p in _iter_files(root)
-    ]
-    return "sha256:" + hashlib.sha256("\n".join(lines).encode()).hexdigest()
-
-
-def verify_seal(src_dir: str | Path, expected_digest: str) -> bool:
-    """True iff ``src_dir`` reproduces ``expected_digest`` -- the round-close integrity check."""
-    return seal_digest(src_dir) == expected_digest
 
 
 # --- the public change-request manifest ----------------------------------------------------------
@@ -158,24 +140,12 @@ def load_change_request_set(source: str | Path | None = None) -> ChangeRequestSe
             f"{path}: change set must carry exactly {sorted(_CATEGORIES)}, got {categories}"
         )
 
-    seal = data.get("seal") or {}
-    if not isinstance(seal, dict):
-        raise RuntimeError(f"{path}: seal must be a mapping")
-    algorithm = str(seal.get("algorithm", "")).strip()
-    digest = str(seal.get("digest", "")).strip()
-    sealed_source = str(seal.get("sealed_source", "")).strip()
-    if algorithm != SEAL_ALGORITHM:
-        raise RuntimeError(f"{path}: seal.algorithm must be {SEAL_ALGORITHM!r}, got {algorithm!r}")
-    if not digest.startswith("sha256:"):
-        raise RuntimeError(f"{path}: seal.digest must be a 'sha256:...' string")
-    if not sealed_source:
-        raise RuntimeError(f"{path}: seal.sealed_source is required")
-
+    seal = parse_seal_block(data.get("seal") or {}, path)
     return ChangeRequestSet(
         requests=tuple(requests),
-        seal_algorithm=algorithm,
-        seal_digest=digest,
-        sealed_source=sealed_source,
+        seal_algorithm=seal.algorithm,
+        seal_digest=seal.digest,
+        sealed_source=seal.sealed_source,
     )
 
 

@@ -30,3 +30,7 @@ spec/volve/*.xlsx
 # close; only the manifest's seal.digest is committed pre-tag. Release = `git add -f` this dir.
 spec/contest/change-requests/.sealed/
 
+# Sealed adversarial paraphrase variants (#51, ADR 0015): held out of version control until released
+# in the eval-bundle feed; only the manifest's seal.digest is committed pre-tag. Release = `git add -f`.
+spec/questions/adversarial-variants/.sealed/
+

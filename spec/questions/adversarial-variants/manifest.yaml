@@ -1,0 +1,30 @@
+# Sealed adversarial paraphrase variants -- PUBLIC manifest (issue #51; ADR 0024 tier, ADR 0016
+# held-out move applied to behaviors, ADR 0015 custody).
+#
+# What is PUBLIC here: which adversarial gold_ids have a held-out paraphrase, their tiers (both already
+# public in spec/questions/catalog.yaml), and the seal digest. What is SEALED until release: the
+# phrasings themselves (spec/questions/adversarial-variants/.sealed/, git-ignored). Release = including
+# the phrasings in the eval-bundle question feed (#49); the phrasings substitute for the catalog text
+# under the SAME gold_id, so gold and grading are unchanged (the oracle still scores 100%).
+#
+# Loaded by `oag_harness.variants.load_variant_manifest` (public side, safe in CI) and
+# `load_sealed_variants` (release side, needs .sealed/). Trap phrasings template the well from
+# `adversarial.trap_well_id` -- they are never hard-coded, closing the #47 sub-note.
+variants:
+  - { gold_id: adversarial-compound-below-expected-and-stale, tier: compound }
+  - { gold_id: adversarial-compound-below-expected-and-anomalous, tier: compound }
+  - { gold_id: adversarial-compound-stale-and-anomalous, tier: compound }
+  - { gold_id: adversarial-ambiguous-underperformers, tier: ambiguous }
+  - { gold_id: adversarial-ambiguous-recent-production, tier: ambiguous }
+  - { gold_id: adversarial-ambiguous-worst-field, tier: ambiguous }
+  - { gold_id: adversarial-trap-stale-allocation, tier: trap }
+  - { gold_id: adversarial-trap-untested-rate, tier: trap }
+  - { gold_id: adversarial-trap-reliability-pick, tier: trap }
+
+# Custody (ADR 0015/0028). Digest is sha256 over the sorted `"<relpath>\0<sha256(content)>"` file
+# manifest of the sealed dir; `oag-seal verify <sealed_source> --manifest <this>` reproduces it at
+# release. Fill via `oag-seal hash spec/questions/adversarial-variants/.sealed`.
+seal:
+  algorithm: sha256-file-manifest-v1
+  sealed_source: spec/questions/adversarial-variants/.sealed
+  digest: "sha256:d470d20ae98531cea6bd5ab7d9f0c5a205108aa9b459755a26d7f7ee3dbf22d0"

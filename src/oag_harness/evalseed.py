@@ -18,12 +18,15 @@ import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from oag_generator import Config, DatasetManifest, generate_dataset, load_config
 from oag_generator.generator import read_dataset_manifest
 from oag_generator.questions import QuestionCatalog, load_catalog
 from oag_harness.functional import ScoreReport, score_submissions
+
+if TYPE_CHECKING:  # substitution is opt-in; avoid a runtime import cycle with variants
+    from oag_harness.variants import VariantSet
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,7 @@ def produce_eval_bundle(
     seed: int,
     out_dir: str | Path,
     catalog: QuestionCatalog | None = None,
+    variants: "VariantSet | None" = None,
 ) -> EvalBundle:
     """Regenerate at the held-out ``seed`` and split the result into operator + contestant halves.
 
@@ -118,6 +122,11 @@ def produce_eval_bundle(
     The returned ``key_map`` stays with the operator; :func:`rekey_submissions` applies it to the
     collected answers before grading. The seed draw should come from a large (>= 64-bit) space --
     the redactions remove the cheap recovery paths, brute force over a big space is the backstop.
+
+    ``variants`` (a :class:`~oag_harness.variants.VariantSet`), when supplied, substitutes the sealed
+    held-out phrasings (#51) for the adversarial questions' catalog text in the feed -- the release
+    vehicle for the paraphrase variants. gold_id, gold, and the key map are unchanged, so grading (and
+    an oracle) behave identically; only the wording a contestant sees changes.
     """
     out = Path(out_dir)
     manifest = regenerate_at_seed(base_config, seed, out / "operator")
@@ -137,9 +146,14 @@ def produce_eval_bundle(
     (bundle_dir / "dataset.json").write_text(json.dumps(redacted, indent=2, sort_keys=True) + "\n")
 
     catalog = catalog or load_catalog()
+    # Sealed paraphrase variants (#51), when supplied, substitute unseen phrasings for the adversarial
+    # questions' catalog text -- keyed by gold_id, trap phrasings templated from this config's trap
+    # well. gold_id and gold are unchanged, so the key map and grading path (and the oracle) are too.
+    rendered = variants.render(load_config(base_config)) if variants is not None else {}
+    by_id = {q.id: q for q in catalog.questions()}
     key_map = {_opaque_key(seed, q.id): q.id for q in catalog.questions()}
     feed = sorted(
-        ({"key": key, "text": next(q.text for q in catalog.questions() if q.id == qid)}
+        ({"key": key, "text": rendered.get(by_id[qid].gold_id, by_id[qid].text)}
          for key, qid in key_map.items()),
         key=lambda entry: entry["key"],
     )

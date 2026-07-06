@@ -26,6 +26,7 @@ from oag_generator.config import (
     hash_canonical_config,
     load_config,
     trap_test_date,
+    well_uwi,
 )
 from oag_generator.gold import (
     compute_adversarial_gold,
@@ -121,7 +122,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
         for w in range(config.wells_per_field):
             well_seq += 1
             well_id = well_seq
-            uwi = f"NO 15/9-F-{well_seq}"
+            uwi = well_uwi(well_seq)
             # Well -> battery: round-robin across the field's facilities (deterministic, no rng draw,
             # so the existing per-well draw order -- and every earlier table -- is unchanged).
             facility_id = f * facilities_per_field + (w % facilities_per_field) + 1
