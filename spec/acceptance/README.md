@@ -35,9 +35,10 @@ checklist as checkboxes for readability; **the YAML here is authoritative**.
 
 ## Coverage
 
-`#16 #17 #18 #19 #20 #26 #27` — one file each. **#25 (operations console) is deliberately absent**:
-its acceptance checklist is the gold-anchored checklist authored inside the #23 webapp
-functional-requirements spec, and lands with that issue.
+`#16 #17 #18 #19 #20 #25 #26 #27` — one file each. **#25 (operations console)** is the gold-anchored
+checklist authored inside the #23 webapp functional-requirements spec and landed with that issue; its
+objective items bind screen values to gold via `spec/webapp/data-contract.yaml` (ADR 0030), and its
+`panel`/`evidence` items reference the defined screenshot set in `spec/webapp/screenshots.md`.
 
 ## Scoring
 

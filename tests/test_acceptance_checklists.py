@@ -19,15 +19,16 @@ from oag_harness.spec_fidelity import (
     score_checklist,
 )
 
-# The contest issues that must carry a checklist at the fork tag. #25 (operations console) is
-# deliberately absent: its checklist IS the #23 webapp spec's gold-anchored acceptance checklist
-# and lands with that issue (#50 sequencing note).
+# The contest issues that must carry a checklist at the fork tag. #25 (operations console) landed with
+# the #23 webapp spec: its gold-anchored acceptance checklist is authored inside that spec (ADR 0027
+# sequencing note) and binds screen values to gold via spec/webapp/data-contract.yaml (ADR 0030).
 _EXPECTED = {
     16: "deferment-downtime",
     17: "decline-trend",
     18: "welltest-allocation",
     19: "operational-exceptions",
     20: "asset-rollups",
+    25: "operations-console",
     26: "adversarial-tier",
     27: "sealed-change-request",
 }
