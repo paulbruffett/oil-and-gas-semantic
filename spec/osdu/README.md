@@ -10,8 +10,10 @@ verifiable and reproducible.
   dictionary of the OSDU Production Domain Data Management Service (DSPDM; a Halliburton
   contribution). It is a PPDM-3.9-based **relational** model. Licensed **Apache-2.0**.
   Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/production/core/dspdm-services/PDM/1.0/data-model-usage-guide/Data-Dictionary.html>
-- **OSDU Well-Known Schemas (WKS)** — the OSDU-native JSON schemas, used for the *secondary*
-  OSDU JSON manifest export (ADR 0007). Licensed **Apache-2.0**.
+- **OSDU Well-Known Schemas (WKS)** — the OSDU-native JSON schemas. The *secondary* OSDU JSON
+  manifest export (ADR 0007) is validated against the **PDM profile below**, not the WKS schemas:
+  no WKS schema files are vendored here, and the full WKS work-product-component / ADME load-manifest
+  form is a deliberate deferral (**ADR 0031**). Licensed **Apache-2.0**.
   Source repo: <https://community.opengroup.org/osdu/data/data-definitions> (`Copyright 2024 Open Subsurface Data Universe Software / Data Definitions and Services`)
 
 Retrieved **2026-07-03**. Both are Apache-2.0; this repo redistributes only the small subset of
@@ -33,3 +35,13 @@ PPDM data dictionary. See ADR 0010.
   this file, so the emitted Parquet cannot silently drift from the spec.
 - [`pdm_dictionary_excerpt.md`](./pdm_dictionary_excerpt.md) — human-readable verbatim excerpt of the
   relevant column definitions (name/type/nullable/key/comment) copied from the Data Dictionary.
+
+## Secondary OSDU JSON manifest export (issue #15, ADR 0031)
+
+The generator co-emits a secondary OSDU JSON view alongside the canonical Parquet, under
+`<out>/osdu/<table>.json` (one manifest per canonical table; indexed in `dataset.json` under `osdu`).
+Each row is an OSDU-style record — `id`, `kind` (`oag:pdm:<TABLE>:1.0.0`), and a `data` block holding
+the verbatim OSDU PDM columns — so the manifests validate against `pdm_profile.json` above. They are
+derived from the same in-memory tables as the Parquet in the same deterministic run and stamped with
+the same `config_hash`, so the two views can never diverge (byte-identical across identical runs).
+Simplifications vs. a full OSDU/ADME WKS load manifest are recorded in **ADR 0031**.

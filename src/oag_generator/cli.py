@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {name}: {count} rows -> {manifest.tables[name]}")
     for name, path in manifest.gold.items():
         print(f"  gold/{name}.json -> {path}")
+    for name, path in manifest.osdu.items():
+        print(f"  osdu/{name}.json -> {path}")
     return 0
 
 

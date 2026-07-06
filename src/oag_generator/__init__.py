@@ -21,6 +21,7 @@ from oag_generator.generator import (
     DatasetManifest,
     canonical_table_paths,
     generate_dataset,
+    osdu_manifest_paths,
     read_dataset_manifest,
 )
 
@@ -36,6 +37,7 @@ __all__ = [
     "deferment_window",
     "generate_dataset",
     "load_config",
+    "osdu_manifest_paths",
     "read_dataset_manifest",
     "rollup_periods",
     "surveillance_window",
