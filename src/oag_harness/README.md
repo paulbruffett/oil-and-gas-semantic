@@ -29,12 +29,16 @@ protocol is [`docs/contest/change-request-round.md`](../../docs/contest/change-r
 
 - `round2.load_change_request_set()` — parse the public manifest into `ChangeRequestSpec`s (each
   carrying its declared **expected change locus**).
-- `round2.seal_digest` / `verify_seal` and the **`oag-seal`** CLI — the custody primitive: the sealed
-  contents are held out of version control and only their `sha256-file-manifest-v1` digest is committed
-  pre-tag, so "the set wasn't tailored to observed outputs" is verifiable, not asserted.
+- `custody.seal_digest` / `verify_seal` (re-exported as `round2.seal_digest`) and the **`oag-seal`**
+  CLI — the custody primitive, shared with the paraphrase variants (#51): the sealed contents are held
+  out of version control and only their `sha256-file-manifest-v1` digest is committed pre-tag, so "the
+  set wasn't tailored to observed outputs" is verifiable, not asserted.
 - `round2.assemble_round2(correctness, per_cr_deltas, change_set)` — bind a post-change eval-seed
   re-grade and each CR's fork diff into a `Round2Result` (post-change correctness + per-CR locus, line
   counts reported not scored).
+
+Sealed **adversarial paraphrase variants** (#51) reuse this custody protocol — see
+`oag_harness.variants` and [`spec/questions/adversarial-variants/`](../../spec/questions/adversarial-variants/).
 
 ## Submission contract
 

@@ -50,13 +50,34 @@ Consulting the catalog's `tier` / `expected_behavior` or any `gold/` artifact at
 of bounds — structurally prevented at eval time by the bundle, and audited at fork publication (see
 below).
 
+## Sealed paraphrase variants (adversarial tier, #51)
+
+The eval seed keeps the adversarial *values* unseen, but the catalog phrasings — including the
+trap-well mention — are public in every fork, so a phrasing-matcher could refuse a trap without any
+data-quality reasoning. The eval run closes this by substituting **sealed paraphrase variants** (ADR
+0029): unseen phrasings of the nine adversarial questions under the **same `gold_id`s and gold**, so
+behavior detection must reason over the data, not the wording.
+
+Custody is the **same protocol as the round-2 change set** (#24, ADR 0015/0028): the phrasings are
+authored pre-tag against the shell spec, held in `spec/questions/adversarial-variants/.sealed/` (git-
+ignored), and only the manifest's `sha256-file-manifest-v1` digest is committed pre-tag. **Release =
+substituting them into this feed** — there is no separate publication.
+
+- Trap phrasings template the well from `adversarial.trap_well_id` (never hard-coded — closes the #47
+  sub-note); `oag-seal verify spec/questions/adversarial-variants/.sealed --manifest
+  spec/questions/adversarial-variants/manifest.yaml` proves the released phrasings match the commitment.
+- Because only the wording changes, the `key_map`, gold, and grading are unchanged (an oracle still
+  scores 100%).
+
 ## Operator runbook
 
 1. **Draw the eval seed from a ≥ 64-bit space** (`np.random.default_rng` accepts arbitrary ints).
    The redactions remove the cheap seed-recovery paths; a large space is the backstop against
    brute-forcing the draw from the Parquet bytes.
-2. `produce_eval_bundle(frozen_config, seed, out_dir)` — keep `operator/` and the returned
-   `key_map` private.
+2. `produce_eval_bundle(frozen_config, seed, out_dir, variants=variant_set)` — keep `operator/` and
+   the returned `key_map` private. Load `variant_set` with `oag_harness.variants.load_sealed_variants`
+   at round close (it verifies the committed digest); omit `variants` before release to feed the
+   public catalog phrasings.
 3. For each fork, in a **sandboxed environment (no network)**: run the fork's `ANSWERING.md`
    command against a copy of `bundle/`, collect the output directory.
 4. `load_submissions(collected)` → `rekey_submissions(submissions, key_map)` →
