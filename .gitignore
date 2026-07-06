@@ -25,3 +25,8 @@ build/
 
 # Raw Volve production export — calibration source, not vendored (issue #13; see spec/volve/README.md)
 spec/volve/*.xlsx
+
+# Sealed round-2 change-request contents (#24, ADR 0015): held out of version control until round
+# close; only the manifest's seal.digest is committed pre-tag. Release = `git add -f` this dir.
+spec/contest/change-requests/.sealed/
+

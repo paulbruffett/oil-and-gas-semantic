@@ -15,10 +15,26 @@ the discrimination scope is ADR 0013. See
 | 4. Test quality | `probes.run_perturbation_probe` (seeded-bug) | seam placement |
 | 5. Security & governance | evidence from the platform build | `panel` |
 | 6. Documentation / runnability | `probes.ReproductionProbe` (fresh-agent) | clarity |
-| 7. Change absorption | `evalseed` re-grade + `locus.locus_adherence` | — |
+| 7. Change absorption | `round2.assemble_round2` (`evalseed` re-grade + `locus.locus_adherence`) | — |
 | Effort-to-build | `effort` — **reported, not scored** | — |
 
 Theme breadth (`spec_fidelity.theme_breadth`) is a **reported fact, not a score** (ADR 0015).
+
+## Round 2 — the sealed change-request set (dimension 7)
+
+The maintainability probe (ADR 0013/0015, issue #24): every contestant applies the identical,
+until-then-private change set to its own fork and the harness re-grades. The public manifest +
+custody live in [`spec/contest/change-requests/`](../../spec/contest/change-requests/); the operating
+protocol is [`docs/contest/change-request-round.md`](../../docs/contest/change-request-round.md).
+
+- `round2.load_change_request_set()` — parse the public manifest into `ChangeRequestSpec`s (each
+  carrying its declared **expected change locus**).
+- `round2.seal_digest` / `verify_seal` and the **`oag-seal`** CLI — the custody primitive: the sealed
+  contents are held out of version control and only their `sha256-file-manifest-v1` digest is committed
+  pre-tag, so "the set wasn't tailored to observed outputs" is verifiable, not asserted.
+- `round2.assemble_round2(correctness, per_cr_deltas, change_set)` — bind a post-change eval-seed
+  re-grade and each CR's fork diff into a `Round2Result` (post-change correctness + per-CR locus, line
+  counts reported not scored).
 
 ## Submission contract
 
