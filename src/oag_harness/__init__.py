@@ -28,6 +28,14 @@ from oag_harness.probes import (
     perturb_gold_value,
     run_perturbation_probe,
 )
+from oag_harness.round2 import (
+    ChangeRequestSet,
+    ChangeRequestSpec,
+    assemble_round2,
+    load_change_request_set,
+    seal_digest,
+    verify_seal,
+)
 from oag_harness.scorecard import Round2Result, Scorecard
 from oag_harness.spec_fidelity import (
     ChecklistItem,
@@ -67,6 +75,13 @@ __all__ = [
     "LocusReport",
     "locus_adherence",
     "parse_numstat",
+    # round 2 -- sealed change-request set + custody + re-grade assembly
+    "ChangeRequestSet",
+    "ChangeRequestSpec",
+    "assemble_round2",
+    "load_change_request_set",
+    "seal_digest",
+    "verify_seal",
     # assessor panel (dimensions 2--6 panel portions)
     "PanelScore",
     "PairwiseVote",

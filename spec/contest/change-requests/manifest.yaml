@@ -1,0 +1,54 @@
+# Sealed change-request set -- PUBLIC manifest (issue #24; ADR 0013 mechanism, ADR 0015 custody).
+#
+# Round 2 is the maintainability probe: every contestant applies this identical change set to its
+# own round-1 fork and the harness re-grades (post-change gold correctness + locus adherence --
+# DESIGN §7 dimension 7). What is PUBLIC pre-release: the three categories, each request's declared
+# **expected change locus**, and a category-level summary. What is SEALED until round close: the
+# exact contents (the new KPI formula, the schema DDL, the failing-gold values) -- held outside
+# version control under `seal.sealed_source`, with only `seal.digest` committed pre-tag so the set
+# is provably not tailored to observed outputs (ADR 0015). Release = committing the sealed source.
+#
+# Declared loci are globs against the SHELL layout: every fork derives from the tagged fork point
+# (ADR 0012), so these seams exist in each fork. `oag_harness.locus` grades a fork's per-CR diff
+# against them; out-of-locus touches are enumerated for review with raw line counts only -- reported,
+# never scored (ADR 0015). Loaded by `oag_harness.round2.load_change_request_set`.
+change_requests:
+  - id: cr-1-uptime-redefinition
+    category: kpi-redefinition
+    summary: >-
+      Redefine a governed availability KPI over the semantic seam. A well-designed implementation
+      absorbs this at the metric definition (the KPI is authored once in OSI and translated per
+      platform -- ADR 0008), not in the agent loop; the operator recomputes the affected gold.
+    declared_locus:
+      - semantic/
+      - configs/
+
+  - id: cr-2-osdu-field-migration
+    category: schema-migration
+    summary: >-
+      Migrate a PDM canonical field (rename/split) in the OSDU/PDM system-of-record. The change
+      lands at the canonical layer and the OSI column mappings that read it; downstream metric
+      *definitions* should be untouched if the seam held.
+    declared_locus:
+      - src/oag_generator/
+      - spec/osdu/
+      - semantic/semantic_models.yaml
+
+  - id: cr-3-failing-gold-bug
+    category: bug-report
+    summary: >-
+      A bug report expressed as a failing gold answer for one use-case theme. The fix must make the
+      failing gold pass without disturbing the other themes' gold -- a surgical, single-theme change
+      at the KPI's computation.
+    declared_locus:
+      - src/oag_generator/gold.py
+      - src/oag_semantic/answer.py
+
+# Custody (ADR 0015). The sealed contents live at `sealed_source` (git-ignored; operator custody),
+# and only this digest is committed pre-tag. `oag_harness.round2.verify_seal(sealed_source, digest)`
+# reproduces it at round close; `oag-seal verify` is the operator command. Algorithm: sha256 over the
+# sorted `"<relpath>\0<sha256(content)>"` file manifest -- deterministic, no archive-timestamp skew.
+seal:
+  algorithm: sha256-file-manifest-v1
+  sealed_source: spec/contest/change-requests/.sealed
+  digest: "sha256:92761d2cf253d75fbbdd36e81d6c671e2e4953c03e808ff0a878cd346f9162cf"

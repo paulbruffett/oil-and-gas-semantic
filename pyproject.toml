@@ -21,6 +21,7 @@ dependencies = [
 oag-generate = "oag_generator.cli:main"
 oag-answer = "oag_semantic.cli:main"
 oag-assess = "oag_harness.cli:main"
+oag-seal = "oag_harness.seal_cli:main"
 
 [dependency-groups]
 dev = [
