@@ -1,0 +1,185 @@
+# Operations-console data contract (contest issue #25; shell spec issue #23, ADR 0013).
+#
+# The webapp is a CONTEST vertical -- its tech stack is a graded contestant choice (ADR 0003), so
+# nothing here prescribes a framework. What the shell *does* fix is the data contract: every number a
+# screen displays binds to a governed metric AND to a specific gold value, so "displayed values must
+# match gold for the frozen seed" (ADR 0013) is mechanically checkable rather than a matter of taste.
+#
+# Each binding names:
+#   field      -- the datum the screen shows (its display key)
+#   metric     -- the governed KPI it is; must be one of `governed_metrics` below (validated at load)
+#   osi_metric -- OPTIONAL: the OSI manifest metric it derives from (semantic/metrics.yaml). When
+#                 present it is validated against the semantic layer, so a renamed metric fails loudly.
+#                 Omitted for compile-assembled KPIs that are not a single OSI aggregate (deferred
+#                 volume, decline gap, allocation variance, GOR change, contribution %, event counts).
+#   gold       -- {question, set_key, value_key}: the gold answer datum this field must equal. The
+#                 question is a catalog question (spec/questions/catalog.yaml); set_key/value_key are
+#                 its grading shape (#48). This is the driftless anchor: the harness resolves every
+#                 binding against the SAME catalog the gold is graded from, so the screen and the gold
+#                 cannot diverge (ADR 0030, mirrors ADR 0027 for the acceptance checklist).
+#
+# Grading is against the held-out eval-seed gold (ADR 0016), never the fork-point dataset -- the
+# acceptance checklist's objective items run the eval bundle and compare screen values to that gold.
+version: 1
+
+# Controlled governed-metric vocabulary: the DESIGN §6.3 canonical KPIs, in the ubiquitous language of
+# the Glossary (§2.1/§3 -- volumes are "Reported Volume", not "production"). Every binding's `metric`
+# must be one of these, so a typo'd or invented label fails at load (mirrors catalog.yaml declaring +
+# validating `behaviors`). Compile-assembled KPIs without a single OSI aggregate still appear here, so
+# "binds to a governed metric" (ADR 0030) holds for every displayed field, not only OSI-backed ones.
+governed_metrics:
+  - expected rate
+  - reported oil volume
+  - reported gas volume
+  - reported water volume
+  - reported oil volume (prior period)
+  - oil shortfall
+  - variance/efficiency
+  - deferred volume
+  - downtime hours
+  - downtime event count
+  - annualized decline rate
+  - annualized decline rate (forecast)
+  - decline gap vs forecast
+  - cumulative production
+  - days since last well test
+  - allocation factor
+  - measured oil volume
+  - allocation variance
+  - days down
+  - water cut
+  - GOR change
+  - period-over-period delta
+  - contribution %
+
+screens:
+  - id: surveillance-watchlist
+    title: Surveillance watchlist
+    # The day-to-day landing screen: wells below expected oil (surveillance) and the exception
+    # watchlist (down / watering out / GOR change), themes 1 and 5.
+    themes: [production-surveillance, operational-exceptions]
+    bindings:
+      - field: expected_oil_bbl
+        metric: expected rate
+        osi_metric: expected_oil
+        gold: {question: surveillance-below-expected-oil, set_key: flagged, value_key: expected_oil_bbl}
+      - field: actual_oil_bbl
+        metric: reported oil volume
+        osi_metric: actual_oil
+        gold: {question: surveillance-below-expected-oil, set_key: flagged, value_key: actual_oil_bbl}
+      - field: shortfall_bbl
+        metric: oil shortfall
+        osi_metric: oil_shortfall
+        gold: {question: surveillance-below-expected-oil, set_key: flagged, value_key: shortfall_bbl}
+      - field: efficiency
+        metric: variance/efficiency
+        osi_metric: production_efficiency
+        gold: {question: surveillance-below-expected-oil, set_key: flagged, value_key: efficiency}
+      - field: days_down
+        metric: days down
+        gold: {question: watchlist-down-watering-out-gor-change, set_key: flagged, value_key: days_down}
+      - field: water_cut
+        metric: water cut
+        osi_metric: water_cut
+        gold: {question: watchlist-down-watering-out-gor-change, set_key: flagged, value_key: water_cut}
+      - field: gor_change_pct
+        metric: GOR change
+        gold: {question: watchlist-down-watering-out-gor-change, set_key: flagged, value_key: gor_change_pct}
+
+  - id: deferment-pareto
+    title: Deferment pareto
+    # Top downtime causes ranked by deferred volume, theme 2.
+    themes: [deferment-downtime]
+    bindings:
+      - field: deferred_oil_bbl
+        metric: deferred volume
+        gold: {question: deferment-top-downtime-causes, set_key: causes, value_key: deferred_oil_bbl}
+      - field: downtime_hours
+        metric: downtime hours
+        osi_metric: downtime_hours
+        gold: {question: deferment-top-downtime-causes, set_key: causes, value_key: downtime_hours}
+      - field: n_events
+        metric: downtime event count
+        gold: {question: deferment-top-downtime-causes, set_key: causes, value_key: n_events}
+
+  - id: well-drilldown
+    title: Well drill-down
+    # A single well's decline vs forecast (theme 3) and well-test/allocation health (theme 4).
+    themes: [decline-trend, welltest-allocation]
+    bindings:
+      - field: actual_annual_decline
+        metric: annualized decline rate
+        gold: {question: decline-12-month-field-oil, set_key: wells_declining_faster, value_key: actual_annual_decline}
+      - field: forecast_annual_decline
+        metric: annualized decline rate (forecast)
+        gold: {question: decline-12-month-field-oil, set_key: wells_declining_faster, value_key: forecast_annual_decline}
+      - field: decline_gap
+        metric: decline gap vs forecast
+        gold: {question: decline-12-month-field-oil, set_key: wells_declining_faster, value_key: decline_gap}
+      - field: cumulative_oil_bbl
+        metric: cumulative production
+        osi_metric: cumulative_oil
+        gold: {question: decline-12-month-field-oil, set_key: wells_declining_faster, value_key: cumulative_oil_bbl}
+      - field: days_since_last_test
+        metric: days since last well test
+        osi_metric: well_tests_recorded
+        gold: {question: welltest-stale-or-anomalous-allocation, set_key: flagged, value_key: days_since_last_test}
+      - field: allocation_factor
+        metric: allocation factor
+        osi_metric: allocation_factor
+        gold: {question: welltest-stale-or-anomalous-allocation, set_key: flagged, value_key: allocation_factor}
+      - field: measured_oil_bbl
+        metric: measured oil volume
+        gold: {question: welltest-stale-or-anomalous-allocation, set_key: flagged, value_key: measured_oil_bbl}
+      - field: allocation_variance
+        metric: allocation variance
+        gold: {question: welltest-stale-or-anomalous-allocation, set_key: flagged, value_key: allocation_variance}
+
+  - id: asset-rollup
+    title: Asset rollup
+    # Oil/gas/water by field & operator, this period vs prior, with biggest movers, theme 6.
+    themes: [asset-rollups]
+    bindings:
+      - field: oil_curr
+        metric: reported oil volume
+        osi_metric: actual_oil
+        gold: {question: rollup-oil-gas-water-by-field-operator, set_key: by_field, value_key: oil_curr}
+      - field: gas_curr
+        metric: reported gas volume
+        osi_metric: actual_gas
+        gold: {question: rollup-oil-gas-water-by-field-operator, set_key: by_field, value_key: gas_curr}
+      - field: water_curr
+        metric: reported water volume
+        osi_metric: actual_water
+        gold: {question: rollup-oil-gas-water-by-field-operator, set_key: by_field, value_key: water_curr}
+      - field: oil_prior
+        metric: reported oil volume (prior period)
+        osi_metric: actual_oil
+        gold: {question: rollup-oil-gas-water-by-field-operator, set_key: by_field, value_key: oil_prior}
+      - field: oil_delta
+        metric: period-over-period delta
+        gold: {question: rollup-oil-gas-water-by-field-operator, set_key: by_field, value_key: oil_delta}
+      - field: oil_contribution_pct
+        metric: contribution %
+        gold: {question: rollup-oil-gas-water-by-field-operator, set_key: by_field, value_key: oil_contribution_pct}
+
+  - id: nl-question-box
+    title: NL question box with provenance
+    # Free-text question -> agent answer + provenance (metric/dimensions/filters/entities used, per the
+    # answer-submission schema, #14). The box can surface ANY catalog question -- including the
+    # adversarial tier's clarification/refusal behaviors -- so its numeric contract is question-driven:
+    # whatever question it answers, the values it renders must equal that question's gold. The worked
+    # example below anchors the hero surveillance question; the provenance panel is asserted structurally
+    # (present + names governed metrics), not by value.
+    themes:
+      - production-surveillance
+      - deferment-downtime
+      - decline-trend
+      - welltest-allocation
+      - operational-exceptions
+      - asset-rollups
+    bindings:
+      - field: shortfall_bbl
+        metric: oil shortfall
+        osi_metric: oil_shortfall
+        gold: {question: surveillance-below-expected-oil, set_key: flagged, value_key: shortfall_bbl}

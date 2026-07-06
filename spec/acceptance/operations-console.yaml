@@ -1,0 +1,76 @@
+# Gold-anchored acceptance checklist for contest issue #25 (the operations-console webapp).
+#
+# Authored inside the #23 webapp functional-requirements spec and landing with it (ADR 0027 sequencing;
+# spec/acceptance/README.md coverage note). It is the objective anchor for rubric dimension 2 on the
+# webapp vertical, and -- via its `panel`/`evidence` items over the defined screenshot set -- the
+# structured input for the panel's dimension 2-6 review (DESIGN §7, ADR 0013/0015).
+#
+# Objective items are computed from the eval-run bundle (ADR 0016/0026): the harness compares each
+# screen's gold-bound values (spec/webapp/data-contract.yaml) to the held-out eval-seed gold. Frozen at
+# the fork tag; post-tag changes follow the three-class amendment rule (ADR 0015). The issue body
+# mirrors these items; this file is authoritative.
+issue: 25
+slug: operations-console
+title: "Contest: operations-console webapp over the agent/semantic layer"
+items:
+  - id: oc-data-contract
+    anchor: objective
+    verify: "load_data_contract() resolves every binding against the catalog + semantic layer (tests/test_webapp_data_contract.py)"
+    text: >-
+      Every number each screen displays binds to a governed metric and a specific gold value per
+      spec/webapp/data-contract.yaml -- the console honors the data contract rather than inventing
+      display values.
+  - id: oc-values-match-gold
+    anchor: objective
+    verify: "eval run (docs/contest/eval-run.md): each gold-bound screen field equals the eval-seed gold within the question's grading tolerance"
+    text: >-
+      Displayed values match gold for the frozen seed: on the held-out eval-seed dataset (ADR 0016),
+      every gold-bound field on every screen equals the governed gold value (formatted values round-trip
+      within tolerance).
+  - id: oc-screens-present
+    anchor: objective
+    verify: "the five screen ids in data-contract.yaml are reachable in the built app; all six themes covered (test asserts theme coverage)"
+    text: >-
+      All five screens are present and reachable -- surveillance watchlist, deferment pareto, well
+      drill-down, asset rollup, and NL question box -- collectively covering all six use-case themes.
+  - id: oc-provenance
+    anchor: objective
+    verify: "the NL answer surfaces a non-empty provenance panel naming governed metrics (answer-submission schema, #14)"
+    text: >-
+      The NL question box displays provenance (metrics/dimensions/filters/entities used) for its answers,
+      per the answer-submission schema.
+  - id: oc-behavior-states
+    anchor: evidence
+    verify: "screenshots nl-answered / nl-assumptions / nl-clarification / nl-refusal committed per spec/webapp/screenshots.md"
+    text: >-
+      The NL box renders the answer behaviors as first-class states -- answered, assumptions-stated,
+      clarification-requested, and refused-data-quality (ADR 0024) -- with clarification/refusal styled
+      as valid answers, not errors.
+  - id: oc-screenshot-set
+    anchor: evidence
+    verify: "the 13 defined captures in spec/webapp/screenshots.md are committed, against the eval seed"
+    text: >-
+      The defined screenshot set (spec/webapp/screenshots.md) is submitted in full -- populated, empty,
+      loading, error, clarification, refusal, and keyboard-focus captures at wide and narrow viewports.
+  - id: oc-empty-error-loading
+    anchor: evidence
+    verify: "screenshots surveillance-empty / surveillance-loading / error-state committed"
+    text: >-
+      Each data screen handles empty, loading, and error states as distinct, non-destructive states
+      (an empty watchlist is a valid success state, not a failure) -- evidenced by the screenshot set.
+  - id: oc-accessibility
+    anchor: panel
+    text: >-
+      Accessibility on top of the anchors: keyboard operability with a visible focus indicator, semantic
+      structure / text equivalents for charted gold values, and state distinguishable beyond color
+      (WCAG 2.1 AA as the functional bar).
+  - id: oc-responsive
+    anchor: panel
+    text: >-
+      Responsiveness on top of the anchors: usable from narrow single-column to wide multi-column with no
+      loss of function or of any gold-bound value, and no page-body horizontal scroll.
+  - id: oc-frontend-quality
+    anchor: panel
+    text: >-
+      Frontend build quality on top of the anchors (the dimension-2-6 discriminator, ADR 0013): coherent
+      information design, state handling, and interaction quality across the screenshot set.

@@ -408,6 +408,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0027 — Acceptance-criteria checklists are versioned spec artifacts (spec/acceptance/, one per contest issue, typed objective/evidence/panel anchors), frozen at the fork tag — the dimension-2 anchor exists before any fork does](docs/adr/0027-acceptance-checklists-as-spec-artifacts.md)
 - [0028 — Sealed change-request custody uses a deterministic sha256 file-manifest digest, not a tar-archive hash (refines 0015)](docs/adr/0028-sealed-set-file-manifest-digest.md)
 - [0029 — Adversarial phrasings are defended by sealed, config-templated paraphrase variants released only in the eval bundle (extends 0024, applies 0016 to behaviors)](docs/adr/0029-sealed-adversarial-paraphrase-variants.md)
+- [0030 — Operations-console data contract binds every displayed value to a catalog gold value_key, machine-validated; the webapp acceptance checklist is gold-anchored (applies 0027 to the webapp vertical)](docs/adr/0030-webapp-data-contract-gold-binding.md)
 
 ---
 
