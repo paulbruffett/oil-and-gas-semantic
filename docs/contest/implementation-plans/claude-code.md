@@ -66,6 +66,10 @@ checklist (the dimension-2 anchor).
   then `/code-review` before merging each branch to the fork's `main`.
 - Adversarial (#26): the agent decides behavior from **question text + data alone** — no catalog
   `tier`/`expected_behavior`, no `gold/` at answer time (the eval bundle enforces this structurally).
+  At grading the phrasings are swapped for **unseen sealed paraphrase variants** (#51, ADR 0029,
+  [`../../adr/0029-sealed-adversarial-paraphrase-variants.md`](../../adr/0029-sealed-adversarial-paraphrase-variants.md)),
+  so string-matching the trap wording won't work — the refusal/clarification must be reasoned from the
+  data ([`../eval-run.md`](../eval-run.md)).
 
 ### Step 7 — `ANSWERING.md`
 - Have Claude Code write the fork-root `ANSWERING.md` naming one headless command, then **prove it**:

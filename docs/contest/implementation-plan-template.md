@@ -95,6 +95,10 @@ Fill each step below with `«your assistant's commands / prompts / skills»`.
 ### Step 5 — Adversarial tier (#26)
 - Answer compound / ambiguous / trap questions, deciding behavior from **question text + data alone**
   (no catalog `tier`/`expected_behavior`, no `gold/` at answer time). `«…»`
+- Note: at grading the catalog phrasings are swapped for **unseen sealed paraphrase variants** (#51,
+  ADR 0029, [`../adr/0029-sealed-adversarial-paraphrase-variants.md`](../adr/0029-sealed-adversarial-paraphrase-variants.md)),
+  so a phrasing-matcher fails — the behavior must be **reasoned from the data**, not the wording
+  ([`eval-run.md`](eval-run.md)).
 
 ### Step 6 — Operations-console webapp (#25)
 - Build the console per the shell functional-requirements spec (surveillance watchlist, NL question box
