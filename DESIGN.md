@@ -250,7 +250,10 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
   operations console, with a gold-anchored acceptance checklist; the *build* is contest work (ADR 0013).
 - **Sealed change-request set + re-grading protocol** — the round-2 maintainability probe; contents stay
   private until release, integrity provable via a committed hash (ADR 0013).
-- **Per-assistant implementation plans** — the build plan tuned to each assistant's workflow.
+- **Per-assistant implementation plans** — the build plan tuned to each assistant's workflow: a neutral
+  template mapping the `axis-b-contest` scope to build steps
+  ([`docs/contest/implementation-plan-template.md`](docs/contest/implementation-plan-template.md)) plus one
+  worked instantiation ([`docs/contest/implementation-plans/`](docs/contest/implementation-plans/)).
 - **Assessment harness** — rubric + assessor-panel method + effort-metering recipe (§7).
 - **Hero reference implementation** — the production-surveillance slice built end-to-end in-repo as
   validated scaffolding (proves the gold/OSI/answer seams, gives contestants a common skeleton); it is
