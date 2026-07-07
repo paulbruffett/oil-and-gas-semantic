@@ -205,28 +205,27 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
                     dte["DURATION_HOURS"].append(float(durations[k]))
             uptime = hours_on / 24.0
 
-            # Arps hyperbolic decline -> expected (forecast) oil rate at full uptime (bopd).
-            expected = qi / np.power(1.0 + b * di * t_years, 1.0 / b)
-            performance = np.clip(bias * (1.0 + daily_noise), perf["floor"], perf["ceil"])
-            oil = expected * performance * uptime  # daily bbl scaled by on-stream fraction
-
-            # Breakthrough (issue #60): drawn per well from the dedicated stream (draws always run so
-            # the stream stays aligned across configs); a member's watercut/GOR rise accelerates after
-            # its onset. The anchor well is pinned into the minority with the earliest onset, maximal
-            # rises, AND the maximal base watercut (ADR 0024 worst-actor pattern; every draw above
-            # still ran, so no other well moves) -- pinning wc0/wc_rise too is what keeps the
-            # watering-out guarantee horizon-robust instead of hostage to the anchor's calibration
-            # draw. Config validation ties onset_frac_min to the watchlist window (ADR 0032), so the
-            # anchor's acceleration is always in force across the graded current window.
+            # Breakthrough (issues #60/#35): drawn per well from the dedicated stream (draws always
+            # run so the stream stays aligned across configs); after its onset a member's watercut and
+            # GOR rise accelerate and its oil is impaired by exp(-extra * years-since-onset), so its
+            # actual decline persistently outruns the Arps forecast (ADR 0033). The anchor well is
+            # pinned into the minority with the earliest onset, maximal rises/impairment, AND the
+            # maximal base watercut (ADR 0024 worst-actor pattern; every draw above still ran, so no
+            # other well moves) -- pinning wc0/wc_rise too is what keeps the watering-out guarantee
+            # horizon-robust instead of hostage to the anchor's calibration draw. Config validation
+            # ties onset_frac_min to the watchlist window (ADR 0032), so the anchor's acceleration is
+            # always in force across the graded current window.
             is_bt = bt_rng.uniform() < bt["fraction"]
             bt_onset = bt_rng.uniform(bt["onset_frac_min"], bt["onset_frac_max"])
             bt_wc_extra = bt_rng.uniform(bt["watercut_extra_rise_min"], bt["watercut_extra_rise_max"])
             bt_gor_extra = bt_rng.uniform(bt["gor_extra_rise_min"], bt["gor_extra_rise_max"])
+            bt_oil_extra = bt_rng.uniform(bt["oil_extra_decline_min"], bt["oil_extra_decline_max"])
             if bt["fraction"] > 0.0 and well_id == bt_anchor_id:
                 is_bt = True
                 bt_onset = bt["onset_frac_min"]
                 bt_wc_extra = bt["watercut_extra_rise_max"]
                 bt_gor_extra = bt["gor_extra_rise_max"]
+                bt_oil_extra = bt["oil_extra_decline_max"]
                 wc0 = wcc["initial_max"]
                 wc_rise = wcc["annual_rise_max"]
             extra_wc = extra_gor = 0.0
@@ -234,6 +233,16 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
                 post_onset = np.maximum(t_years - bt_onset * horizon_years, 0.0)
                 extra_wc = bt_wc_extra * post_onset
                 extra_gor = bt_gor_extra * post_onset
+
+            # Arps hyperbolic decline -> expected (forecast) oil rate at full uptime (bopd).
+            expected = qi / np.power(1.0 + b * di * t_years, 1.0 / b)
+            performance = np.clip(bias * (1.0 + daily_noise), perf["floor"], perf["ceil"])
+            oil = expected * performance * uptime  # daily bbl scaled by on-stream fraction
+            if is_bt:
+                # Post-onset oil impairment (issue #35 / ADR 0033): members only, so non-member oil
+                # is bit-for-bit the knob-off value. The forecast series below deliberately is NOT
+                # impaired -- the actual-vs-forecast gap is the signal.
+                oil = oil * np.exp(-bt_oil_extra * post_onset)
 
             watercut = np.clip(wc0 + wc_rise * t_years + extra_wc, 0.0, wcc["cap"])
             water = oil * watercut / (1.0 - watercut)

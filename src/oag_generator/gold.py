@@ -287,6 +287,16 @@ def _annualized_decline(
     return 1.0 - (rate1 / rate0) ** (1.0 / span_years)
 
 
+def declines_faster(actual_decline: float, forecast_decline: float, gap_threshold: float) -> bool:
+    """"Declining faster than forecast" with the materiality band (ADR 0033, refines ADR 0018 §4).
+
+    Flagged when the decline gap (actual - forecast annual decline) exceeds ``gap_threshold``
+    (``decline.faster_gap_threshold``). 0.0 preserves ADR 0018's raw comparison. Shared by the gold
+    computation and the reference compile so the banded flag cannot diverge.
+    """
+    return actual_decline - forecast_decline > gap_threshold
+
+
 def compute_decline_gold(cols: dict[str, dict[str, list]], config: Config) -> dict:
     """Deterministic gold for the decline & trend question (theme 3, issue #5).
 
@@ -299,6 +309,7 @@ def compute_decline_gold(cols: dict[str, dict[str, list]], config: Config) -> di
     start_iso, end_iso = config.start_date, config.end_date
     start = date.fromisoformat(start_iso)
     boundary = decline_boundary_months(start_iso, end_iso)
+    gap_threshold = float(config.decline["faster_gap_threshold"])
 
     # date -> (YYYY-MM month bucket, day index since start) for every day in the window.
     dmap: dict[str, tuple[str, int]] = {}
@@ -391,7 +402,7 @@ def compute_decline_gold(cols: dict[str, dict[str, list]], config: Config) -> di
             if a_dec is None or f_dec is None:
                 continue
             n_evaluated += 1
-            if a_dec > f_dec:
+            if declines_faster(a_dec, f_dec, gap_threshold):
                 wells_faster.append(
                     {
                         "uwi": well_uwi[well_id],
@@ -454,6 +465,7 @@ def compute_decline_gold(cols: dict[str, dict[str, list]], config: Config) -> di
         ),
         "window": {"start": start_iso, "end": end_iso, "months": months},
         "unit": "bbl",
+        "faster_gap_threshold": gap_threshold,
         "field": {"field_id": target_field, "field_name": field_name[target_field]},
         "field_cumulative_oil_bbl": field_cumulative[target_field],
         "field_actual_annual_decline": field_actual_decline,

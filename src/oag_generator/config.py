@@ -31,6 +31,12 @@ DEFAULT_DECLINE = {
     "di_annual_max": 1.05,
     "b_min": 0.10,             # hyperbolic exponent (0 -> exponential). Volve's strong aquifer/water-
     "b_max": 0.50,             # injection support fits near-exponential (reliable fits clamp to ~0.1).
+    # Materiality band for "declining faster than forecast" (ADR 0033, refines ADR 0018 §4): a well
+    # is flagged when actual - forecast annual decline exceeds this gap. 0.0 = the raw comparison
+    # (ADR 0018's original definition, preserved as the default); scenario configs with a modeled
+    # decline signal (the breakthrough knob's oil impairment, issue #35) set a real band so the flag
+    # detects the phenomenon rather than downtime-timing noise.
+    "faster_gap_threshold": 0.0,
 }
 DEFAULT_WATERCUT = {
     "initial_min": 0.00,       # fraction water at t0; Volve initial water cut 0.00..0.20
@@ -133,8 +139,9 @@ DEFAULT_ADVERSARIAL = {
 # reservoir event where injected/aquifer water or cap gas breaks through into a producer -- as a
 # config-gated two-population minority (the ADR 0009 pattern): after a drawn onset time, a
 # breakthrough well's watercut rise and GOR rise accelerate, so the watchlist's watering-out and
-# GOR-change exceptions (ADR 0022) flag a modeled phenomenon at the *default* thresholds. Fluid
-# ratios only: the oil series and forecast are untouched. Default fraction 0.0 = scenario off; the
+# GOR-change exceptions (ADR 0022) flag a modeled phenomenon at the *default* thresholds, and its
+# oil is impaired by exp(-oil_extra_decline x years-since-onset), so its actual decline persistently
+# outruns the untouched Arps forecast (issue #35 / ADR 0033). Default fraction 0.0 = scenario off; the
 # shipped calibration stays honestly Volve-faithful (ADR 0023) and the default dataset is unchanged.
 # When enabled, the **anchor well** is pinned into the minority with the earliest onset and maximal
 # rises (the ADR 0024 worst-actor pattern; its draws still run, so every other well is unaffected),
@@ -149,6 +156,12 @@ DEFAULT_BREAKTHROUGH = {
     "watercut_extra_rise_max": 1.40,
     "gor_extra_rise_min": 900.0,     # extra GOR rise (scf/bbl/yr) after onset
     "gor_extra_rise_max": 2400.0,
+    # Post-onset oil impairment (issue #35 / ADR 0033): a member's oil is scaled by
+    # exp(-extra * years-since-onset), so its actual decline persistently outruns the Arps forecast
+    # -- the modeled signal behind "declining faster than forecast" (pair with a non-zero
+    # decline.faster_gap_threshold so the flag has a materiality band).
+    "oil_extra_decline_min": 0.30,   # extra effective annual decline after onset
+    "oil_extra_decline_max": 0.80,
     "anchor_well_id": 2,             # pinned-member well (structural WELL_ID; distinct from the trap)
 }
 
@@ -295,9 +308,14 @@ class Config:
             raise ValueError("breakthrough.fraction must be in [0, 1]")
         if not 0.0 <= bt["onset_frac_min"] or not bt["onset_frac_max"] < 1.0:
             raise ValueError("breakthrough onset_frac range must lie in [0, 1)")
-        if bt["watercut_extra_rise_min"] < 0.0 or bt["gor_extra_rise_min"] < 0.0:
+        if (
+            bt["watercut_extra_rise_min"] < 0.0
+            or bt["gor_extra_rise_min"] < 0.0
+            or bt["oil_extra_decline_min"] < 0.0
+        ):
             raise ValueError(
-                "breakthrough watercut_extra_rise/gor_extra_rise ranges must be >= 0"
+                "breakthrough watercut_extra_rise/gor_extra_rise/oil_extra_decline ranges "
+                "must be >= 0"
             )
         if bt["fraction"] > 0.0:
             if not 1 <= bt["anchor_well_id"] <= self.n_wells:
@@ -319,13 +337,17 @@ class Config:
                     f"of {n_days}, window {int(wl['window_days'])} days) -- otherwise the scenario "
                     "cannot flag on this window"
                 )
+        # Decline materiality band (ADR 0033): non-negative; 0.0 = ADR 0018's raw comparison.
+        if self.decline["faster_gap_threshold"] < 0.0:
+            raise ValueError("decline.faster_gap_threshold must be >= 0")
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
         # silently samples the reversed interval, so reject min > max up front.
         for group, keys in (
             (self.decline, ("qi_bopd", "di_annual", "b")),
             (self.watercut, ("initial", "annual_rise")),
             (self.gor, ("initial", "annual_rise")),
-            (self.breakthrough, ("onset_frac", "watercut_extra_rise", "gor_extra_rise")),
+            (self.breakthrough,
+             ("onset_frac", "watercut_extra_rise", "gor_extra_rise", "oil_extra_decline")),
         ):
             for key in keys:
                 lo, hi = group[f"{key}_min"], group[f"{key}_max"]

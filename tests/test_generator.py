@@ -761,30 +761,89 @@ def test_breakthrough_off_is_inert(tmp_path):
         )
 
 
-def test_breakthrough_touches_only_water_and_gas(tmp_path):
-    """Enabling breakthrough changes water/gas only: oil, uptime, forecasts, downtime, allocation,
-    and the well-test OIL_RATE are byte/value-identical to the same config with the knob off, because
-    the scenario draws from its own derived rng stream (issue #60)."""
-    off = {**BREAKTHROUGH_CONFIG, "breakthrough": {"fraction": 0.0}}
-    a = generate_dataset(BREAKTHROUGH_CONFIG, tmp_path / "on")
-    b = generate_dataset(off, tmp_path / "off")
-
-    # Every table except the two carrying fluid volumes/rates is byte-identical -- derived from
-    # CANONICAL_TABLES so a future table is covered automatically.
-    for name in (t for t in CANONICAL_TABLES if t not in ("well_vol_daily", "well_test")):
-        assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
-            f"table {name} changed when only fluid ratios should have"
+def _breakthrough_members(wvd_on: dict, wvd_off: dict) -> set[int]:
+    """Wells whose daily fluid volumes differ between a knob-on and knob-off run of the same config:
+    exactly the breakthrough minority. Classified on all three fluid columns (not oil alone) so a
+    member whose oil impairment rounds away on every day is still caught by its watercut/GOR
+    acceleration. Rows must align first."""
+    assert wvd_on["WELL_ID"] == wvd_off["WELL_ID"]
+    assert wvd_on["VOLUME_DATE"] == wvd_off["VOLUME_DATE"]
+    return {
+        w
+        for w, o_on, o_off, g_on, g_off, wa_on, wa_off in zip(
+            wvd_on["WELL_ID"], wvd_on["OIL_VOLUME"], wvd_off["OIL_VOLUME"],
+            wvd_on["GAS_VOLUME"], wvd_off["GAS_VOLUME"],
+            wvd_on["WATER_VOLUME"], wvd_off["WATER_VOLUME"],
         )
-    # WELL_VOL_DAILY: oil and uptime identical; water and gas move for the breakthrough minority.
-    wvd_on, wvd_off = _read(a.tables["well_vol_daily"]), _read(b.tables["well_vol_daily"])
-    assert wvd_on["OIL_VOLUME"] == wvd_off["OIL_VOLUME"]
-    assert wvd_on["HOURS_ON"] == wvd_off["HOURS_ON"]
-    assert wvd_on["WATER_VOLUME"] != wvd_off["WATER_VOLUME"]
-    assert wvd_on["GAS_VOLUME"] != wvd_off["GAS_VOLUME"]
-    # WELL_TEST: metered oil rate identical (tests meter the same oil); gas/water rates may move.
+        if (o_on, g_on, wa_on) != (o_off, g_off, wa_off)
+    }
+
+
+@pytest.fixture(scope="session")
+def bt_pair(tmp_path_factory):
+    """BREAKTHROUGH_CONFIG generated knob-on and knob-off once for the isolation/decline tests
+    (the pair differs only in ``breakthrough.fraction``, so diffs isolate the scenario)."""
+    root = tmp_path_factory.mktemp("bt_pair")
+    on = generate_dataset(BREAKTHROUGH_CONFIG, root / "on")
+    off = generate_dataset({**BREAKTHROUGH_CONFIG, "breakthrough": {"fraction": 0.0}}, root / "off")
+    return on, off
+
+
+@pytest.fixture(scope="session")
+def bt_members(bt_pair) -> set[int]:
+    on, off = bt_pair
+    return _breakthrough_members(_read(on.tables["well_vol_daily"]), _read(off.tables["well_vol_daily"]))
+
+
+def test_breakthrough_touches_only_member_wells(bt_pair, bt_members):
+    """Enabling breakthrough changes the drawn minority only: non-member wells' daily volumes are
+    identical to the knob-off run, a member's oil is untouched pre-onset and only ever reduced
+    (issues #60/#35), and every table not derived from measured volumes stays byte-identical --
+    the scenario stream never perturbs the main draw sequence."""
+    a, b = bt_pair
+    members = bt_members
+
+    # Byte-identical except the three tables carrying measured volumes / their derivatives
+    # (daily volumes, well-test rates, allocation factors) -- derived from CANONICAL_TABLES so a
+    # future table is covered automatically.
+    for name in (t for t in CANONICAL_TABLES
+                 if t not in ("well_vol_daily", "well_test", "rpen_allocation_factor")):
+        assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
+            f"table {name} changed when only the breakthrough minority should have"
+        )
+    # WELL_TEST / allocation: the *schedule* (which wells, which dates, which periods) comes from
+    # the main rng stream and must be breakthrough-invariant; only measured rates/factors may move,
+    # and only for members (a member's field peers keep their factor: it derives from oil shares,
+    # but the schedule columns pin the draw order either way).
     wt_on, wt_off = _read(a.tables["well_test"]), _read(b.tables["well_test"])
+    assert wt_on["WELL_ID"] == wt_off["WELL_ID"]
     assert wt_on["TEST_DATE"] == wt_off["TEST_DATE"]
-    assert wt_on["OIL_RATE"] == wt_off["OIL_RATE"]
+    for w, r_on, r_off in zip(wt_on["WELL_ID"], wt_on["OIL_RATE"], wt_off["OIL_RATE"]):
+        if w not in members:
+            assert r_on == r_off, f"non-member well {w}'s test rate moved"
+    paf_on, paf_off = _read(a.tables["rpen_allocation_factor"]), _read(b.tables["rpen_allocation_factor"])
+    for col in ("FROM_REPORTING_ENTITY_ID", "TO_REPORTING_ENTITY_ID", "START_DATE", "END_DATE"):
+        assert paf_on[col] == paf_off[col], f"allocation schedule column {col} moved"
+
+    wvd_on, wvd_off = _read(a.tables["well_vol_daily"]), _read(b.tables["well_vol_daily"])
+    assert wvd_on["HOURS_ON"] == wvd_off["HOURS_ON"]  # uptime is never the scenario's to change
+    assert members, "no breakthrough members drawn"
+    assert 2 in members  # the pinned anchor well
+    # Non-members: every fluid column identical. Members: oil only ever reduced (impairment), never
+    # raised, and each member has untouched (pre-onset) days.
+    untouched_member_days = dict.fromkeys(members, 0)
+    for w, o_on, o_off, g_on, g_off, w_on, w_off in zip(
+        wvd_on["WELL_ID"], wvd_on["OIL_VOLUME"], wvd_off["OIL_VOLUME"],
+        wvd_on["GAS_VOLUME"], wvd_off["GAS_VOLUME"],
+        wvd_on["WATER_VOLUME"], wvd_off["WATER_VOLUME"],
+    ):
+        if w not in members:
+            assert (o_on, g_on, w_on) == (o_off, g_off, w_off)
+        else:
+            assert o_on <= o_off
+            if o_on == o_off:
+                untouched_member_days[w] += 1
+    assert all(n > 0 for n in untouched_member_days.values()), "a member lost its pre-onset days"
 
 
 def test_breakthrough_fires_all_watchlist_signals_at_default_thresholds(watchlist_config, watchlist_gold):
@@ -819,3 +878,63 @@ def test_breakthrough_anchor_guarantees_signals_on_any_seed(tmp_path, seed):
     assert anchor is not None, f"anchor well not flagged on seed {seed}"
     assert anchor["is_watering_out"], f"anchor not watering out on seed {seed}"
     assert anchor["is_gor_change"], f"anchor GOR change not flagged on seed {seed}"
+
+
+@pytest.fixture(scope="session")
+def bt_strict(tmp_path_factory):
+    """BREAKTHROUGH_CONFIG with a 0.05 decline materiality band (ADR 0033), generated once. Its
+    canonical tables are byte-identical to ``bt_pair``'s knob-on run (the band only moves the decline
+    gold), so member identification from ``bt_members`` carries over."""
+    return generate_dataset(
+        {**BREAKTHROUGH_CONFIG, "decline": {"faster_gap_threshold": 0.05}},
+        tmp_path_factory.mktemp("bt_strict"),
+    )
+
+
+def test_breakthrough_gives_decline_a_modeled_signal(bt_pair, bt_members, bt_strict):
+    """With a materiality band configured (ADR 0033), "declining faster than forecast" flags exactly
+    the breakthrough members of the target field: the modeled post-onset oil impairment, not
+    downtime-timing noise (#35). The reference compile reproduces the same banded flag set.
+
+    The exact-set assertion is deliberate and has real margin on any drawn member: the worst draw
+    (onset at 0.60 of the window, impairment 0.30/yr) still accrues ~0.36 impaired years by the last
+    boundary month, a gap of ~0.11 -- 2x the band -- while noise-only gaps on 31-day month buckets
+    sit well under 0.05. A calibration change that collapses those margins *should* fail here."""
+    from oag_semantic.compile import compute_decline
+
+    on, _off = bt_pair
+    # Same physical data as the banded dataset (the band only moves gold), proven cheaply:
+    assert bt_strict.tables["well_vol_daily"].read_bytes() == on.tables["well_vol_daily"].read_bytes()
+
+    gold = json.loads(bt_strict.gold["decline"].read_text())
+    assert gold["faster_gap_threshold"] == 0.05
+    well = _read(bt_strict.tables["well"])
+    target_field = gold["field"]["field_id"]
+    target_members = {
+        w for w, f in zip(well["WELL_ID"], well["FIELD_ID"])
+        if f == target_field and w in bt_members
+    }
+    flagged = {r["well_id"] for r in gold["wells_declining_faster"]}
+    assert flagged == target_members, (
+        "banded flag set is not exactly the breakthrough members of the target field"
+    )
+    assert flagged, "no member landed in the target field on this seed/config"
+    assert all(r["decline_gap"] > 0.05 for r in gold["wells_declining_faster"])
+
+    result = compute_decline(bt_strict.output_dir)
+    assert result.faster_gap_threshold == 0.05
+    assert [w.well_id for w in result.wells_declining_faster] == [
+        r["well_id"] for r in gold["wells_declining_faster"]
+    ]
+
+
+def test_decline_flag_honors_configured_gap(bt_pair, bt_strict):
+    """The band is configuration, not a hardcoded bar: gap 0.0 (the default -- ADR 0018's raw
+    comparison, echoed in gold) flags noise-driven wells that a 0.05 band excludes."""
+    on, _off = bt_pair
+    g_loose = json.loads(on.gold["decline"].read_text())
+    g_strict = json.loads(bt_strict.gold["decline"].read_text())
+    assert g_loose["faster_gap_threshold"] == 0.0
+    f_loose = {r["well_id"] for r in g_loose["wells_declining_faster"]}
+    f_strict = {r["well_id"] for r in g_strict["wells_declining_faster"]}
+    assert f_strict < f_loose, "the band should strictly prune the raw flag set on this seed"
