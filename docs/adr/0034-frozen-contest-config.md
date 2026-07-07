@@ -20,3 +20,8 @@ values, which grade even when the flagged list is empty.
 every graded dimension has a populated, default-threshold signal on the frozen seed, the fork-tag prep
 can point at one file, and the calibration honesty rule (ADR 0023) is enforced by test rather than
 convention.
+
+**Status (2026-07-07).** The swept decline guarantee is **accepted** (issue #64): the residual
+memberless-target-field risk on an unlucky eval seed is carried, mitigated by the decline gold's
+field-level values. Revisit only if a future round demands construction-grade decline coverage
+(per-field anchor). Fork point cut as `fork-point-r1` (docs/contest/fork-point.md).

@@ -15,9 +15,10 @@ are filled here with concrete Claude Code commands.
 
 ## Preconditions & mechanics — as Claude Code runs them
 
-- **Fork at the fork-point tag.** `git clone` the fork, `git checkout «fork-tag»`; confirm the frozen
-  `config_hash` in `dataset.json` matches the published value before building. (Fork point / config
-  hash: template §Preconditions, [`../../WORKFLOW.md`](../../WORKFLOW.md).)
+- **Fork at the fork-point tag.** `git clone` the fork, `git checkout fork-point-r1`; confirm the
+  frozen `config_hash` in `dataset.json` matches the published value (`12a110eecfe2` — see
+  [`../fork-point.md`](../fork-point.md)) before building. (Fork point / config hash: template
+  §Preconditions, [`../../WORKFLOW.md`](../../WORKFLOW.md).)
 - **Frozen config hash / seed-agnostic.** Never regenerate the dataset with a new seed; treat `gold/`
   as read-only build-time collateral. Dimension 1 grades on a **held-out seed** (ADR 0016).
 - **Databricks (round 1).** Databricks CLI + a Unity Catalog catalog/service principal; canonical
