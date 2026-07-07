@@ -33,7 +33,12 @@ from oag_generator import (
     surveillance_window,
     watchlist_windows,
 )
-from oag_generator.gold import _annualized_decline, assemble_rollup, assemble_watchlist
+from oag_generator.gold import (
+    _annualized_decline,
+    assemble_rollup,
+    assemble_watchlist,
+    declines_faster,
+)
 from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 
 _AGG_SQL = {"sum": "SUM", "min": "MIN", "max": "MAX", "count": "COUNT", "average": "AVG"}
@@ -318,6 +323,7 @@ class DeclineResult:
     field_cumulative_oil_bbl: float
     field_actual_annual_decline: float | None
     field_forecast_annual_decline: float | None
+    faster_gap_threshold: float
     n_wells_evaluated: int
     wells_declining_faster: tuple[WellDecline, ...]
     monthly_oil: tuple[MonthlyOil, ...]
@@ -341,6 +347,9 @@ def compute_decline(
 
     start, end = config["start_date"], config["end_date"]
     boundary = decline_boundary_months(start, end)
+    # Materiality band (ADR 0033); direct-indexed like every other config threshold, so a dataset
+    # whose config lost the key fails loudly instead of silently compiling at the raw comparison.
+    gap_threshold = float(config["decline"]["faster_gap_threshold"])
 
     wvd_model, actual_measure = layer.measure("actual_oil_volume")
     pvs_model, expected_measure = layer.measure("expected_oil_volume")
@@ -449,7 +458,7 @@ def compute_decline(
             if a_dec is None or f_dec is None:
                 continue
             n_evaluated += 1
-            if a_dec > f_dec:
+            if declines_faster(a_dec, f_dec, gap_threshold):
                 wells_faster.append(
                     WellDecline(
                         well_id=well_id,
@@ -510,6 +519,7 @@ def compute_decline(
         field_cumulative_oil_bbl=field_cumulative[target_field],
         field_actual_annual_decline=field_actual_decline,
         field_forecast_annual_decline=field_forecast_decline,
+        faster_gap_threshold=gap_threshold,
         n_wells_evaluated=n_evaluated,
         wells_declining_faster=tuple(wells_faster),
         monthly_oil=monthly,

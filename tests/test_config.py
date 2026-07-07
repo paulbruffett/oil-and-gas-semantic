@@ -124,3 +124,22 @@ def test_breakthrough_onset_must_precede_watchlist_window():
                breakthrough={"fraction": 0.2, "onset_frac_min": 0.5, "onset_frac_max": 0.6})
     # The default onset_frac_min (0.25 -> day 12) clears the same window: accepted.
     Config(start_date="2024-01-01", end_date="2024-02-15", breakthrough={"fraction": 0.2})
+
+
+def test_decline_faster_gap_threshold_defaults_to_raw_comparison():
+    """The decline materiality band (ADR 0033) defaults to 0.0 -- the ADR 0018 raw comparison --
+    and rejects negative bands."""
+    assert Config().decline["faster_gap_threshold"] == 0.0
+    with pytest.raises(ValueError, match="faster_gap_threshold"):
+        Config(decline={"faster_gap_threshold": -0.1})
+
+
+def test_breakthrough_oil_extra_decline_validated():
+    """The post-onset oil impairment range (issue #35) is present and validated like the other
+    breakthrough ranges."""
+    assert Config().breakthrough["oil_extra_decline_min"] > 0.0
+    with pytest.raises(ValueError, match="oil_extra_decline"):
+        Config(breakthrough={"fraction": 0.2, "oil_extra_decline_min": -0.5})
+    with pytest.raises(ValueError, match="oil_extra_decline"):
+        Config(breakthrough={"fraction": 0.2,
+                             "oil_extra_decline_min": 0.9, "oil_extra_decline_max": 0.3})
