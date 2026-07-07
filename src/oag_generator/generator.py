@@ -41,6 +41,11 @@ from oag_generator.osdu_manifest import write_osdu_manifests
 
 GENERATOR_VERSION = "0.1.0"
 
+# Child-seed tag for the breakthrough scenario's dedicated rng stream (issue #60): spawned as
+# default_rng([seed, tag]) so scenario draws never perturb the main sequence -- the knob moves only
+# water/gas, and the default (fraction 0.0) dataset is byte-identical with or without the block.
+_BREAKTHROUGH_STREAM = 60
+
 # A small pool of North Sea field names (Volve neighbourhood) for readable identifiers.
 _FIELD_NAME_POOL = [
     "Volve", "Sleipner", "Gullfaks", "Troll", "Ekofisk",
@@ -80,6 +85,16 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     dcl, wcc, gor, perf, dtc = (
         config.decline, config.watercut, config.gor, config.performance, config.downtime
     )
+    # Breakthrough scenario knob (issue #60): drawn from its OWN derived rng stream so the main draw
+    # sequence is untouched -- enabling the scenario moves only the fluid-ratio outputs (water/gas);
+    # oil, uptime, forecasts, downtime, tests, and allocation stay byte-identical to the knob-off run.
+    bt = config.breakthrough
+    bt_rng = np.random.default_rng([config.seed, _BREAKTHROUGH_STREAM])
+    bt_anchor_id = int(bt["anchor_well_id"])
+    # Window length in years. The full n_days (not t_years[-1] = (n_days-1)/365.25) so a 1-day window
+    # is a day of exposure, not zero; shared by the downtime Poisson exposure and breakthrough onsets
+    # so the two can never disagree about how long the window is.
+    horizon_years = n_days / 365.25
     # The adversarial worst-actor well (ADR 0024): the same seeded well that carries the untrustworthy
     # test is also forced to be a genuine underperformer (impaired) and, below, an anomalously allocated
     # one -- so it is a member of the surveillance *and* well-test flagged populations at once, which is
@@ -172,10 +187,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
             # existing per-well draw order is preserved. Volumes scale with the uptime fraction, so
             # downtime shows up as both lost production and (in gold) forecast-rate deferment by cause.
             hours_on = np.full(n_days, 24.0)
-            # Exposure is the full window length (n_days daily records = n_days/365.25 years); using
-            # t_years[-1] = (n_days-1)/365.25 would undercount by a day and emit zero events when n_days=1.
-            exposure_years = n_days / 365.25
-            n_events = min(int(rng.poisson(dtc["events_per_well_year"] * exposure_years)), n_days)
+            n_events = min(int(rng.poisson(dtc["events_per_well_year"] * horizon_years)), n_days)
             if n_events > 0:
                 day_idx = np.sort(rng.choice(n_days, size=n_events, replace=False))
                 is_full = rng.uniform(size=n_events) < dtc["full_day_fraction"]
@@ -198,9 +210,34 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
             performance = np.clip(bias * (1.0 + daily_noise), perf["floor"], perf["ceil"])
             oil = expected * performance * uptime  # daily bbl scaled by on-stream fraction
 
-            watercut = np.clip(wc0 + wc_rise * t_years, 0.0, wcc["cap"])
+            # Breakthrough (issue #60): drawn per well from the dedicated stream (draws always run so
+            # the stream stays aligned across configs); a member's watercut/GOR rise accelerates after
+            # its onset. The anchor well is pinned into the minority with the earliest onset, maximal
+            # rises, AND the maximal base watercut (ADR 0024 worst-actor pattern; every draw above
+            # still ran, so no other well moves) -- pinning wc0/wc_rise too is what keeps the
+            # watering-out guarantee horizon-robust instead of hostage to the anchor's calibration
+            # draw. Config validation ties onset_frac_min to the watchlist window (ADR 0032), so the
+            # anchor's acceleration is always in force across the graded current window.
+            is_bt = bt_rng.uniform() < bt["fraction"]
+            bt_onset = bt_rng.uniform(bt["onset_frac_min"], bt["onset_frac_max"])
+            bt_wc_extra = bt_rng.uniform(bt["watercut_extra_rise_min"], bt["watercut_extra_rise_max"])
+            bt_gor_extra = bt_rng.uniform(bt["gor_extra_rise_min"], bt["gor_extra_rise_max"])
+            if bt["fraction"] > 0.0 and well_id == bt_anchor_id:
+                is_bt = True
+                bt_onset = bt["onset_frac_min"]
+                bt_wc_extra = bt["watercut_extra_rise_max"]
+                bt_gor_extra = bt["gor_extra_rise_max"]
+                wc0 = wcc["initial_max"]
+                wc_rise = wcc["annual_rise_max"]
+            extra_wc = extra_gor = 0.0
+            if is_bt:
+                post_onset = np.maximum(t_years - bt_onset * horizon_years, 0.0)
+                extra_wc = bt_wc_extra * post_onset
+                extra_gor = bt_gor_extra * post_onset
+
+            watercut = np.clip(wc0 + wc_rise * t_years + extra_wc, 0.0, wcc["cap"])
             water = oil * watercut / (1.0 - watercut)
-            gor_series = np.maximum(gor0 + gor_rise * t_years, 0.0)
+            gor_series = np.maximum(gor0 + gor_rise * t_years + extra_gor, 0.0)
             gas = oil * gor_series / 1000.0  # scf/bbl * bbl -> mscf
 
             oil_r = np.round(oil, 2).tolist()

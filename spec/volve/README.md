@@ -83,12 +83,13 @@ The generator draws each parameter ~Uniform(min, max) per well. Ranges bracket t
 2. **GOR level and trend are both Volve fits — but the GOR-change *signal* is synthetic.** Volve GOR
    rises only ~10–26 scf/bbl/yr, far too stable to ever trip the watchlist GOR-change exception (20%
    window-over-window, ADR 0022). Rather than inflate `DEFAULT_GOR` to manufacture that signal (which
-   would make the shipped calibration un-Volve-like), the default stays faithful and the watchlist
-   **engineering fixture** (`tests/conftest.py::watchlist_config`) overrides the GOR rise to exercise
-   the exception — the same way it overrides windows/thresholds to force the down/watering-out signals.
-   On the default config the watchlist GOR dimension is quiet (as it was pre-calibration: the default
-   30-day windows can't resolve the trend); surfacing it on the frozen dataset would need a longer-
-   window config (out of scope; cf. issue #35). The two-population performance model (ADR 0009) is
+   would make the shipped calibration un-Volve-like), the default stays faithful and the signal comes
+   from the **breakthrough scenario knob** (`breakthrough` config block, issue #60 / ADR 0032): a
+   config-gated minority of wells gets a modeled post-onset watercut/GOR acceleration. The watchlist
+   **engineering fixture** (`tests/conftest.py::watchlist_config`) turns that knob on (default off),
+   exercising the exception at the shipped default thresholds without touching the calibrated
+   distributions. On the default config the watchlist GOR dimension stays quiet; the frozen contest
+   config surfaces it via the same knob (issue #44). The two-population performance model (ADR 0009) is
    similarly a synthetic knob left as a documented default per issue #13.
 
 ## Determinism note

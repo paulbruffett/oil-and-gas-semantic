@@ -543,21 +543,24 @@ def test_welltest_gold_matches_kpi_defs(tmp_path, welltest_config):
     assert n_stale > 0 and n_anom > 0
 
 
-def test_watchlist_gold_matches_kpi_defs(tmp_path, watchlist_config):
-    """Recompute the watchlist KPIs (§6.3, ADR 0022) independently and assert gold matches.
+def _assert_watchlist_gold_matches_kpi_defs(cfg: dict, out_dir: Path) -> tuple[dict, int, int, int]:
+    """Recompute the watchlist KPIs (§6.3, ADR 0022) independently from ``cfg`` and assert gold matches.
 
     water cut = Σwater / (Σoil + Σwater); GOR = Σgas x 1000 / Σoil (scf/bbl); days-down = # days with
     HOURS_ON == 0; over the trailing current window. A well is flagged when down (days-down >= thr),
-    watering out (water cut > thr), or GOR-changed (|current/baseline GOR - 1| > thr).
+    watering out (water cut > thr), or GOR-changed (|current/baseline GOR - 1| > thr). Every window
+    and threshold comes from ``cfg``, so a caller passing non-default values proves the gold writer
+    honors configuration rather than DEFAULT_WATCHLIST. Returns
+    ``(gold, n_down, n_watering_out, n_gor_change)`` for callers' further claims.
     """
-    m = generate_dataset(watchlist_config, tmp_path)
+    m = generate_dataset(cfg, out_dir)
     well = _read(m.tables["well"])
     wvd = _read(m.tables["well_vol_daily"])
     gold = json.loads(m.gold["watchlist"].read_text())
 
-    wl = watchlist_config["watchlist"]
-    end = date.fromisoformat(watchlist_config["end_date"])
-    data_start = date.fromisoformat(watchlist_config["start_date"])
+    wl = cfg["watchlist"]
+    end = date.fromisoformat(cfg["end_date"])
+    data_start = date.fromisoformat(cfg["start_date"])
     curr_start = max(data_start, end - timedelta(days=wl["window_days"] - 1))
     base_end = min(end, data_start + timedelta(days=wl["window_days"] - 1))
     assert gold["current_window"] == {
@@ -614,8 +617,43 @@ def test_watchlist_gold_matches_kpi_defs(tmp_path, watchlist_config):
     keys = [(-r["days_down"], -(r["water_cut"] or 0.0), -abs(r["gor_change_pct"] or 0.0), r["well_id"])
             for r in gold["flagged"]]
     assert keys == sorted(keys)
+    return gold, n_down, n_water, n_gor
+
+
+def test_watchlist_gold_matches_kpi_defs(tmp_path, watchlist_config):
+    _, n_down, n_water, n_gor = _assert_watchlist_gold_matches_kpi_defs(watchlist_config, tmp_path)
     # All three signals genuinely fire in this fixture, so the flagging logic is exercised.
     assert n_down > 0 and n_water > 0 and n_gor > 0
+
+
+def test_watchlist_honors_configured_thresholds(tmp_path, watchlist_config, watchlist_gold):
+    """Non-default watchlist windows/thresholds are honored end-to-end by the gold writer AND the
+    reference compile -- neither may shortcut to DEFAULT_WATCHLIST. (The pre-#60 fixture carried the
+    suite's only non-default values; retargeting it onto the defaults moved that coverage here.)"""
+    from oag_semantic.compile import compute_watchlist
+
+    override = {
+        **watchlist_config,
+        "watchlist": {"window_days": 60, "watercut_threshold": 0.30,
+                      "gor_change_threshold": 0.10, "days_down_threshold": 2},
+    }
+    gold, *_ = _assert_watchlist_gold_matches_kpi_defs(override, tmp_path)
+    assert (
+        gold["watercut_threshold"], gold["gor_change_threshold"], gold["days_down_threshold"]
+    ) == (0.30, 0.10, 2)
+    assert gold["current_window"]["days"] == 60
+    # The configured bars bite: same physical data (the watchlist block never feeds generation),
+    # different flagged story than the shipped-defaults gold.
+    assert {r["well_id"] for r in gold["flagged"]} != {r["well_id"] for r in watchlist_gold["flagged"]}
+    # The reference compile reads the same configured values from the dataset manifest.
+    result = compute_watchlist(tmp_path)
+    assert (
+        result.watercut_threshold, result.gor_change_threshold, result.days_down_threshold
+    ) == (0.30, 0.10, 2)
+    assert (result.n_down, result.n_watering_out, result.n_gor_change) == (
+        gold["n_down"], gold["n_watering_out"], gold["n_gor_change"]
+    )
+    assert [w["well_id"] for w in result.flagged] == [r["well_id"] for r in gold["flagged"]]
 
 
 def test_facility_hierarchy_emitted(tmp_path, small_config):
@@ -684,3 +722,100 @@ def test_rollup_gold_matches_kpi_defs(tmp_path, small_config):
     assert deltas == sorted(deltas, reverse=True)
     # by_facility rolls up the same total as by_field (the hierarchy partitions the same wells).
     assert sum(r["oil_curr"] for r in gold["by_facility"]) == pytest.approx(total_curr, rel=1e-9)
+
+
+# --- breakthrough scenario knob (issue #60) ------------------------------------------------------
+
+# A 12-month window gives the anchor well (onset pinned to onset_frac_min, extras pinned to max)
+# enough post-onset time to clear the DEFAULT watchlist thresholds -- the scenario is meant to fire
+# at the shipped 0.50 / 0.20 thresholds, not at fixture-lowered ones.
+BREAKTHROUGH_CONFIG = {
+    "seed": 7,
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31",
+    "n_fields": 3,
+    "wells_per_field": 6,
+    "breakthrough": {"fraction": 0.30},
+}
+
+
+def test_breakthrough_off_is_inert(tmp_path):
+    """With fraction 0.0 every output byte matches a config with no breakthrough block at all,
+    regardless of the other breakthrough parameters -- the knob is surgical (issue #60)."""
+    base = dict(BREAKTHROUGH_CONFIG)
+    base.pop("breakthrough")
+    off = {**BREAKTHROUGH_CONFIG,
+           "breakthrough": {"fraction": 0.0, "gor_extra_rise_min": 9000.0,
+                            "gor_extra_rise_max": 9999.0}}
+    a = generate_dataset(base, tmp_path / "a")
+    b = generate_dataset(off, tmp_path / "b")
+    for name in CANONICAL_TABLES:
+        assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
+            f"table {name} changed with breakthrough off"
+        )
+    # Every co-emitted gold artifact, including the adversarial tier and whatever future slices add.
+    assert a.gold.keys() == b.gold.keys()
+    for artifact in a.gold:
+        assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes(), (
+            f"gold {artifact} changed with breakthrough off"
+        )
+
+
+def test_breakthrough_touches_only_water_and_gas(tmp_path):
+    """Enabling breakthrough changes water/gas only: oil, uptime, forecasts, downtime, allocation,
+    and the well-test OIL_RATE are byte/value-identical to the same config with the knob off, because
+    the scenario draws from its own derived rng stream (issue #60)."""
+    off = {**BREAKTHROUGH_CONFIG, "breakthrough": {"fraction": 0.0}}
+    a = generate_dataset(BREAKTHROUGH_CONFIG, tmp_path / "on")
+    b = generate_dataset(off, tmp_path / "off")
+
+    # Every table except the two carrying fluid volumes/rates is byte-identical -- derived from
+    # CANONICAL_TABLES so a future table is covered automatically.
+    for name in (t for t in CANONICAL_TABLES if t not in ("well_vol_daily", "well_test")):
+        assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
+            f"table {name} changed when only fluid ratios should have"
+        )
+    # WELL_VOL_DAILY: oil and uptime identical; water and gas move for the breakthrough minority.
+    wvd_on, wvd_off = _read(a.tables["well_vol_daily"]), _read(b.tables["well_vol_daily"])
+    assert wvd_on["OIL_VOLUME"] == wvd_off["OIL_VOLUME"]
+    assert wvd_on["HOURS_ON"] == wvd_off["HOURS_ON"]
+    assert wvd_on["WATER_VOLUME"] != wvd_off["WATER_VOLUME"]
+    assert wvd_on["GAS_VOLUME"] != wvd_off["GAS_VOLUME"]
+    # WELL_TEST: metered oil rate identical (tests meter the same oil); gas/water rates may move.
+    wt_on, wt_off = _read(a.tables["well_test"]), _read(b.tables["well_test"])
+    assert wt_on["TEST_DATE"] == wt_off["TEST_DATE"]
+    assert wt_on["OIL_RATE"] == wt_off["OIL_RATE"]
+
+
+def test_breakthrough_fires_all_watchlist_signals_at_default_thresholds(watchlist_config, watchlist_gold):
+    """On the breakthrough fixture the watchlist finds down, watering-out, AND GOR-change minorities
+    at the shipped default thresholds -- the signals come from a modeled phenomenon, not lowered bars.
+    Reuses the session dataset; the fixture builds its watchlist block from DEFAULT_WATCHLIST."""
+    from oag_generator.config import DEFAULT_WATCHLIST
+
+    assert watchlist_config["watchlist"] == DEFAULT_WATCHLIST
+    assert watchlist_gold["watercut_threshold"] == DEFAULT_WATCHLIST["watercut_threshold"]
+    assert watchlist_gold["gor_change_threshold"] == DEFAULT_WATCHLIST["gor_change_threshold"]
+    assert watchlist_gold["n_down"] > 0
+    assert watchlist_gold["n_watering_out"] > 0
+    assert watchlist_gold["n_gor_change"] > 0
+    # The scenario is a minority, not the fleet: most wells stay unflagged on these two signals.
+    assert watchlist_gold["n_watering_out"] < watchlist_gold["n_wells_evaluated"] / 2
+    assert watchlist_gold["n_gor_change"] < watchlist_gold["n_wells_evaluated"] / 2
+
+
+@pytest.mark.parametrize("seed", [2, 7, 99, 123])
+def test_breakthrough_anchor_guarantees_signals_on_any_seed(tmp_path, seed):
+    """The pinned anchor well is watering-out AND GOR-changed on every seed (the ADR 0024 worst-actor
+    pattern), so a frozen or held-out-seed dataset can never have empty gold on these dimensions.
+    Deliberately a 6-month horizon -- half the fixture's -- because the anchor's watercut base + rise
+    are pinned along with the scenario parameters (ADR 0032); the guarantee must not depend on a
+    lucky calibration draw or a long window."""
+    cfg = {**BREAKTHROUGH_CONFIG, "seed": seed, "end_date": "2024-06-30",
+           "breakthrough": {"fraction": 0.15, "anchor_well_id": 2}}
+    m = generate_dataset(cfg, tmp_path / str(seed))
+    gold = json.loads(m.gold["watchlist"].read_text())
+    anchor = next((r for r in gold["flagged"] if r["well_id"] == 2), None)
+    assert anchor is not None, f"anchor well not flagged on seed {seed}"
+    assert anchor["is_watering_out"], f"anchor not watering out on seed {seed}"
+    assert anchor["is_gor_change"], f"anchor GOR change not flagged on seed {seed}"

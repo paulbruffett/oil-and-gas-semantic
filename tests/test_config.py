@@ -83,3 +83,44 @@ def test_rollup_periods_clamps_and_empties_prior_before_data():
     (cs, ce, cd), (ps, pe, pd) = rollup_periods("2024-01-01", "2024-02-15")
     assert (cs, ce, cd) == ("2024-01-01", "2024-01-31", 31)
     assert pd == 0  # December 2023 precedes the data
+
+
+def test_breakthrough_defaults_off_and_validated():
+    """The breakthrough scenario knob defaults to off; bad values are rejected (issue #60)."""
+    assert Config().breakthrough["fraction"] == 0.0
+
+    with pytest.raises(ValueError, match="breakthrough.fraction"):
+        Config(breakthrough={"fraction": 1.5})
+    with pytest.raises(ValueError, match="onset_frac"):
+        Config(breakthrough={"fraction": 0.2, "onset_frac_min": 0.6, "onset_frac_max": 0.4})
+    with pytest.raises(ValueError, match="onset_frac"):
+        Config(breakthrough={"fraction": 0.2, "onset_frac_max": 1.0})
+    with pytest.raises(ValueError, match="watercut_extra_rise"):
+        Config(breakthrough={"fraction": 0.2, "watercut_extra_rise_min": -0.1})
+
+
+def test_breakthrough_anchor_well_must_be_structural_when_enabled():
+    """When the scenario is on, the anchor well must be a real WELL_ID; when off it is not checked."""
+    with pytest.raises(ValueError, match="anchor_well_id"):
+        Config(n_fields=1, wells_per_field=2, breakthrough={"fraction": 0.2, "anchor_well_id": 99})
+    # Off: the anchor id is irrelevant, so a tiny config needs no override.
+    Config(n_fields=1, wells_per_field=2, breakthrough={"fraction": 0.0, "anchor_well_id": 99})
+
+
+def test_breakthrough_anchor_must_differ_from_trap_well():
+    """The breakthrough anchor and the adversarial trap are structurally distinct seeded populations
+    (ADR 0024/0032), so anchoring the scenario on the trap well is rejected."""
+    with pytest.raises(ValueError, match="trap_well_id"):
+        Config(breakthrough={"fraction": 0.2, "anchor_well_id": 1})  # default trap_well_id is 1
+
+
+def test_breakthrough_onset_must_precede_watchlist_window():
+    """When the scenario is on, the anchor's onset (onset_frac_min) must land at or before the
+    watchlist current window opens -- otherwise the scenario is a silent no-op on this window."""
+    # 46-day span, 30-day window: onset_frac_min 0.5 puts the anchor's onset on day 23, inside the
+    # trailing window (opens day 17) -> rejected.
+    with pytest.raises(ValueError, match="onset_frac_min"):
+        Config(start_date="2024-01-01", end_date="2024-02-15",
+               breakthrough={"fraction": 0.2, "onset_frac_min": 0.5, "onset_frac_max": 0.6})
+    # The default onset_frac_min (0.25 -> day 12) clears the same window: accepted.
+    Config(start_date="2024-01-01", end_date="2024-02-15", breakthrough={"fraction": 0.2})

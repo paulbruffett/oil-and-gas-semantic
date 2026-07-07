@@ -97,32 +97,24 @@ def welltest_gold(welltest_dataset_dir) -> dict:
 def watchlist_config() -> dict:
     """A config sized so all three watchlist signals fire (issue #7).
 
-    The full default window (24 wells) plus lowered thresholds and non-overlapping 60-day current /
-    baseline windows so a *down* minority, a *watering-out* minority, and a *GOR-change* minority all
-    appear — giving the flag logic real teeth (like ``welltest_config`` for the well-test signals).
-
-    The ``gor`` and ``watercut`` overrides are deliberate: the shipped defaults are calibrated to Volve,
-    whose real GOR is too stable to trip the GOR-change exception and whose water cut stays below the
-    watch threshold on this window — so this fixture forces both synthetic signals here (parallel to the
-    window/threshold overrides), keeping the default calibration honestly Volve-based and decoupling the
-    fixture from future recalibration (ADR 0023, spec/volve/README.md).
+    24 wells over a 12-month window with the **breakthrough scenario knob** on (issue #60): a modeled
+    water/gas-breakthrough minority (plus the pinned anchor well) trips watering-out and GOR-change at
+    the *shipped default* thresholds, and the default downtime rate supplies a *down* minority — giving
+    the flag logic real teeth (like ``welltest_config`` for the well-test signals). The thresholds are
+    stated explicitly because the KPI tests recompute the flags from them; the values are the shipped
+    defaults, not fixture-lowered bars. The Volve-calibrated ``gor``/``watercut`` distributions are
+    untouched (ADR 0023): the signal comes from the modeled scenario, not from re-widened calibration.
     """
+    from oag_generator.config import DEFAULT_WATCHLIST
+
     return {
         "seed": 7,
         "start_date": "2024-01-01",
-        "end_date": "2024-06-30",
+        "end_date": "2024-12-31",
         "n_fields": 3,
         "wells_per_field": 8,
-        "gor": {"initial_min": 800.0, "initial_max": 835.0,
-                "annual_rise_min": 10.0, "annual_rise_max": 400.0},
-        "watercut": {"initial_min": 0.05, "initial_max": 0.25,
-                     "annual_rise_min": 0.15, "annual_rise_max": 0.45, "cap": 0.98},
-        "watchlist": {
-            "window_days": 60,
-            "watercut_threshold": 0.30,
-            "gor_change_threshold": 0.10,
-            "days_down_threshold": 1,
-        },
+        "breakthrough": {"fraction": 0.30},
+        "watchlist": dict(DEFAULT_WATCHLIST),
     }
 
 
