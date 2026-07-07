@@ -45,9 +45,9 @@ DEFAULT_GOR = {
     "annual_rise_min": 10.0,   # Volve GOR rise is small + stable (fits 10..26 scf/bbl/yr)
     "annual_rise_max": 26.0,
     # NB: Volve's real GOR rise is far too stable to trip the watchlist GOR-change exception (20%
-    # window-over-window, ADR 0022). Exercising that signal is a synthetic scenario, so the watchlist
-    # engineering fixture (tests/conftest.py::watchlist_config) overrides this range to force it --
-    # the shipped default stays honestly Volve-calibrated. See spec/volve/README.md.
+    # window-over-window, ADR 0022). Exercising that signal is a modeled scenario -- the breakthrough
+    # knob (DEFAULT_BREAKTHROUGH below, ADR 0032) -- so this range stays honestly Volve-calibrated.
+    # See spec/volve/README.md.
 }
 DEFAULT_PERFORMANCE = {
     # Actual oil = expected * performance factor. Two-population model (ADR 0009):
@@ -129,6 +129,29 @@ DEFAULT_ADVERSARIAL = {
     "untrustworthy_test_days": 400,  # its only test is this many days before end_date (>> staleness)
 }
 
+# Breakthrough scenario knob (issue #60, feeds #44/#35). Models water/gas breakthrough -- the
+# reservoir event where injected/aquifer water or cap gas breaks through into a producer -- as a
+# config-gated two-population minority (the ADR 0009 pattern): after a drawn onset time, a
+# breakthrough well's watercut rise and GOR rise accelerate, so the watchlist's watering-out and
+# GOR-change exceptions (ADR 0022) flag a modeled phenomenon at the *default* thresholds. Fluid
+# ratios only: the oil series and forecast are untouched. Default fraction 0.0 = scenario off; the
+# shipped calibration stays honestly Volve-faithful (ADR 0023) and the default dataset is unchanged.
+# When enabled, the **anchor well** is pinned into the minority with the earliest onset and maximal
+# rises (the ADR 0024 worst-actor pattern; its draws still run, so every other well is unaffected),
+# guaranteeing non-empty watering-out/GOR-change gold on any seed -- required for the held-out
+# evaluation seed (ADR 0016). On a window too short for the pinned rises to clear the thresholds,
+# fewer (or no) wells flag -- a domain effect, like the overlapping watchlist windows (ADR 0022).
+DEFAULT_BREAKTHROUGH = {
+    "fraction": 0.0,                 # share of wells that suffer a breakthrough (0.0 = off)
+    "onset_frac_min": 0.25,          # onset time as a fraction of the dataset window
+    "onset_frac_max": 0.60,
+    "watercut_extra_rise_min": 0.60,  # extra watercut rise per year after onset
+    "watercut_extra_rise_max": 1.40,
+    "gor_extra_rise_min": 900.0,     # extra GOR rise (scf/bbl/yr) after onset
+    "gor_extra_rise_max": 2400.0,
+    "anchor_well_id": 2,             # pinned-member well (structural WELL_ID; distinct from the trap)
+}
+
 DEFAULT_OPERATORS = ["Equinor", "AkerBP", "Wintershall"]
 
 
@@ -162,6 +185,7 @@ class Config:
     allocation: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_ALLOCATION))
     watchlist: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WATCHLIST))
     adversarial: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_ADVERSARIAL))
+    breakthrough: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_BREAKTHROUGH))
 
     def __post_init__(self) -> None:
         # Nested calibration dicts: fill any missing keys from defaults so a partial
@@ -175,6 +199,7 @@ class Config:
         self.allocation = {**DEFAULT_ALLOCATION, **self.allocation}
         self.watchlist = {**DEFAULT_WATCHLIST, **self.watchlist}
         self.adversarial = {**DEFAULT_ADVERSARIAL, **self.adversarial}
+        self.breakthrough = {**DEFAULT_BREAKTHROUGH, **self.breakthrough}
         self._validate()
 
     def _validate(self) -> None:
@@ -258,12 +283,49 @@ class Config:
             raise ValueError(
                 "adversarial.untrustworthy_test_days must exceed welltest.stale_threshold_days"
             )
+        # Breakthrough scenario knob (issue #60 / ADR 0032): a valid share; onsets inside the window;
+        # non-negative extra rises. When the scenario is ON, the guarantee invariants also hold: the
+        # anchor is a real structural well distinct from the adversarial trap (two separately seeded
+        # populations, ADR 0024), and the anchor's onset (onset_frac_min) lands at or before the
+        # watchlist current window opens -- otherwise the scenario can be a silent no-op on this
+        # window and the non-empty watering-out/GOR-change guarantee is void. (When off, none of the
+        # scenario parameters are consulted.)
+        bt = self.breakthrough
+        if not 0.0 <= bt["fraction"] <= 1.0:
+            raise ValueError("breakthrough.fraction must be in [0, 1]")
+        if not 0.0 <= bt["onset_frac_min"] or not bt["onset_frac_max"] < 1.0:
+            raise ValueError("breakthrough onset_frac range must lie in [0, 1)")
+        if bt["watercut_extra_rise_min"] < 0.0 or bt["gor_extra_rise_min"] < 0.0:
+            raise ValueError(
+                "breakthrough watercut_extra_rise/gor_extra_rise ranges must be >= 0"
+            )
+        if bt["fraction"] > 0.0:
+            if not 1 <= bt["anchor_well_id"] <= self.n_wells:
+                raise ValueError(
+                    f"breakthrough.anchor_well_id must be in [1, {self.n_wells}] (n_wells)"
+                )
+            if int(bt["anchor_well_id"]) == int(self.adversarial["trap_well_id"]):
+                raise ValueError(
+                    "breakthrough.anchor_well_id must differ from adversarial.trap_well_id "
+                    "(the two seeded populations are structurally distinct wells)"
+                )
+            n_days = (
+                date.fromisoformat(self.end_date) - date.fromisoformat(self.start_date)
+            ).days + 1
+            if bt["onset_frac_min"] * n_days > n_days - wl["window_days"]:
+                raise ValueError(
+                    "breakthrough.onset_frac_min must place the anchor's onset at or before the "
+                    f"watchlist current window opens (onset day {bt['onset_frac_min'] * n_days:.0f} "
+                    f"of {n_days}, window {int(wl['window_days'])} days) -- otherwise the scenario "
+                    "cannot flag on this window"
+                )
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
         # silently samples the reversed interval, so reject min > max up front.
         for group, keys in (
             (self.decline, ("qi_bopd", "di_annual", "b")),
             (self.watercut, ("initial", "annual_rise")),
             (self.gor, ("initial", "annual_rise")),
+            (self.breakthrough, ("onset_frac", "watercut_extra_rise", "gor_extra_rise")),
         ):
             for key in keys:
                 lo, hi = group[f"{key}_min"], group[f"{key}_max"]
