@@ -1,0 +1,27 @@
+# Frozen contest config (issue #44 / ADR 0034): THE config the Axis-B fork-point dataset is
+# generated and frozen from (ADR 0012). Every difference from the shipped default is a documented
+# scenario choice -- never re-widened calibration: the Volve-faithful distributions (ADR 0023) and
+# the shipped default watchlist thresholds are untouched.
+#   - 15-month window: watering-out gains an honest component (calibrated water cut approaches the
+#     default 0.50 threshold naturally as wells mature) and the decline/GOR trends get real
+#     window-over-window separation, while the trailing watchlist window keeps a healthy down count.
+#   - breakthrough scenario on (ADR 0032/0033): a modeled water/gas-breakthrough minority, with the
+#     pinned anchor well guaranteeing non-empty watering-out/GOR-change gold on any seed -- the
+#     held-out evaluation seed included (ADR 0016) -- and giving "declining faster than forecast" a
+#     modeled population. fraction 0.35 is the smallest share that puts a member in EVERY field on
+#     the frozen seed and the sweep seeds, so the decline flag (scoped to the largest field, ADR
+#     0018) is populated wherever the target lands.
+#   - decline materiality band (ADR 0033): the decline flag detects that population, not
+#     downtime-timing noise (#35).
+# Acceptance tests: tests/test_contest_config.py. Do not edit after the fork tag is cut -- the
+# frozen config_hash stamped in the tagged dataset.json is every contestant's comparability proof.
+seed: 42
+start_date: "2024-01-01"
+end_date: "2025-03-31"
+n_fields: 3
+wells_per_field: 6
+operators: ["Equinor", "AkerBP", "Wintershall"]
+breakthrough:
+  fraction: 0.35
+decline:
+  faster_gap_threshold: 0.05
