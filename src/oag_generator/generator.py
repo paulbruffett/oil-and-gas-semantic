@@ -37,6 +37,7 @@ from oag_generator.gold import (
     compute_watchlist_gold,
     compute_welltest_gold,
 )
+from oag_generator.osdu_manifest import write_osdu_manifests
 
 GENERATOR_VERSION = "0.1.0"
 
@@ -58,6 +59,8 @@ class DatasetManifest:
     tables: dict[str, Path]
     gold: dict[str, Path]
     row_counts: dict[str, int]
+    # Secondary OSDU JSON manifests, one per canonical table (issue #15, ADR 0007/0031).
+    osdu: dict[str, Path]
 
 
 def _date_range(start: str, end: str) -> list[str]:
@@ -470,6 +473,11 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
 
     canonical_config = cfg.to_canonical_dict()
     chash = hash_canonical_config(canonical_config)
+
+    # Secondary OSDU JSON manifests (issue #15, ADR 0007): derived from the same in-memory columns
+    # as the Parquet, stamped with the same config hash, so the two views can never diverge.
+    osdu_paths = write_osdu_manifests(cols, chash, out / "osdu")
+
     manifest = {
         "config_hash": chash,
         "generator_version": GENERATOR_VERSION,
@@ -478,6 +486,9 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
             spec.key: {"osdu_table": spec.osdu_table, "path": str(tables[spec.key].relative_to(out))}
             for spec in schema.TABLES
         },
+        # Flat key -> path map (mirrors the gold index). The OSDU table name is already recorded in
+        # the tables index and inside each manifest file, so it isn't repeated here.
+        "osdu": {key: str(path.relative_to(out)) for key, path in osdu_paths.items()},
         "gold": {key: str(path.relative_to(out)) for key, path in gold_paths.items()},
         "row_counts": row_counts,
     }
@@ -490,6 +501,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         tables=tables,
         gold=gold_paths,
         row_counts=row_counts,
+        osdu=osdu_paths,
     )
 
 
@@ -507,3 +519,16 @@ def canonical_table_paths(dataset_dir: str | Path) -> dict[str, Path]:
     dataset_dir = Path(dataset_dir)
     manifest = read_dataset_manifest(dataset_dir)
     return {key: dataset_dir / entry["path"] for key, entry in manifest["tables"].items()}
+
+
+def osdu_manifest_paths(dataset_dir: str | Path) -> dict[str, Path]:
+    """Map each canonical table key -> absolute OSDU JSON manifest path for a generated dataset.
+
+    The read seam for the secondary OSDU export (issue #15). Returns ``{}`` for datasets that carry
+    no manifests -- e.g. the redacted eval-run bundle (ADR 0026), whose ``dataset.json`` keeps only
+    the canonical tables -- so a consumer that also calls :func:`canonical_table_paths` degrades to
+    "no OSDU manifests here" instead of a ``KeyError``.
+    """
+    dataset_dir = Path(dataset_dir)
+    manifest = read_dataset_manifest(dataset_dir)
+    return {key: dataset_dir / rel for key, rel in manifest.get("osdu", {}).items()}

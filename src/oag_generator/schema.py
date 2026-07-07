@@ -31,10 +31,20 @@ class TableSpec:
     osdu_table: str  # canonical OSDU PDM table name (verbatim)
     key: str         # short key / parquet filename stem
     columns: tuple[tuple[str, pa.DataType], ...]
+    # The OSDU PDM primary key, as an explicit contract. Empty -> the surrogate first column (the
+    # ``*_ID`` every table leads with, unique per row). Declared only where the real PDM key is
+    # composite (FACILITY) so the secondary OSDU export keys record ids off a stated contract rather
+    # than the positional accident that the first column is unique (issue #15, ADR 0031).
+    pk: tuple[str, ...] = ()
 
     @property
     def column_names(self) -> tuple[str, ...]:
         return tuple(name for name, _ in self.columns)
+
+    @property
+    def primary_key(self) -> tuple[str, ...]:
+        """The record-key columns: the declared PDM key, else the surrogate first column."""
+        return self.pk or (self.columns[0][0],)
 
     def arrow_schema(self) -> pa.Schema:
         return pa.schema(list(self.columns))
@@ -135,7 +145,7 @@ FACILITY = TableSpec("FACILITY", "facility", (
     ("LATITUDE_OUOM", pa.string()),
     ("LONGITUDE", pa.float64()),
     ("LONGITUDE_OUOM", pa.string()),
-))
+), pk=("FACILITY_ID", "FACILITY_TYPE"))  # true PDM composite key (a battery is a FACILITY_TYPE value)
 
 # Production allocation factors (allocation use case, #6). A from-entity -> to-entity factor
 # (both REPORTING_ENTITY), NOT a stored allocated-volume table (ADR 0019). The factor value
