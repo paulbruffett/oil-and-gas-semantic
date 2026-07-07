@@ -29,8 +29,11 @@ These bind the build before the first step and are the same for everyone (ADR 00
   Volve calibration (#13)** merge, with the **dataset config hash frozen**. Fork from that tag — not
   from `main` at an arbitrary commit — so every contestant starts from a byte-identical substrate. See
   [`../WORKFLOW.md`](../WORKFLOW.md) ("Dependency order" / the two comparison axes).
-- **Frozen config hash.** The generator is deterministic; the frozen `config_hash` (in `dataset.json`)
-  is the proof your dataset matches everyone else's. Do not regenerate with a different config. Your
+- **Frozen config hash.** The fork-tag dataset is generated from
+  [`configs/contest.yaml`](../../configs/contest.yaml) (ADR 0034) — the scenario config that populates
+  every graded signal at the shipped default thresholds. The generator is deterministic; the frozen
+  `config_hash` (in `dataset.json`) is the proof your dataset matches everyone else's. Do not
+  regenerate with a different config. Your
   implementation must be **seed-agnostic** — dimension 1 is graded on a **held-out evaluation seed**
   you never see (ADR 0016, [`../adr/0016-held-out-evaluation-seed-grading.md`](../adr/0016-held-out-evaluation-seed-grading.md));
   the gold in your fork is build-time collateral, never something to echo at answer time.

@@ -415,6 +415,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0031 — Secondary OSDU JSON export is per-table PDM records (id/kind/data) validated against the vendored PDM profile, co-derived with the Parquet and byte-identical across runs; full WKS/ADME load-manifest form deferred (applies 0007/0010)](docs/adr/0031-osdu-json-manifest-export.md)
 - [0032 — Breakthrough scenario knob: config-gated water/gas-breakthrough minority on a dedicated rng stream, with a pinned anchor well guaranteeing non-empty watering-out/GOR-change gold on any seed (extends 0009/0024, feeds #44/#35)](docs/adr/0032-breakthrough-scenario-knob.md)
 - [0033 — Breakthrough members suffer post-onset oil impairment and the "declining faster than forecast" flag gains a config-gated materiality band, so the decline flag detects a modeled phenomenon, not downtime-timing noise (refines 0018 §4, extends 0032, closes #35)](docs/adr/0033-breakthrough-oil-impairment-decline-band.md)
+- [0034 — configs/contest.yaml is the frozen fork-tag dataset config: 15-month window, breakthrough on, decline band; watchlist non-emptiness anchored by construction, decline empirically swept (applies 0032/0033, closes #44)](docs/adr/0034-frozen-contest-config.md)
 
 ---
 
