@@ -51,9 +51,10 @@ CREATE OR REPLACE FUNCTION oag_fable.knowledge.norm(s STRING)
 
 -- resolve_term(phrase) -> the governed metric the phrase denotes, or NULL. Substring match (longest
 -- synonym wins) so a term embedded in a longer question still resolves, mirroring lpg.resolve_term.
-CREATE OR REPLACE FUNCTION oag_fable.knowledge.resolve_term(phrase STRING)
+CREATE OR REPLACE FUNCTION oag_fable.knowledge.resolve_term(
+    phrase STRING COMMENT 'A business phrase or full question, e.g. "wells producing below expected oil".')
   RETURNS STRING
-  COMMENT 'Map a business phrase to the governed metric it denotes (NL -> semantic layer).'
+  COMMENT 'Map a business phrase to the governed metric it denotes (NL -> semantic layer). Returns NULL if the phrase matches no known term.'
   RETURN (
     SELECT metric FROM oag_fable.knowledge.vocabulary_term
     WHERE contains(oag_fable.knowledge.norm(phrase), synonym)
@@ -62,9 +63,10 @@ CREATE OR REPLACE FUNCTION oag_fable.knowledge.resolve_term(phrase STRING)
   );
 
 -- resolve_field(name) -> FIELD_ID for a canonical name or a synonym (case-insensitive), else NULL.
-CREATE OR REPLACE FUNCTION oag_fable.knowledge.resolve_field(name STRING)
+CREATE OR REPLACE FUNCTION oag_fable.knowledge.resolve_field(
+    name STRING COMMENT 'A field name or informal synonym, e.g. "Volve", "the volve", "Sleipner Ost".')
   RETURNS BIGINT
-  COMMENT 'Resolve a Field name or synonym to its FIELD_ID (entity resolution).'
+  COMMENT 'Resolve a Field name or synonym to its FIELD_ID (entity resolution). Returns NULL if no field matches.'
   RETURN COALESCE(
     (SELECT f.FIELD_ID FROM oag_fable.canonical.field f
       WHERE oag_fable.knowledge.norm(f.FIELD_NAME) = oag_fable.knowledge.norm(name) LIMIT 1),
@@ -77,7 +79,8 @@ CREATE OR REPLACE FUNCTION oag_fable.knowledge.resolve_field(name STRING)
 -- wells_in_field(field_id) -> the well IDs that roll up to a field (well -[:IN_FIELD]-> field nav).
 -- Parameter is prefixed (arg_field_id) to avoid colliding with the FIELD_ID column: an unqualified
 -- `WHERE FIELD_ID = field_id` would resolve both sides to the column and match every row.
-CREATE OR REPLACE FUNCTION oag_fable.knowledge.wells_in_field(arg_field_id BIGINT)
+CREATE OR REPLACE FUNCTION oag_fable.knowledge.wells_in_field(
+    arg_field_id BIGINT COMMENT 'A FIELD_ID (from resolve_field).')
   RETURNS ARRAY<BIGINT>
   COMMENT 'Traverse the well->field rollup: all well IDs producing from a field.'
   RETURN (SELECT array_sort(array_agg(WELL_ID)) FROM oag_fable.canonical.well WHERE FIELD_ID = arg_field_id);
@@ -93,16 +96,16 @@ CREATE OR REPLACE FUNCTION oag_fable.knowledge.surveillance_config()
     CAST(MAX(CASE WHEN param = 'surveillance_flag_threshold' THEN value END) AS DOUBLE)
   FROM oag_fable.knowledge.dataset_param;
 
--- surveillance_below_expected(...) -> the governed answer to the hero question: wells whose
--- production_efficiency is below the materiality threshold over the window, biggest miss first. Reads
--- the governed semantic.surveillance METRIC VIEW (the agent selects the metric, never authors SQL).
--- arg_field_id NULL = whole fleet; else scope to that field (from resolve_field). This is the agent's
--- primary tool; its output rows are exactly the answer-submission `flagged` shape.
+-- surveillance_below_expected(arg_field_id) -> the governed answer to the hero question: wells whose
+-- production_efficiency is below the frozen materiality threshold over the frozen surveillance window,
+-- biggest miss first. Reads the governed semantic.surveillance METRIC VIEW (the agent selects the
+-- metric, never authors SQL); the window + threshold come from dataset_param, so the only argument is
+-- the optional field scope. Its output rows are exactly the answer-submission `flagged` shape.
 CREATE OR REPLACE FUNCTION oag_fable.knowledge.surveillance_below_expected(
-    window_start DATE, window_end DATE, flag_threshold DOUBLE, arg_field_id BIGINT)
+    arg_field_id BIGINT COMMENT 'FIELD_ID to scope to (from resolve_field). Pass 0 for the whole fleet.')
   RETURNS TABLE(well_id BIGINT, uwi STRING, field_id BIGINT,
                 expected_oil_bbl DOUBLE, actual_oil_bbl DOUBLE, shortfall_bbl DOUBLE, efficiency DOUBLE)
-  COMMENT 'Wells producing below the expected-oil materiality band over the window (theme 1 hero answer).'
+  COMMENT 'Wells producing below the expected-oil materiality band this surveillance week, worst miss first (theme 1 hero answer). arg_field_id=0 => whole fleet.'
   RETURN
     SELECT s.well_id, s.uwi, s.field_id,
            MEASURE(s.expected_oil)          AS expected_oil_bbl,
@@ -110,8 +113,11 @@ CREATE OR REPLACE FUNCTION oag_fable.knowledge.surveillance_below_expected(
            MEASURE(s.oil_shortfall)         AS shortfall_bbl,
            MEASURE(s.production_efficiency) AS efficiency
     FROM oag_fable.semantic.surveillance s
-    WHERE s.volume_date BETWEEN window_start AND window_end
-      AND (arg_field_id IS NULL OR s.field_id = arg_field_id)
+    WHERE s.volume_date BETWEEN
+            (SELECT CAST(value AS DATE) FROM oag_fable.knowledge.dataset_param WHERE param = 'surveillance_window_start')
+        AND (SELECT CAST(value AS DATE) FROM oag_fable.knowledge.dataset_param WHERE param = 'surveillance_window_end')
+      AND (arg_field_id <= 0 OR s.field_id = arg_field_id)
     GROUP BY s.well_id, s.uwi, s.field_id
-    HAVING MEASURE(s.production_efficiency) < flag_threshold
+    HAVING MEASURE(s.production_efficiency) <
+            (SELECT CAST(value AS DOUBLE) FROM oag_fable.knowledge.dataset_param WHERE param = 'surveillance_flag_threshold')
     ORDER BY shortfall_bbl DESC, s.well_id;
