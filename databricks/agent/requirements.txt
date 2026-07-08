@@ -1,0 +1,7 @@
+# Runtime deps for the served surveillance agent (pinned to the versions it was logged/validated with).
+mlflow==3.14.0
+databricks-openai==0.17.0
+databricks-ai-bridge==0.21.0
+unitycatalog-ai==0.4.0
+databricks-sdk==0.94.0
+openai==2.24.0
