@@ -21,14 +21,28 @@ oag_fable                       CATALOG   (MANAGED LOCATION under the metastore 
 │   ├── well_test               well-test fact (251)
 │   ├── rpen_allocation_factor  allocation fact (18)
 │   └── _staging                VOLUME   (Parquet upload target; safe to drop after load)
-└── semantic                    SCHEMA    OSI metric views (6, all METRIC_VIEW)
-    ├── surveillance            theme 1 (hero): production_efficiency, oil_shortfall (cross-fact)
-    ├── well_volumes            actuals: actual_oil/gas/water, cumulative_oil, uptime_pct, water_cut, gor
-    ├── forecast_volumes        expected_oil (decline-curve baseline)
-    ├── downtime                downtime_hours by cause (theme 2)
-    ├── well_tests              well_tests_recorded, test_oil_rate, last_test_date (theme 4)
-    └── allocation              allocation_factor (theme 4)
+├── semantic                    SCHEMA    OSI metric views (6, all METRIC_VIEW)
+│   ├── surveillance            theme 1 (hero): production_efficiency, oil_shortfall (cross-fact)
+│   ├── well_volumes            actuals: actual_oil/gas/water, cumulative_oil, uptime_pct, water_cut, gor
+│   ├── forecast_volumes        expected_oil (decline-curve baseline)
+│   ├── downtime                downtime_hours by cause (theme 2)
+│   ├── well_tests              well_tests_recorded, test_oil_rate, last_test_date (theme 4)
+│   └── allocation              allocation_factor (theme 4)
+└── knowledge                   SCHEMA    LPG knowledge layer (DESIGN §4 layer 4, ADR 0004)
+    ├── vocabulary_term         TABLE     phrase synonym -> governed metric (story 15)
+    ├── field_synonym           TABLE     field-name synonym -> canonical FIELD_NAME (story 14)
+    ├── dataset_param           TABLE     frozen fork-point params (window, threshold, config_hash)
+    ├── resolve_term(phrase)    FUNCTION  NL phrase -> governed metric (e.g. "below expected")
+    ├── resolve_field(name)     FUNCTION  field name/synonym -> FIELD_ID (entity resolution)
+    ├── wells_in_field(id)      FUNCTION  well->field rollup navigation
+    ├── surveillance_config()   FUNCTION  the frozen window + flag threshold
+    └── surveillance_below_expected(...)  FUNCTION (TABLE)  the governed hero answer over the metric view
 ```
+
+The `knowledge.*` functions are the **agent tools** (Mosaic AI Agent Framework, DESIGN §4 layer 5): NL
+maps to governed metrics without the agent authoring SQL — `resolve_term` picks the metric,
+`resolve_field`/`wells_in_field` do entity resolution + rollup, and `surveillance_below_expected` reads
+the governed `semantic.surveillance` metric view. See `agent/` for the served agent.
 
 ## Reproduce
 
@@ -53,6 +67,9 @@ done
 
 # 3. OSI metric views
 ./run-sql.sh sql/03_metric_views.sql
+
+# 4. Knowledge layer (vocabulary, entity resolution, agent-tool functions)
+./run-sql.sh sql/04_knowledge_layer.sql
 ```
 
 `run-sql.sh` needs a SQL warehouse id: `export DATABRICKS_WAREHOUSE_ID=<id>` (from

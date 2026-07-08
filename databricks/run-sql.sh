@@ -16,22 +16,34 @@ profile_args=(); [ -n "${DATABRICKS_PROFILE:-}" ] && profile_args=(-p "$DATABRIC
 # Piped straight into the loop (NUL bytes cannot survive a bash command substitution).
 split_py='
 import sys
+q, nul = chr(39), chr(0)
 sql = open(sys.argv[1]).read()
-out, buf, i, in_dollar = [], [], 0, False
-while i < len(sql):
+out, buf, i, n = [], [], 0, len(sql)
+in_dollar = in_line_comment = in_squote = False
+while i < n:
+    c = sql[i]
+    if in_line_comment:
+        buf.append(c); i += 1
+        if c == "\n": in_line_comment = False
+        continue
+    if in_squote:
+        buf.append(c); i += 1
+        if c == q: in_squote = False
+        continue
+    if not in_dollar and sql.startswith("--", i):
+        in_line_comment = True; buf.append("--"); i += 2; continue
     if sql.startswith("$$", i):
         in_dollar = not in_dollar; buf.append("$$"); i += 2; continue
-    c = sql[i]
+    if not in_dollar and c == q:
+        in_squote = True; buf.append(c); i += 1; continue
     if c == ";" and not in_dollar:
         s = "".join(buf).strip()
         if s: out.append(s)
-        buf = []
-    else:
-        buf.append(c)
-    i += 1
+        buf = []; i += 1; continue
+    buf.append(c); i += 1
 s = "".join(buf).strip()
 if s: out.append(s)
-sys.stdout.write("".join(x + "\0" for x in out))  # NUL-TERMINATE each (not join) so read gets the last
+sys.stdout.write("".join(x + nul for x in out))  # NUL-TERMINATE each so read -d gets the last one
 '
 
 n=0
