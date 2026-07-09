@@ -18,10 +18,39 @@ CREATE OR REPLACE TABLE oag_fable.knowledge.dataset_param (param STRING, value S
   COMMENT 'Frozen fork-point dataset parameters (config_hash 12a110eecfe2).';
 INSERT OVERWRITE oag_fable.knowledge.dataset_param VALUES
   ('config_hash',                 '12a110eecfe2'),
+  ('start_date',                  '2024-01-01'),
+  ('end_date',                    '2025-03-31'),
+  -- Theme 1: surveillance (trailing 7 days)
   ('surveillance_window_start',   '2025-03-25'),
   ('surveillance_window_end',     '2025-03-31'),
   ('surveillance_window_days',    '7'),
-  ('surveillance_flag_threshold', '0.9');
+  ('surveillance_flag_threshold', '0.9'),
+  -- Theme 2: deferment (calendar month of end_date)
+  ('deferment_window_start',      '2025-03-01'),
+  ('deferment_window_end',        '2025-03-31'),
+  -- Theme 3: decline (whole span, boundary months + materiality band)
+  ('decline_first_month',         '2024-01'),
+  ('decline_last_month',          '2025-03'),
+  ('decline_faster_gap_threshold','0.05'),
+  -- Theme 4: well-test / allocation (as-of end_date; monthly allocation period; thresholds)
+  ('welltest_as_of',              '2025-03-31'),
+  ('alloc_period_start',          '2025-03-01'),
+  ('alloc_period_end',            '2025-03-31'),
+  ('welltest_stale_threshold_days','45'),
+  ('allocation_anomaly_threshold','0.1'),
+  -- Theme 5: watchlist (trailing 30-day current vs leading 30-day baseline; thresholds)
+  ('watchlist_curr_start',        '2025-03-02'),
+  ('watchlist_curr_end',          '2025-03-31'),
+  ('watchlist_base_start',        '2024-01-01'),
+  ('watchlist_base_end',          '2024-01-30'),
+  ('watchlist_watercut_threshold','0.5'),
+  ('watchlist_gor_change_threshold','0.2'),
+  ('watchlist_days_down_threshold','1'),
+  -- Theme 6: asset rollups (last complete month vs the month before)
+  ('rollup_curr_start',           '2025-03-01'),
+  ('rollup_curr_end',             '2025-03-31'),
+  ('rollup_prior_start',          '2025-02-01'),
+  ('rollup_prior_end',            '2025-02-28');
 
 -- Business phrase -> governed metric (semantic mapping). synonym pre-normalized (lower+trim).
 CREATE OR REPLACE TABLE oag_fable.knowledge.vocabulary_term (
