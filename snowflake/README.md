@@ -137,7 +137,10 @@ snow sql -c $CONN -f sql/04_knowledge_layer.sql
 # 5. Theme 2-6 governed-answer table functions
 snow sql -c $CONN -f sql/05_theme_functions.sql
 
-# 6. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
+# 6. Governance / RBAC roles + grants (needs USERADMIN/SECURITYADMIN/ACCOUNTADMIN; see below)
+snow sql -c $CONN -f sql/06_governance.sql
+
+# 7. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
 cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py
 ```
 
@@ -145,3 +148,42 @@ cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" pytho
 Steps 4–5 are the agent's governed tools (`OAG_FABLE.KNOWLEDGE.*`); every theme function reproduces the
 frozen gold. See [`agent/README.md`](agent/README.md) for the agent (locus 3) and its Cortex-routing
 finding.
+
+## Governance / RBAC (locus 4)
+
+`06_governance.sql` is the Snowflake role/RBAC equivalent of the Databricks UC catalog/schema grant
+model (DESIGN §4 layer 6, rubric dim 5). The Databricks posture (ADR 0015): a per-consumer principal
+with **scoped, least-privilege** grants over the catalog; **credentials never in the repo**; platform
+lineage. This port reproduces it with three least-privilege roles and key-pair auth (the `snow`
+connection reads `~/.ssh` + `config.toml` — nothing secret is committed).
+
+| Role | Purpose | Grants |
+|---|---|---|
+| `OAG_OWNER` | administers the port (UC catalog-owner analogue) | rolls up to `SYSADMIN`; parent of the two consumer roles |
+| `OAG_ANALYST` | read-only BI consumer | `USAGE` on DB + all three schemas; `SELECT` on canonical tables, semantic views, knowledge tables; `USAGE` (EXECUTE) on knowledge functions; `USAGE` on `COMPUTE_WH` — current **and** future objects |
+| `OAG_AGENT` | agent service role | `USAGE`/EXECUTE on the `KNOWLEDGE.*` tool functions + `SNOWFLAKE.CORTEX_USER` + `COMPUTE_WH` only — **no** direct table/view access |
+
+Feature mapping (comparison deliverable #2):
+
+| Databricks (UC) | Snowflake (this port) | Note / finding |
+|---|---|---|
+| `GRANT SELECT/USAGE ON CATALOG/SCHEMA/…` to a group | `GRANT … ON DATABASE/SCHEMA/… TO ROLE` | 1:1; Snowflake adds `ON ALL`/`ON FUTURE <kind>` to cover new objects |
+| per-contestant **service principal** | **service role** (`OAG_AGENT`) assigned to a key-pair service user | credentials via key-pair, never in repo |
+| `GRANT EXECUTE ON FUNCTION` (agent tools) | `GRANT USAGE ON … FUNCTION` | same "governed tools only" contract |
+| UC functions read tables with the **caller's** grants | Snowflake SQL UDFs run with the **owner's** rights | **stronger isolation**: `OAG_AGENT` calls every governed tool yet **cannot `SELECT` a single raw table** — the tightest form of "governed tools, no SQL authoring" |
+| `GRANT … ON MODEL` / serving | Cortex via `SNOWFLAKE.CORTEX_USER` database role | the LLM is a governed account resource |
+
+**Validated live** (assuming each role with `USE SECONDARY ROLES NONE` for true isolation):
+
+| Check | Result |
+|---|---|
+| `OAG_AGENT` calls `SURVEILLANCE_BELOW_EXPECTED(0)` | 12 rows ✓ |
+| `OAG_AGENT` `SELECT` from `CANONICAL.WELL_VOL_DAILY` | **denied** — "schema … does not exist or not authorized" ✓ (owner-rights isolation) |
+| `OAG_AGENT` calls `SNOWFLAKE.CORTEX.COMPLETE` | ✓ |
+| `OAG_ANALYST` reads `SEMANTIC.SURVEILLANCE` / calls `WATCHLIST_FLAGS` | ✓ |
+| `OAG_ANALYST` `INSERT` into `KNOWLEDGE.DATASET_PARAM` | **denied** — "insufficient privileges" ✓ (read-only) |
+
+To run the agent under least privilege, assign `OAG_AGENT` to its key-pair service user
+(`06_governance.sql` §7) and set that role on the agent's `snow` connection. `SECONDARY ROLES` default
+to `ALL`, so isolate the service user (secondary roles `NONE` or a scoped default) or the union of its
+roles applies.
