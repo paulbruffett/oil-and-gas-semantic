@@ -54,10 +54,11 @@ UC_TOOLS = [
     _fn("rollup_by_facility"),
 ]
 
-# Theme registry keyed by the PRIMARY tool (bare name). Each entry declares the answer-submission
-# question_id and the graded set (set_key + id column + value columns, with integer columns typed) so
-# key_values is assembled deterministically from the governed tool CSV. `extra_sets` attach the other
-# rollup groupings. `metrics` is provenance.
+# Theme registry keyed by the PRIMARY tool (bare name). Each entry mirrors the catalog.yaml grading
+# block (spec/questions/catalog.yaml is the source of truth): the answer-submission question_id and the
+# graded set (set_key + id column + value columns, with integer columns typed), so key_values is
+# assembled deterministically from the governed tool CSV. `extra_sets` attach the other rollup
+# groupings. `metrics` is provenance. Keep in sync with the catalog if a value_key is added there.
 THEMES: dict[str, dict[str, Any]] = {
     "surveillance_below_expected": {
         "question_id": "surveillance-below-expected-oil",
@@ -100,13 +101,26 @@ THEMES: dict[str, dict[str, Any]] = {
     },
 }
 
+# Any theme-related tool (primary or secondary) -> its primary theme key, so a question answered via a
+# secondary tool (e.g. deferment_summary, rollup_by_operator, surveillance_config) still resolves to the
+# right theme instead of falling through.
+TOOL_TO_THEME: dict[str, str] = {k: k for k in THEMES}
+TOOL_TO_THEME.update({
+    "deferment_summary": "deferment_by_cause",
+    "rollup_by_operator": "rollup_by_field",
+    "rollup_by_facility": "rollup_by_field",
+    "surveillance_config": "surveillance_below_expected",
+})
+
 SYSTEM_PROMPT = """\
 You are the production-analytics agent for the oag_fable oil & gas platform. You answer six kinds of
 business question over governed data. Use ONLY the provided Unity Catalog tools; never write SQL and
 never invent numbers. Pick the tool matching the question, call it, and summarise the result.
 
 - "wells below expected oil this week" (surveillance): call surveillance_below_expected(field_id).
-  Use resolve_field for a named field (else 0 = fleet). resolve_term confirms the metric.
+  Use resolve_field for a named field (else 0 = fleet). If resolve_field returns null for a named
+  field, tell the user that field is unknown and do not guess or fall back to the fleet. resolve_term
+  confirms the metric.
 - "what did we defer last month / top downtime causes" (deferment): call deferment_by_cause (and
   deferment_summary for fleet totals + uptime).
 - "12-month oil decline / wells declining faster than forecast" (decline): call decline_wells_faster.
@@ -206,19 +220,40 @@ class ProductionAgent(ResponsesAgent):
         return out
 
     def _build_submission(self, results: dict[str, str], field_arg: int, final_text: str) -> dict[str, Any]:
-        # Which theme? The last primary tool the model called (fall back to surveillance/fleet).
-        theme_key = next((k for k in reversed(list(results)) if k in THEMES), None)
+        # Which theme? The last theme-related tool the model called (primary or secondary). If it called
+        # none, DO NOT fabricate a surveillance answer with the wrong question_id -- abstain honestly
+        # (also the correct outcome for an adversarial clarification that calls no governed tool).
+        theme_key = next((TOOL_TO_THEME[k] for k in reversed(list(results)) if k in TOOL_TO_THEME), None)
         if theme_key is None:
-            theme_key = "surveillance_below_expected"
-            results[theme_key] = self._exec_tool(_fn("surveillance_below_expected"), {"arg_field_id": field_arg})
+            return {
+                "question_id": "unresolved",
+                "answer": final_text.strip() or "Could not determine which governed analysis answers this question.",
+                "key_values": {},
+                "behavior": "clarification-requested",
+                "provenance": {"metrics": [], "dimensions": [], "filters": [], "entities": []},
+            }
         t = THEMES[theme_key]
+
+        # Re-execute the primary tool in code for an authoritative, deterministic result set -- so
+        # key_values does not depend on the LLM's captured output, and a transient tool ERROR cannot
+        # silently collapse to an empty graded set (it is surfaced as a data-quality refusal instead).
+        args = {"arg_field_id": field_arg} if theme_key == "surveillance_below_expected" else {}
+        primary = self._exec_tool(_fn(theme_key), args)
+        if primary is None or primary.startswith("ERROR:"):
+            return {
+                "question_id": t["question_id"],
+                "answer": f"The governed {theme_key} tool failed to return data: {primary}",
+                "key_values": {t["set_key"]: []},
+                "behavior": "refused-data-quality",
+                "provenance": {"metrics": t["metrics"], "dimensions": [], "filters": [], "entities": []},
+            }
 
         key_values: dict[str, Any] = {}
         key_values[t["set_key"]] = self._rows(
-            results.get(theme_key), t["id_key"], t["id_int"], t["value_keys"], t["int_keys"]
+            primary, t["id_key"], t["id_int"], t["value_keys"], t["int_keys"]
         )
         for set_key, tool, id_key, id_int in t.get("extra_sets", []):
-            csv_text = results.get(tool) or self._exec_tool(_fn(tool), {})
+            csv_text = self._exec_tool(_fn(tool), {})
             key_values[set_key] = self._rows(csv_text, id_key, id_int,
                                              [k for k in t["value_keys"]], t["int_keys"])
 
