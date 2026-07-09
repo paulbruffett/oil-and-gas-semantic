@@ -23,7 +23,14 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
 │   ├── RPEN_ALLOCATION_FACTOR  allocation fact (18)
 │   ├── PARQUET_FMT             FILE FORMAT  (Parquet reader)
 │   └── _STAGING                STAGE    (internal named stage; Parquet load target, safe to purge)
-└── SEMANTIC                    SCHEMA    OSI Semantic Views (see 03_semantic_views.sql)
+└── SEMANTIC                    SCHEMA    OSI Semantic Views (6) + custom-source backing views (3)
+    ├── SURVEILLANCE            theme 1 (hero): production_efficiency, oil_shortfall (cross-fact)
+    ├── WELL_VOLUMES            actuals: actual_oil/gas/water, cumulative_oil, uptime_pct, water_cut, gor
+    ├── FORECAST_VOLUMES        expected_oil (decline-curve baseline)
+    ├── DOWNTIME                downtime_hours by cause (theme 2)
+    ├── WELL_TESTS              well_tests_recorded, test_oil_rate, last_test_date (theme 4)
+    ├── ALLOCATION              allocation_factor (theme 4)
+    └── _SURVEILLANCE_SRC · _FORECAST_SRC · _ALLOCATION_SRC   VIEW  backing sources (see below)
 ```
 
 ## Platform mapping (Databricks → Snowflake)
@@ -39,6 +46,59 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
 
 Date-like columns land as `VARCHAR` under both `read_files` and `INFER_SCHEMA` (ISO-8601 strings);
 the semantic views `CAST(... AS DATE)`, mirroring the Databricks build.
+
+## Semantic layer: OSI → Semantic Views (locus 2)
+
+`03_semantic_views.sql` is the platform-native translation of `semantic/metrics.yaml` +
+`semantic/semantic_models.yaml`, the Snowflake counterpart of Databricks Metric Views
+(`databricks/sql/03_metric_views.sql`). Feature mapping (comparison deliverable #2, PORTING.md):
+
+| Databricks Metric View | Snowflake Semantic View | Note / finding |
+|---|---|---|
+| `CREATE VIEW … WITH METRICS LANGUAGE YAML` (embedded YAML) | `CREATE SEMANTIC VIEW … TABLES/RELATIONSHIPS/FACTS/DIMENSIONS/METRICS` (SQL DDL) | different authoring surface; same governed KPI set |
+| `source:` = **arbitrary inline SQL** (UNION, join, filter) | logical table must reference a **TABLE or VIEW** | the 3 custom sources (surveillance UNION, forecast/allocation join+filter) become named backing views `_*_SRC` — **the sharpest coupling difference** |
+| implicit row grain, no key required | each logical table needs a **PRIMARY KEY** | surveillance's UNION has no natural key → `ROW_NUMBER()` surrogate `surv_row_id` in the backing view |
+| ratio/derived measure = re-aggregated `SUM(a)/SUM(b)` | derived metric **references base metrics** (`production_efficiency = actual_oil / expected_oil`) | Snowflake **rejects** `SUM(metric)`; the reference form is a **closer match to OSI's `ratio`/`derived` metric types** than the Databricks flat measure |
+| `joins:` | `RELATIONSHIPS (rel AS a (fk) REFERENCES b (pk))` | 1:1 |
+| `dimensions:` / `measures:` | `DIMENSIONS` / `METRICS` | 1:1 |
+| read with `MEASURE(m)` in normal `SELECT … GROUP BY` | `SELECT * FROM SEMANTIC_VIEW(v DIMENSIONS … METRICS … WHERE …)` | **row-level filters go INSIDE the function**; an outer `WHERE` only filters the aggregated output |
+
+No OSI construct failed to translate: every metric in `metrics.yaml` (simple, ratio, derived) has a
+Semantic View equivalent. The only structural additions are the three `_*_SRC` backing views — all
+in-locus (semantic layer), none out-of-locus (PORTING.md).
+
+## Querying a semantic view
+
+Name the dimensions and metrics inside the `SEMANTIC_VIEW()` table function; filter the underlying
+rows with its inner `WHERE`:
+
+```sql
+-- Theme 1: wells below 90% of expected oil this surveillance week (reproduces gold/surveillance.json)
+SELECT well_id, expected_oil, actual_oil, oil_shortfall, production_efficiency
+FROM SEMANTIC_VIEW(OAG_FABLE.SEMANTIC.SURVEILLANCE
+  DIMENSIONS surv.well_id
+  METRICS surv.expected_oil, surv.actual_oil, surv.oil_shortfall, surv.production_efficiency
+  WHERE surv.volume_date BETWEEN '2025-03-25' AND '2025-03-31')
+WHERE production_efficiency < 0.9
+ORDER BY oil_shortfall DESC, well_id;
+```
+
+## Gold validation
+
+Validated to reproduce the frozen gold on the fork-point dataset (`config_hash 12a110eecfe2`), same
+checks as the Databricks build:
+
+| View | Check | Result |
+|---|---|---|
+| `SURVEILLANCE` | 12 flagged wells over 2025-03-25..03-31, order + expected/actual/shortfall/efficiency | matches `gold/surveillance.json` exactly |
+| `WELL_VOLUMES` | fleet `uptime_pct`, 2025-03 = 97.75253882915173 | matches `gold/deferment.json` `fleet_uptime_pct` |
+| `DOWNTIME` | downtime hours + event counts by cause, 2025-03 (total 300.98) | matches `gold/deferment.json` |
+| `FORECAST_VOLUMES` | `expected_oil`, 2025-03-25..31 = 831975.206 | agrees with `SURVEILLANCE.expected_oil` (cross-view consistency) |
+
+Compile-assembled KPIs (deferred volume, decline vs forecast, days-since-test, allocation variance,
+period-over-period Δ, GOR-change) are **not** semantic views on either platform — they are row-level
+products / date-diffs / cross-window ratios computed downstream over these governed measures (see
+`semantic/metrics.yaml`, `databricks/README.md`, ADR 0017/0018/0019/0021/0022).
 
 ## Reproduce
 
