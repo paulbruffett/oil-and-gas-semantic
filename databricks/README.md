@@ -36,8 +36,19 @@ oag_fable                       CATALOG   (MANAGED LOCATION under the metastore 
     ├── resolve_field(name)     FUNCTION  field name/synonym -> FIELD_ID (entity resolution)
     ├── wells_in_field(id)      FUNCTION  well->field rollup navigation
     ├── surveillance_config()   FUNCTION  the frozen window + flag threshold
-    └── surveillance_below_expected(...)  FUNCTION (TABLE)  the governed hero answer over the metric view
+    ├── surveillance_below_expected(...)  FUNCTION (TABLE)  theme 1 hero answer over the metric view
+    ├── param(key)              FUNCTION  a governed dataset parameter (window/threshold)
+    ├── deferment_by_cause() · deferment_summary()        FUNCTION (TABLE)  theme 2
+    ├── decline_wells_faster()                            FUNCTION (TABLE)  theme 3
+    ├── welltest_flags()                                  FUNCTION (TABLE)  theme 4
+    ├── watchlist_flags()                                 FUNCTION (TABLE)  theme 5
+    └── rollup_by_field() · rollup_by_operator() · rollup_by_facility()  FUNCTION (TABLE)  theme 6
 ```
+
+The theme 2–6 table functions (`sql/05_theme_functions.sql`) reproduce the shell reference-compile
+(`src/oag_semantic/compile.py`) as SQL — the compile-assembled KPIs (deferred volume, decline-vs-forecast,
+days-since-test, allocation variance, period-over-period Δ, GOR-change) computed on-platform. Every one
+reproduces the frozen gold (`data/frozen/gold/*.json`) exactly.
 
 The `knowledge.*` functions are the **agent tools** (Mosaic AI Agent Framework, DESIGN §4 layer 5): NL
 maps to governed metrics without the agent authoring SQL — `resolve_term` picks the metric,
@@ -70,6 +81,9 @@ done
 
 # 4. Knowledge layer (vocabulary, entity resolution, agent-tool functions)
 ./run-sql.sh sql/04_knowledge_layer.sql
+
+# 5. Theme 2-6 governed-answer table functions
+./run-sql.sh sql/05_theme_functions.sql
 ```
 
 `run-sql.sh` needs a SQL warehouse id: `export DATABRICKS_WAREHOUSE_ID=<id>` (from

@@ -19,16 +19,20 @@ from mlflow.models.resources import DatabricksFunction, DatabricksServingEndpoin
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATALOG = "oag_fable"
-UC_MODEL = f"{CATALOG}.agents.surveillance_agent"
+UC_MODEL = f"{CATALOG}.agents.production_agent"
 LLM_ENDPOINT = os.environ.get("OAG_AGENT_LLM", "databricks-qwen3-next-80b-a3b-instruct")
 EXPERIMENT = os.environ.get("OAG_AGENT_EXPERIMENT", "/Shared/oag_fable_agent")
 
+# Every UC function the agent invokes (as tools) or that those tools call (param), granted for
+# on-behalf-of auth at serving time.
 KNOWLEDGE_FUNCS = [
-    f"{CATALOG}.knowledge.resolve_term",
-    f"{CATALOG}.knowledge.resolve_field",
-    f"{CATALOG}.knowledge.wells_in_field",
-    f"{CATALOG}.knowledge.surveillance_config",
-    f"{CATALOG}.knowledge.surveillance_below_expected",
+    f"{CATALOG}.knowledge.{f}" for f in [
+        "param", "resolve_term", "resolve_field", "wells_in_field",
+        "surveillance_config", "surveillance_below_expected",
+        "deferment_by_cause", "deferment_summary", "decline_wells_faster",
+        "welltest_flags", "watchlist_flags",
+        "rollup_by_field", "rollup_by_operator", "rollup_by_facility",
+    ]
 ]
 
 INPUT_EXAMPLE = {
@@ -59,14 +63,21 @@ def main() -> None:
     mv = mlflow.register_model(logged.model_uri, UC_MODEL)
     print(f"registered: {UC_MODEL} v{mv.version}")
 
-    deployment = agents.deploy(
-        UC_MODEL,
-        int(mv.version),
-        scale_to_zero=True,
-        tags={"project": "oag_fable", "layer": "agent", "theme": "surveillance"},
-    )
-    print("deployed endpoint:", getattr(deployment, "endpoint_name", deployment))
-    print("query URL:", getattr(deployment, "query_endpoint", "see Serving UI"))
+    # Serving-endpoint creation is unavailable on trial workspaces; log+register still succeed there.
+    try:
+        deployment = agents.deploy(
+            UC_MODEL,
+            int(mv.version),
+            scale_to_zero=True,
+            tags={"project": "oag_fable", "layer": "agent"},
+        )
+        print("deployed endpoint:", getattr(deployment, "endpoint_name", deployment))
+        print("query URL:", getattr(deployment, "query_endpoint", "see Serving UI"))
+    except Exception as exc:  # noqa: BLE001
+        print(f"\nRegistered {UC_MODEL} v{mv.version}, but serving deploy failed:\n  {exc}\n"
+              "On a trial workspace this is expected (custom Model Serving is unavailable). Re-run "
+              "on a non-trial workspace to create the endpoint; the registered model is usable now via "
+              "mlflow.pyfunc.load_model in Databricks compute.")
 
 
 if __name__ == "__main__":
