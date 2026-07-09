@@ -5,9 +5,9 @@ seams (PORTING.md, DESIGN §4). This directory holds the **reproducible SQL** th
 `OAG_FABLE` database from the frozen fork-point dataset (`config_hash 12a110eecfe2`) and authors the
 shell's OSI metrics as **Snowflake Semantic Views**.
 
-> Scope: DESIGN §4 layers 2–3 (canonical OSDU/PDM + OSI semantic). The neutral OSI manifest
-> (`semantic/*.yaml`) stays the source of truth (ADR 0008/0011); these views are what a Snowflake
-> target compiles it to (story 12). `databricks/` stays in place as the diff anchor (PORTING.md).
+> Scope: DESIGN §4 layers 2–5 (canonical OSDU/PDM + OSI semantic + LPG knowledge + agent). The neutral
+> OSI manifest (`semantic/*.yaml`) stays the source of truth (ADR 0008/0011); these views are what a
+> Snowflake target compiles it to (story 12). `databricks/` stays in place as the diff anchor (PORTING.md).
 
 ## Layout
 
@@ -23,15 +23,24 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
 │   ├── RPEN_ALLOCATION_FACTOR  allocation fact (18)
 │   ├── PARQUET_FMT             FILE FORMAT  (Parquet reader)
 │   └── _STAGING                STAGE    (internal named stage; Parquet load target, safe to purge)
-└── SEMANTIC                    SCHEMA    OSI Semantic Views (6) + custom-source backing views (3)
-    ├── SURVEILLANCE            theme 1 (hero): production_efficiency, oil_shortfall (cross-fact)
-    ├── WELL_VOLUMES            actuals: actual_oil/gas/water, cumulative_oil, uptime_pct, water_cut, gor
-    ├── FORECAST_VOLUMES        expected_oil (decline-curve baseline)
-    ├── DOWNTIME                downtime_hours by cause (theme 2)
-    ├── WELL_TESTS              well_tests_recorded, test_oil_rate, last_test_date (theme 4)
-    ├── ALLOCATION              allocation_factor (theme 4)
-    └── _SURVEILLANCE_SRC · _FORECAST_SRC · _ALLOCATION_SRC   VIEW  backing sources (see below)
+├── SEMANTIC                    SCHEMA    OSI Semantic Views (6) + custom-source backing views (3)
+│   ├── SURVEILLANCE            theme 1 (hero): production_efficiency, oil_shortfall (cross-fact)
+│   ├── WELL_VOLUMES            actuals: actual_oil/gas/water, cumulative_oil, uptime_pct, water_cut, gor
+│   ├── FORECAST_VOLUMES        expected_oil (decline-curve baseline)
+│   ├── DOWNTIME                downtime_hours by cause (theme 2)
+│   ├── WELL_TESTS              well_tests_recorded, test_oil_rate, last_test_date (theme 4)
+│   ├── ALLOCATION              allocation_factor (theme 4)
+│   └── _SURVEILLANCE_SRC · _FORECAST_SRC · _ALLOCATION_SRC   VIEW  backing sources (see below)
+└── KNOWLEDGE                   SCHEMA    LPG knowledge layer + agent-tool functions (DESIGN §4 layer 4/5)
+    ├── DATASET_PARAM · VOCABULARY_TERM · FIELD_SYNONYM    TABLE  governed params + vocabulary
+    ├── NORM · PARAM · RESOLVE_TERM · RESOLVE_FIELD · WELLS_IN_FIELD   scalar UDF  resolution/params
+    ├── SURVEILLANCE_CONFIG · SURVEILLANCE_BELOW_EXPECTED  UDTF  theme 1 hero answer (reads SEMANTIC.SURVEILLANCE)
+    └── DEFERMENT_* · DECLINE_WELLS_FASTER · WELLTEST_FLAGS · WATCHLIST_FLAGS · ROLLUP_BY_*  UDTF  themes 2-6
 ```
+
+The `KNOWLEDGE.*` functions are the **agent tools** (DESIGN §4 layer 5): NL maps to governed metrics
+without the agent authoring SQL. Each theme UDTF reproduces the frozen gold exactly. See `agent/` for the
+Cortex-routed agent that calls them and returns the answer-submission contract.
 
 ## Platform mapping (Databricks → Snowflake)
 
@@ -121,6 +130,18 @@ snow sql -c $CONN -f sql/02_load_canonical.sql   # ends with a row-count sanity 
 
 # 3. OSI Semantic Views
 snow sql -c $CONN -f sql/03_semantic_views.sql
+
+# 4. Knowledge layer (vocabulary, entity resolution, surveillance agent-tool functions)
+snow sql -c $CONN -f sql/04_knowledge_layer.sql
+
+# 5. Theme 2-6 governed-answer table functions
+snow sql -c $CONN -f sql/05_theme_functions.sql
+
+# 6. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
+cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py
 ```
 
 `02_load_canonical.sql` closes with a row-count check — expect `8208, 8208, 21, 18, 3, 6, 282, 251, 18`.
+Steps 4–5 are the agent's governed tools (`OAG_FABLE.KNOWLEDGE.*`); every theme function reproduces the
+frozen gold. See [`agent/README.md`](agent/README.md) for the agent (locus 3) and its Cortex-routing
+finding.
