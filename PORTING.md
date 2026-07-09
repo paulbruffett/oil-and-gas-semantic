@@ -62,6 +62,54 @@ Suggested layout: a sibling `snowflake/` directory mirroring `databricks/`
    harness, same questions; correctness parity is the floor, query/provenance differences are the
    interesting part.
 
+### Results — loci 1–4 complete (`port-base` = `892d88d` → `main`)
+
+**1. The diff is the measurement.** `git diff port-base..HEAD --stat` over `snowflake/`:
+
+| Locus | Primary files | Diff (that locus's commit) |
+|---|---|---|
+| 1 — Canonical load | `sql/01_database_and_schemas.sql`, `sql/02_load_canonical.sql`, `README.md` | +183 |
+| 2 — Semantic layer | `sql/03_semantic_views.sql`, `README.md` | +255 / −1 |
+| 3 — Agent wiring | `sql/04_knowledge_layer.sql`, `sql/05_theme_functions.sql`, `agent/` (agent.py, test_local.py, requirements.txt, README.md), `README.md` | +926 / −11 |
+| 4 — Governance | `sql/06_governance.sql`, `README.md` | +114 / −1 |
+| **Total (unique)** | **11 files, all under `snowflake/`** | **+1465** |
+
+**The blast radius is 100% inside `snowflake/`** — zero edits to shared collateral (`semantic/` OSI,
+`spec/`, `knowledge/`, `src/`, `configs/`, gold). The Out-of-locus change log below stayed empty across
+all four loci: the semantic seam held, so every platform difference is a *finding*, not a coupling
+change. (`git diff port-base..HEAD` also shows `PORTING.md` itself — this port-protocol doc, committed
+as scaffolding at `83010f8` before the port began, not a ported artifact.)
+
+**2. Feature-mapping tables** live where the Databricks build documented governance — `snowflake/README.md`
+and `snowflake/agent/README.md`. Headline mappings & findings:
+
+- **Metric Views ↔ Semantic Views:** clean, but Metric View inline `source:` SQL has no analogue — a
+  Semantic View logical table must reference a table/view, so 3 custom sources became `_*_SRC` backing
+  views (sharpest coupling); each logical table needs a PRIMARY KEY (UNION source → `ROW_NUMBER()`
+  surrogate); OSI `ratio`/`derived` metrics map *better* to Snowflake's reference-based metrics than to
+  Databricks' flat `SUM/SUM` measures. **No OSI construct failed to translate.**
+- **Genie / served FM ↔ Cortex:** Cortex `COMPLETE` is the model analogue, but on this account **no**
+  Cortex model accepts the OpenAI-style `tools` param, so the tool-calling loop became a structured-output
+  routing completion (deterministic-answer / LLM-reasoning split preserved). Cortex Analyst (text-to-SQL)
+  was not needed — the agent selects governed UDTFs, it never authors SQL.
+- **UC grants ↔ RBAC:** 1:1, plus Snowflake `ON ALL`/`ON FUTURE`. Finding: SQL UDFs run with **owner's**
+  rights (vs UC caller rights), so the agent role calls every governed tool yet cannot `SELECT` a raw
+  table — tighter isolation than the source build.
+- **Load:** `CATALOG`(+`MANAGED LOCATION`) → `DATABASE` (storage coupling didn't port); `read_files` CTAS
+  → `INFER_SCHEMA` + `COPY INTO MATCH_BY_COLUMN_NAME`; `run-sql.sh` → native `snow sql -f`.
+
+**3. Behavioral check — correctness parity is met.** All six themes reproduce the frozen-seed gold
+(`config_hash 12a110eecfe2`) exactly, verified both by direct SQL and end-to-end through the agent —
+identical counts to the Databricks build:
+
+| surveillance | deferment | decline | welltest | watchlist | rollups (by_field) |
+|---|---|---|---|---|---|
+| 12/12 | 5/5 | 1/1 | 8/8 | 11/11 | 3/3 |
+
+Field scoping (`resolve_field` → Volve=1) and abstention are preserved. The interesting non-correctness
+differences are the query surface (`SEMANTIC_VIEW(… DIMENSIONS … METRICS … WHERE …)` vs `MEASURE()`) and
+the routing mechanism (structured-output vs native tool-calling), both captured in the READMEs.
+
 ## Out-of-locus change log
 
 | Commit | File(s) | Why it had to change |
