@@ -50,7 +50,8 @@ one overridable constant, flip and re-run once native tool-use is enabled).
 |---|---|
 | `agent.py` | `ProductionAgent` — Cortex routing + Snowflake tool execution + the deterministic assembler. |
 | `test_local.py` | Drives the route-then-execute loop for every theme and grades vs `data/frozen/gold/*.json`. |
-| `requirements.txt` | `snowflake-connector-python`. |
+| `test_agent_rest.py` | Drives the deployed `PRODUCTION_AGENT` Cortex Agent over REST (`:run`) and grades theme 1 vs gold. Pure stdlib. |
+| `requirements.txt` | `snowflake-connector-python` (agent.py/test_local.py only — the REST test needs no driver). |
 
 ## Validate (local, against the live account)
 
@@ -82,10 +83,38 @@ Field scoping (`resolve_field`) and abstention are preserved: "…in the Volve f
 `FIELD_ID=1`; an unknown named field or an off-topic question returns `clarification-requested` rather
 than guessing.
 
-## Deploy (Snowflake-native analogue)
+## Deploy — the delegated Cortex Agent path (tracer: theme 1)
 
-The Databricks build registered the agent to Unity Catalog + Model Serving (serving itself blocked on the
-trial workspace). The Snowflake analogues, not exercised here, are **Snowpark Container Services** or a
-**Streamlit-in-Snowflake** app calling this same `ProductionAgent`, or a **Cortex Agent** once native
-tool-use is available on the account. The governed tools (`sql/04`+`05`) are already server-side, so a
-deployment only relocates the routing/orchestration; the graded contract is unchanged.
+`sql/07_agent.sql` deploys **`OAG_FABLE.KNOWLEDGE.PRODUCTION_AGENT`**, a server-side Cortex Agent
+object over the same governed tools — the entry point an **external orchestrator** calls to hand off a
+whole NL question. Any HTTP client invokes it (no driver, no session):
+
+```
+POST https://<account>.snowflakecomputing.com/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run
+Authorization: Bearer <key-pair JWT>          # `snow connection generate-jwt -c proton`
+X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
+{"stream": false, "messages": [{"role": "user", "content": [{"type": "text", "text": "<question>"}]}]}
+```
+
+The deterministic-answer / LLM-reasoning split **survives delegation**: the platform executes the
+governed tool server-side and returns its rows in a `tool_result` content item; `test_agent_rest.py`
+assembles the graded `key_values` from that payload (never from the LLM narrative) and grades the same
+frozen gold — `PASS flagged=12/12`, values within 1e-6, same as the local loop.
+
+Findings (tracer bullet, theme 1):
+
+- **UDTFs cannot be attached as `generic` tools directly** — the tool runner invokes functions
+  scalar-style ("Unknown user-defined function"). The fix is a thin scalar wrapper returning the rows
+  as an `ARRAY` of `OBJECT`s (`SURVEILLANCE_BELOW_EXPECTED_ROWS`, in `sql/07`); the wrapper's object
+  keys are the answer-submission `value_keys`, so the REST adapter is trivial.
+- **Native tool-use exists at the agent-object tier** even though Cortex `COMPLETE` rejects the
+  `tools` parameter on this account (the finding above): the AGENT object plans, calls the governed
+  tool with correct arguments (`arg_field_id=0` for fleet-wide), and abstains honestly on tool errors.
+- The `tool_result` payload carries the rows as a JSON **string** under `content[].json.result`, with
+  full float precision — sufficient for exact 1e-6 grading without re-querying.
+
+Remaining (beyond the tracer): attach themes 2–6 (each needs a `_ROWS` wrapper), optionally add
+`cortex_analyst_text_to_sql` over the `SEMANTIC` views for ad-hoc questions, and a service user with
+`DEFAULT_ROLE = OAG_AGENT` for least-privilege REST calls (the `:run` session uses the caller's
+default role). **Snowpark Container Services** / **Streamlit-in-Snowflake** remain alternatives for
+hosting the client-side `ProductionAgent` unchanged.

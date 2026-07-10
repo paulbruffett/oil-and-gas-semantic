@@ -35,7 +35,9 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
     ├── DATASET_PARAM · VOCABULARY_TERM · FIELD_SYNONYM    TABLE  governed params + vocabulary
     ├── NORM · PARAM · RESOLVE_TERM · RESOLVE_FIELD · WELLS_IN_FIELD   scalar UDF  resolution/params
     ├── SURVEILLANCE_CONFIG · SURVEILLANCE_BELOW_EXPECTED  UDTF  theme 1 hero answer (reads SEMANTIC.SURVEILLANCE)
-    └── DEFERMENT_* · DECLINE_WELLS_FASTER · WELLTEST_FLAGS · WATCHLIST_FLAGS · ROLLUP_BY_*  UDTF  themes 2-6
+    ├── DEFERMENT_* · DECLINE_WELLS_FASTER · WELLTEST_FLAGS · WATCHLIST_FLAGS · ROLLUP_BY_*  UDTF  themes 2-6
+    ├── SURVEILLANCE_BELOW_EXPECTED_ROWS   scalar UDF  agent-tool wrapper (rows as ARRAY of OBJECTs)
+    └── PRODUCTION_AGENT                   AGENT  Cortex Agent object — delegated REST entry point (tracer: theme 1)
 ```
 
 The `KNOWLEDGE.*` functions are the **agent tools** (DESIGN §4 layer 5): NL maps to governed metrics
@@ -140,8 +142,14 @@ snow sql -c $CONN -f sql/05_theme_functions.sql
 # 6. Governance / RBAC roles + grants (needs USERADMIN/SECURITYADMIN/ACCOUNTADMIN; see below)
 snow sql -c $CONN -f sql/06_governance.sql
 
-# 7. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
+# 7. Cortex Agent object — the delegated REST entry point for external orchestrators (tracer: theme 1)
+snow sql -c $CONN -f sql/07_agent.sql
+
+# 8. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
 cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py
+
+# 9. (optional) drive the deployed Cortex Agent over REST and grade theme 1 vs gold (stdlib only)
+cd agent && OAG_GOLD_DIR="$FROZEN/gold" python test_agent_rest.py
 ```
 
 `02_load_canonical.sql` closes with a row-count check — expect `8208, 8208, 21, 18, 3, 6, 282, 251, 18`.
