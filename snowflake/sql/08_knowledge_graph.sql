@@ -177,3 +177,46 @@ CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.KG_PATH(arg_from STRING, arg_to S
     WHERE node_id = arg_to
     QUALIFY ROW_NUMBER() OVER (ORDER BY depth, path::STRING) = 1
   $$;
+
+-- ============================ Agent-tool wrappers ============================
+-- The Cortex Agent generic-tool runner invokes functions scalar-style, so UDTFs cannot attach
+-- directly (sql/07 finding). These scalar wrappers return each traversal result as an ARRAY of
+-- OBJECTs for the PRODUCTION_AGENT tool surface (sql/07); object keys mirror the UDTF columns.
+
+CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.KG_RESOLVE_ROWS(arg_name STRING)
+  RETURNS ARRAY
+  COMMENT = 'Agent-tool wrapper: KG_RESOLVE rows as an array of objects. Empty if no entity matches.'
+  AS $$
+    (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('node_id', node_id, 'node_type', node_type,
+                                       'name', name, 'matched_on', matched_on))
+       WITHIN GROUP (ORDER BY node_id)
+     FROM TABLE(OAG_FABLE.KNOWLEDGE.KG_RESOLVE(arg_name)))
+  $$;
+
+CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.KG_NEIGHBORS_ROWS(arg_node_id STRING)
+  RETURNS ARRAY
+  COMMENT = 'Agent-tool wrapper: KG_NEIGHBORS rows as an array of objects.'
+  AS $$
+    (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('direction', direction, 'edge_type', edge_type,
+                                       'node_id', node_id, 'node_type', node_type, 'name', name))
+       WITHIN GROUP (ORDER BY direction, edge_type, node_id)
+     FROM TABLE(OAG_FABLE.KNOWLEDGE.KG_NEIGHBORS(arg_node_id)))
+  $$;
+
+CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.KG_TRAVERSE_ROWS(arg_node_id STRING, arg_max_hops NUMBER)
+  RETURNS ARRAY
+  COMMENT = 'Agent-tool wrapper: KG_TRAVERSE rows as an array of objects (min depth, one shortest path each).'
+  AS $$
+    (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('node_id', node_id, 'node_type', node_type, 'name', name,
+                                       'depth', depth, 'path', path))
+       WITHIN GROUP (ORDER BY depth, node_id)
+     FROM TABLE(OAG_FABLE.KNOWLEDGE.KG_TRAVERSE(arg_node_id, arg_max_hops)))
+  $$;
+
+CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.KG_PATH_ROWS(arg_from STRING, arg_to STRING, arg_max_hops NUMBER)
+  RETURNS ARRAY
+  COMMENT = 'Agent-tool wrapper: the KG_PATH result as an array of one object, or empty if the entities are not connected.'
+  AS $$
+    (SELECT ARRAY_AGG(OBJECT_CONSTRUCT('hops', hops, 'path', path))
+     FROM TABLE(OAG_FABLE.KNOWLEDGE.KG_PATH(arg_from, arg_to, arg_max_hops)))
+  $$;

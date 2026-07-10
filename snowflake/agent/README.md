@@ -83,11 +83,22 @@ Field scoping (`resolve_field`) and abstention are preserved: "…in the Volve f
 `FIELD_ID=1`; an unknown named field or an off-topic question returns `clarification-requested` rather
 than guessing.
 
-## Deploy — the delegated Cortex Agent path (tracer: theme 1)
+## Deploy — the delegated Cortex Agent path
 
 `sql/07_agent.sql` deploys **`OAG_FABLE.KNOWLEDGE.PRODUCTION_AGENT`**, a server-side Cortex Agent
-object over the same governed tools — the entry point an **external orchestrator** calls to hand off a
-whole NL question. Any HTTP client invokes it (no driver, no session):
+object over the governed tools — the entry point an **external orchestrator** calls to hand off a
+whole NL question. Its tool surface (all owner's-rights KNOWLEDGE functions; the agent can never
+author SQL or touch a table):
+
+| Agent tool | Backs onto | Answers |
+|---|---|---|
+| `surveillance_below_expected` | `SURVEILLANCE_BELOW_EXPECTED_ROWS` → theme-1 UDTF → `SEMANTIC.SURVEILLANCE` | wells below expected oil (theme 1, gold-graded) |
+| `kg_resolve` | `KG_RESOLVE_ROWS` (sql/08) | NL mention → graph node (name/synonym/UWI) |
+| `kg_neighbors` | `KG_NEIGHBORS_ROWS` (sql/08) | what an entity is directly connected to |
+| `kg_traverse` | `KG_TRAVERSE_ROWS` (sql/08) | everything within N hops (rollups, "what belongs to X") |
+| `kg_path` | `KG_PATH_ROWS` (sql/08) | how two entities are related (empty = truly not connected) |
+
+Any HTTP client invokes it (no driver, no session):
 
 ```
 POST https://<account>.snowflakecomputing.com/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run
@@ -101,6 +112,14 @@ governed tool server-side and returns its rows in a `tool_result` content item; 
 assembles the graded `key_values` from that payload (never from the LLM narrative) and grades the same
 frozen gold — `PASS flagged=12/12`, values within 1e-6, same as the local loop.
 
+**Knowledge-graph navigation, validated live over `:run`** — the agent composes the graph tools
+unprompted (resolve first, then navigate):
+
+| Question | Tool calls the agent planned | Answer (abridged) |
+|---|---|---|
+| "How is well NO 15/9-F-12 related to AkerBP?" | `kg_resolve("AkerBP")`, `kg_resolve("NO 15/9-F-12")`, `kg_path(well:12 → operator:AkerBP, 6)` | "directly operated by AkerBP — a single OPERATED_BY hop" |
+| "What belongs to the Volve field?" | `kg_resolve("Volve")`, `kg_traverse(field:1, 2)` | two facilities (Volve Battery 1/2), six wells, their reporting entities, operated by Equinor |
+
 Findings (tracer bullet, theme 1):
 
 - **UDTFs cannot be attached as `generic` tools directly** — the tool runner invokes functions
@@ -113,7 +132,7 @@ Findings (tracer bullet, theme 1):
 - The `tool_result` payload carries the rows as a JSON **string** under `content[].json.result`, with
   full float precision — sufficient for exact 1e-6 grading without re-querying.
 
-Remaining (beyond the tracer): attach themes 2–6 (each needs a `_ROWS` wrapper), optionally add
+Remaining: attach themes 2–6 (each needs a `_ROWS` wrapper), optionally add
 `cortex_analyst_text_to_sql` over the `SEMANTIC` views for ad-hoc questions, and a service user with
 `DEFAULT_ROLE = OAG_AGENT` for least-privilege REST calls (the `:run` session uses the caller's
 default role). **Snowpark Container Services** / **Streamlit-in-Snowflake** remain alternatives for

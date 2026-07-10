@@ -39,7 +39,8 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
     ├── SURVEILLANCE_BELOW_EXPECTED_ROWS   scalar UDF  agent-tool wrapper (rows as ARRAY of OBJECTs)
     ├── PRODUCTION_AGENT                   AGENT  Cortex Agent object — delegated REST entry point (tracer: theme 1)
     ├── KG_NODE · KG_EDGE                  TABLE  LPG knowledge graph (51 typed nodes · 87 typed edges, derived from canonical)
-    └── KG_RESOLVE · KG_NEIGHBORS · KG_TRAVERSE · KG_PATH   UDTF  graph entity resolution + traversal (recursive CTE)
+    ├── KG_RESOLVE · KG_NEIGHBORS · KG_TRAVERSE · KG_PATH   UDTF  graph entity resolution + traversal (recursive CTE)
+    └── KG_*_ROWS                          scalar UDF  agent-tool wrappers over the graph UDTFs (attached to PRODUCTION_AGENT)
 ```
 
 The `KNOWLEDGE.*` functions are the **agent tools** (DESIGN §4 layer 5): NL maps to governed metrics
@@ -197,6 +198,11 @@ in either direction), so `OAG_AGENT` can navigate without any table access:
 | `KG_TRAVERSE('field:1', 1)` well set == `WELLS_IN_FIELD(1)` | exact match ✓ (graph agrees with the sql/04 tool) |
 | `KG_PATH('well:12','operator:AkerBP',2)` | 1 hop, `well:12 -[OPERATED_BY]-> operator:AkerBP` ✓ |
 | `KG_PATH('well:12','operator:Equinor',6)` | **empty** ✓ — each field has one operator, so the graph has three disconnected components (one per field); the pathfinder reports true non-connectivity rather than inventing a route |
+
+All four traversal tools are also attached to `PRODUCTION_AGENT` (via `KG_*_ROWS` scalar wrappers,
+the sql/07 pattern), so a delegated NL question like "how is well NO 15/9-F-12 related to AkerBP?"
+resolves and walks the graph server-side — see [`agent/README.md`](agent/README.md) for the live
+`:run` validation.
 
 ## Governance / RBAC (locus 4)
 
