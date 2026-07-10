@@ -37,7 +37,9 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
     ├── SURVEILLANCE_CONFIG · SURVEILLANCE_BELOW_EXPECTED  UDTF  theme 1 hero answer (reads SEMANTIC.SURVEILLANCE)
     ├── DEFERMENT_* · DECLINE_WELLS_FASTER · WELLTEST_FLAGS · WATCHLIST_FLAGS · ROLLUP_BY_*  UDTF  themes 2-6
     ├── SURVEILLANCE_BELOW_EXPECTED_ROWS   scalar UDF  agent-tool wrapper (rows as ARRAY of OBJECTs)
-    └── PRODUCTION_AGENT                   AGENT  Cortex Agent object — delegated REST entry point (tracer: theme 1)
+    ├── PRODUCTION_AGENT                   AGENT  Cortex Agent object — delegated REST entry point (tracer: theme 1)
+    ├── KG_NODE · KG_EDGE                  TABLE  LPG knowledge graph (51 typed nodes · 87 typed edges, derived from canonical)
+    └── KG_RESOLVE · KG_NEIGHBORS · KG_TRAVERSE · KG_PATH   UDTF  graph entity resolution + traversal (recursive CTE)
 ```
 
 The `KNOWLEDGE.*` functions are the **agent tools** (DESIGN §4 layer 5): NL maps to governed metrics
@@ -145,10 +147,13 @@ snow sql -c $CONN -f sql/06_governance.sql
 # 7. Cortex Agent object — the delegated REST entry point for external orchestrators (tracer: theme 1)
 snow sql -c $CONN -f sql/07_agent.sql
 
-# 8. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
+# 8. Knowledge graph — KG_NODE/KG_EDGE + traversal tools (derived from canonical; re-run to rebuild)
+snow sql -c $CONN -f sql/08_knowledge_graph.sql
+
+# 9. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
 cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py
 
-# 9. (optional) drive the deployed Cortex Agent over REST and grade theme 1 vs gold (stdlib only)
+# 10. (optional) drive the deployed Cortex Agent over REST and grade theme 1 vs gold (stdlib only)
 cd agent && OAG_GOLD_DIR="$FROZEN/gold" python test_agent_rest.py
 ```
 
@@ -156,6 +161,42 @@ cd agent && OAG_GOLD_DIR="$FROZEN/gold" python test_agent_rest.py
 Steps 4–5 are the agent's governed tools (`OAG_FABLE.KNOWLEDGE.*`); every theme function reproduces the
 frozen gold. See [`agent/README.md`](agent/README.md) for the agent (locus 3) and its Cortex-routing
 finding.
+
+## Knowledge graph (LPG, DESIGN §4 layer 4)
+
+`08_knowledge_graph.sql` makes the entity graph an explicit, queryable object — the KG_NODE/KG_EDGE
+pattern from Snowflake's ontology-grounded-agents engineering blog. Where the Semantic Views declare
+the same joins **per view** for the metric engine, the graph holds every concept and relationship
+**once, account-wide**, so agents can walk business concepts across the data model:
+
+```
+well -[AT_FACILITY]-> facility -[IN_FIELD]-> field      well -[OPERATED_BY]-> operator
+well -[IN_FIELD]-> field                                reporting_entity -[REPORTS_ON]-> well | field
+```
+
+51 typed nodes (18 well · 6 facility · 3 field · 3 operator · 21 reporting_entity) and 87 typed
+edges, **derived deterministically from the canonical tables** (re-run the file to rebuild — graph
+and substrate cannot drift). Node ids are `'<type>:<key>'`; field nodes carry their synonyms from
+`FIELD_SYNONYM` as a property. Informational PK/FK constraints on both tables keep the graph
+catalog-discoverable. Traversal is owner's-rights UDTFs (recursive CTE, cycle-guarded, edges walked
+in either direction), so `OAG_AGENT` can navigate without any table access:
+
+| Tool | Question it answers |
+|---|---|
+| `KG_RESOLVE('the volve')` | which entity does an NL mention refer to? (name / synonym / UWI) |
+| `KG_NEIGHBORS('well:12')` | what is this entity directly connected to, and how? |
+| `KG_TRAVERSE('field:1', 2)` | everything within N hops, at min depth with one shortest path |
+| `KG_PATH('well:12', 'operator:AkerBP', 4)` | how are these two concepts related? (empty if they aren't) |
+
+**Validated live** (knowledge seam, DESIGN §8 — known results on the fixed graph):
+
+| Check | Result |
+|---|---|
+| node/edge counts by type | 18·6·3·3·21 nodes, 18/24/24/21 edges ✓ |
+| `KG_RESOLVE('the volve')` | `field:1` via `synonym` ✓ |
+| `KG_TRAVERSE('field:1', 1)` well set == `WELLS_IN_FIELD(1)` | exact match ✓ (graph agrees with the sql/04 tool) |
+| `KG_PATH('well:12','operator:AkerBP',2)` | 1 hop, `well:12 -[OPERATED_BY]-> operator:AkerBP` ✓ |
+| `KG_PATH('well:12','operator:Equinor',6)` | **empty** ✓ — each field has one operator, so the graph has three disconnected components (one per field); the pathfinder reports true non-connectivity rather than inventing a route |
 
 ## Governance / RBAC (locus 4)
 
