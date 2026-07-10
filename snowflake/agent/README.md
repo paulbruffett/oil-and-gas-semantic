@@ -50,7 +50,7 @@ one overridable constant, flip and re-run once native tool-use is enabled).
 |---|---|
 | `agent.py` | `ProductionAgent` — Cortex routing + Snowflake tool execution + the deterministic assembler. |
 | `test_local.py` | Drives the route-then-execute loop for every theme and grades vs `data/frozen/gold/*.json`. |
-| `test_agent_rest.py` | Drives the deployed `PRODUCTION_AGENT` Cortex Agent over REST (`:run`) and grades theme 1 vs gold. Pure stdlib. |
+| `test_agent_rest.py` | Drives the deployed `PRODUCTION_AGENT` Cortex Agent over REST (`:run`) and grades all six themes vs gold. Pure stdlib. |
 | `requirements.txt` | `snowflake-connector-python` (agent.py/test_local.py only — the REST test needs no driver). |
 
 ## Validate (local, against the live account)
@@ -93,6 +93,11 @@ author SQL or touch a table):
 | Agent tool | Backs onto | Answers |
 |---|---|---|
 | `surveillance_below_expected` | `SURVEILLANCE_BELOW_EXPECTED_ROWS` → theme-1 UDTF → `SEMANTIC.SURVEILLANCE` | wells below expected oil (theme 1, gold-graded) |
+| `deferment_by_cause` (+ `deferment_summary`) | `DEFERMENT_BY_CAUSE_ROWS` → theme-2 UDTF | deferred volume + top downtime causes (theme 2, gold-graded) |
+| `decline_wells_faster` | `DECLINE_WELLS_FASTER_ROWS` → theme-3 UDTF | wells declining faster than forecast (theme 3, gold-graded) |
+| `welltest_flags` | `WELLTEST_FLAGS_ROWS` → theme-4 UDTF | stale tests / anomalous allocation (theme 4, gold-graded) |
+| `watchlist_flags` | `WATCHLIST_FLAGS_ROWS` → theme-5 UDTF | down / watering out / GOR change (theme 5, gold-graded) |
+| `rollup_by_field` (+ `_operator`, `_facility`) | `ROLLUP_BY_*_ROWS` → theme-6 UDTFs | oil/gas/water rollups vs last month (theme 6, gold-graded) |
 | `kg_resolve` | `KG_RESOLVE_ROWS` (sql/08) | NL mention → graph node (name/synonym/UWI) |
 | `kg_neighbors` | `KG_NEIGHBORS_ROWS` (sql/08) | what an entity is directly connected to |
 | `kg_traverse` | `KG_TRAVERSE_ROWS` (sql/08) | everything within N hops (rollups, "what belongs to X") |
@@ -109,8 +114,18 @@ X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
 
 The deterministic-answer / LLM-reasoning split **survives delegation**: the platform executes the
 governed tool server-side and returns its rows in a `tool_result` content item; `test_agent_rest.py`
-assembles the graded `key_values` from that payload (never from the LLM narrative) and grades the same
-frozen gold — `PASS flagged=12/12`, values within 1e-6, same as the local loop.
+assembles the graded `key_values` from that payload (never from the LLM narrative) and grades the
+same frozen gold as the local loop. **All six themes PASS over `:run`** (exact set + values within
+1e-6, same as `test_local.py`):
+
+```
+PASS  surveillance qid=surveillance-below-expected-oil          flagged=12/12
+PASS  deferment    qid=deferment-top-downtime-causes            causes=5/5
+PASS  decline      qid=decline-12-month-field-oil               wells_declining_faster=1/1
+PASS  welltest     qid=welltest-stale-or-anomalous-allocation   flagged=8/8
+PASS  watchlist    qid=watchlist-down-watering-out-gor-change   flagged=11/11
+PASS  rollups      qid=rollup-oil-gas-water-by-field-operator   by_field=3/3
+```
 
 **Knowledge-graph navigation, validated live over `:run`** — the agent composes the graph tools
 unprompted (resolve first, then navigate):
@@ -132,8 +147,8 @@ Findings (tracer bullet, theme 1):
 - The `tool_result` payload carries the rows as a JSON **string** under `content[].json.result`, with
   full float precision — sufficient for exact 1e-6 grading without re-querying.
 
-Remaining: attach themes 2–6 (each needs a `_ROWS` wrapper), optionally add
-`cortex_analyst_text_to_sql` over the `SEMANTIC` views for ad-hoc questions, and a service user with
-`DEFAULT_ROLE = OAG_AGENT` for least-privilege REST calls (the `:run` session uses the caller's
-default role). **Snowpark Container Services** / **Streamlit-in-Snowflake** remain alternatives for
-hosting the client-side `ProductionAgent` unchanged.
+Remaining: optionally add `cortex_analyst_text_to_sql` over the `SEMANTIC` views for ad-hoc
+questions beyond the six governed themes, and a service user with `DEFAULT_ROLE = OAG_AGENT` for
+least-privilege REST calls (the `:run` session uses the caller's default role). **Snowpark Container
+Services** / **Streamlit-in-Snowflake** remain alternatives for hosting the client-side
+`ProductionAgent` unchanged.
