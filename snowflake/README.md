@@ -36,8 +36,8 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
     ├── NORM · PARAM · RESOLVE_TERM · RESOLVE_FIELD · WELLS_IN_FIELD   scalar UDF  resolution/params
     ├── SURVEILLANCE_CONFIG · SURVEILLANCE_BELOW_EXPECTED  UDTF  theme 1 hero answer (reads SEMANTIC.SURVEILLANCE)
     ├── DEFERMENT_* · DECLINE_WELLS_FASTER · WELLTEST_FLAGS · WATCHLIST_FLAGS · ROLLUP_BY_*  UDTF  themes 2-6
-    ├── SURVEILLANCE_BELOW_EXPECTED_ROWS   scalar UDF  agent-tool wrapper (rows as ARRAY of OBJECTs)
-    ├── PRODUCTION_AGENT                   AGENT  Cortex Agent object — delegated REST entry point (tracer: theme 1)
+    ├── *_ROWS (9)                         scalar UDF  agent-tool wrappers over the theme UDTFs (rows as ARRAY of OBJECTs)
+    ├── PRODUCTION_AGENT                   AGENT  Cortex Agent object — delegated REST entry point (all 6 themes + graph)
     ├── KG_NODE · KG_EDGE                  TABLE  LPG knowledge graph (51 typed nodes · 87 typed edges, derived from canonical)
     ├── KG_RESOLVE · KG_NEIGHBORS · KG_TRAVERSE · KG_PATH   UDTF  graph entity resolution + traversal (recursive CTE)
     └── KG_*_ROWS                          scalar UDF  agent-tool wrappers over the graph UDTFs (attached to PRODUCTION_AGENT)
@@ -145,7 +145,7 @@ snow sql -c $CONN -f sql/05_theme_functions.sql
 # 6. Governance / RBAC roles + grants (needs USERADMIN/SECURITYADMIN/ACCOUNTADMIN; see below)
 snow sql -c $CONN -f sql/06_governance.sql
 
-# 7. Cortex Agent object — the delegated REST entry point for external orchestrators (tracer: theme 1)
+# 7. Cortex Agent object — the delegated REST entry point (all six themes + knowledge-graph tools)
 snow sql -c $CONN -f sql/07_agent.sql
 
 # 8. Knowledge graph — KG_NODE/KG_EDGE + traversal tools (derived from canonical; re-run to rebuild)
@@ -154,7 +154,7 @@ snow sql -c $CONN -f sql/08_knowledge_graph.sql
 # 9. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
 cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py
 
-# 10. (optional) drive the deployed Cortex Agent over REST and grade theme 1 vs gold (stdlib only)
+# 10. (optional) drive the deployed Cortex Agent over REST and grade all six themes vs gold (stdlib only)
 cd agent && OAG_GOLD_DIR="$FROZEN/gold" python test_agent_rest.py
 ```
 
