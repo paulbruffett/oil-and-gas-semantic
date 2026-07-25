@@ -38,6 +38,7 @@ OAG_FABLE                       DATABASE  (no MANAGED LOCATION — Snowflake has
     ├── DEFERMENT_* · DECLINE_WELLS_FASTER · WELLTEST_FLAGS · WATCHLIST_FLAGS · ROLLUP_BY_*  UDTF  themes 2-6
     ├── *_ROWS (9)                         scalar UDF  agent-tool wrappers over the theme UDTFs (rows as ARRAY of OBJECTs)
     ├── PRODUCTION_AGENT                   AGENT  Cortex Agent object — delegated REST entry point (all 6 themes + graph)
+    ├── ANALYST_AGENT                      AGENT  Cortex Analyst (text-to-SQL) over the 6 Semantic Views — ad-hoc questions
     ├── KG_NODE · KG_EDGE                  TABLE  LPG knowledge graph (51 typed nodes · 87 typed edges, derived from canonical)
     ├── KG_RESOLVE · KG_NEIGHBORS · KG_TRAVERSE · KG_PATH   UDTF  graph entity resolution + traversal (recursive CTE)
     └── KG_*_ROWS                          scalar UDF  agent-tool wrappers over the graph UDTFs (attached to PRODUCTION_AGENT)
@@ -151,11 +152,22 @@ snow sql -c $CONN -f sql/07_agent.sql
 # 8. Knowledge graph — KG_NODE/KG_EDGE + traversal tools (derived from canonical; re-run to rebuild)
 snow sql -c $CONN -f sql/08_knowledge_graph.sql
 
-# 9. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
+# 9. Cortex Analyst — ANALYST_AGENT: text-to-SQL over the six Semantic Views (ad-hoc questions)
+snow sql -c $CONN -f sql/09_cortex_analyst.sql
+
+# 10. Service users for the two delegated paths (needs USERADMIN/SECURITYADMIN/ACCOUNTADMIN).
+#     Generate a key pair per service user and paste the public halves in first — see the file.
+snow sql -c $CONN -f sql/10_service_users.sql
+
+# 11. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
 cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py
 
-# 10. (optional) drive the deployed Cortex Agent over REST and grade all six themes vs gold (stdlib only)
-cd agent && OAG_GOLD_DIR="$FROZEN/gold" python test_agent_rest.py
+# 12. (optional) drive the deployed Cortex Agent over REST and grade all six themes vs gold (stdlib only)
+#     Use the least-privilege service-user connection from step 10 rather than an admin one.
+cd agent && OAG_GOLD_DIR="$FROZEN/gold" OAG_SNOWFLAKE_CONNECTION=oag_agent python test_agent_rest.py
+
+# 13. (optional) exercise Cortex Analyst and assert the privilege boundary between the two paths
+cd agent && python test_analyst_rest.py
 ```
 
 `02_load_canonical.sql` closes with a row-count check — expect `8208, 8208, 21, 18, 3, 6, 282, 251, 18`.
@@ -238,7 +250,38 @@ Feature mapping (comparison deliverable #2):
 | `OAG_ANALYST` reads `SEMANTIC.SURVEILLANCE` / calls `WATCHLIST_FLAGS` | ✓ |
 | `OAG_ANALYST` `INSERT` into `KNOWLEDGE.DATASET_PARAM` | **denied** — "insufficient privileges" ✓ (read-only) |
 
-To run the agent under least privilege, assign `OAG_AGENT` to its key-pair service user
-(`06_governance.sql` §7) and set that role on the agent's `snow` connection. `SECONDARY ROLES` default
-to `ALL`, so isolate the service user (secondary roles `NONE` or a scoped default) or the union of its
-roles applies.
+### Service users and the Cortex Analyst boundary (`sql/10`)
+
+`sql/06` created roles but assigned them to no principal — the agent still ran as the human `SYSADMIN`
+developer. `10_service_users.sql` adds two `TYPE = SERVICE` users (key-pair auth,
+`DEFAULT_SECONDARY_ROLES = ()`, one role each), so each delegated path runs as its own principal:
+
+| Service user | Role | Agent it can invoke |
+|---|---|---|
+| `OAG_AGENT_SVC` | `OAG_AGENT` | `PRODUCTION_AGENT` — governed UDF tools, **owner's** rights |
+| `OAG_ANALYST_SVC` | `OAG_ANALYST` | `ANALYST_AGENT` (+ `PRODUCTION_AGENT`) — text-to-SQL, **caller's** rights |
+
+The split is forced, not stylistic. **Cortex Analyst executes its SQL with the caller's rights and
+compiles the semantic view down to base tables** (`SEMANTIC.SURVEILLANCE` → `… FROM
+SEMANTIC._SURVEILLANCE_SRC`; `SEMANTIC.WELL_VOLUMES` → `… FROM CANONICAL.WELL_VOL_DAILY`), so it needs
+exactly the `SELECT` grants the governed-tool design withholds — the mirror image of the owner's-rights
+finding above. And because the agent runner **resolves every `tool_resource` before choosing one**,
+mixing the families on one agent fails closed: attaching the `analyst_*` tools to `PRODUCTION_AGENT`
+(measured, then reverted) took `OAG_AGENT` from 6/6 themes to a blanket `HTTP 400 … Schema
+'OAG_FABLE.SEMANTIC' does not exist or not authorized`, on theme questions that touch no semantic view.
+Hence one agent object per privilege posture. Also note `CREATE OR REPLACE AGENT` **drops every grant
+on the agent**, so `USAGE ON AGENT` is re-applied by `sql/07`/`sql/09` themselves.
+
+**Validated live over REST** (`agent/test_analyst_rest.py`, `test_agent_rest.py`):
+
+| Check | Result |
+|---|---|
+| six themes vs frozen gold as `OAG_AGENT_SVC` | 12/5/1/8/11/3 ✓ — the graded path runs under a principal that cannot `SELECT` a table |
+| standalone Analyst (`/api/v2/cortex/analyst/message`) over all six Semantic Views | ✓ — 5 answered via `SEMANTIC_VIEW(…)`, `ALLOCATION` via base-table SQL |
+| `ANALYST_AGENT` as `OAG_ANALYST_SVC` | ✓ picks a view, writes SQL, executes it, narrates |
+| `ANALYST_AGENT` as `OAG_AGENT_SVC` | **denied** (HTTP 401) ✓ least privilege holds |
+| `PRODUCTION_AGENT` as `OAG_AGENT_SVC` | ✓ unaffected by the Analyst deployment |
+
+`SECONDARY ROLES` default to `ALL`; left alone, a session holds the union of every role granted to the
+user and the isolation is fiction — hence `DEFAULT_SECONDARY_ROLES = ()` on both service users, and
+`USE SECONDARY ROLES NONE` when testing a role interactively.

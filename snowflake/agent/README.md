@@ -51,6 +51,7 @@ one overridable constant, flip and re-run once native tool-use is enabled).
 | `agent.py` | `ProductionAgent` — Cortex routing + Snowflake tool execution + the deterministic assembler. |
 | `test_local.py` | Drives the route-then-execute loop for every theme and grades vs `data/frozen/gold/*.json`. |
 | `test_agent_rest.py` | Drives the deployed `PRODUCTION_AGENT` Cortex Agent over REST (`:run`) and grades all six themes vs gold. Pure stdlib. |
+| `test_analyst_rest.py` | Drives Cortex Analyst — standalone (`/api/v2/cortex/analyst/message`) over all six Semantic Views and via `ANALYST_AGENT` — and asserts the two service users' privilege boundary. Pure stdlib. |
 | `requirements.txt` | `snowflake-connector-python` (agent.py/test_local.py only — the REST test needs no driver). |
 
 ## Validate (local, against the live account)
@@ -147,8 +148,75 @@ Findings (tracer bullet, theme 1):
 - The `tool_result` payload carries the rows as a JSON **string** under `content[].json.result`, with
   full float precision — sufficient for exact 1e-6 grading without re-querying.
 
-Remaining: optionally add `cortex_analyst_text_to_sql` over the `SEMANTIC` views for ad-hoc
-questions beyond the six governed themes, and a service user with `DEFAULT_ROLE = OAG_AGENT` for
-least-privilege REST calls (the `:run` session uses the caller's default role). **Snowpark Container
-Services** / **Streamlit-in-Snowflake** remain alternatives for hosting the client-side
+## Deploy — Cortex Analyst (text-to-SQL) and the service users
+
+`sql/09_cortex_analyst.sql` deploys **`OAG_FABLE.KNOWLEDGE.ANALYST_AGENT`**, the ad-hoc counterpart to
+`PRODUCTION_AGENT`: six `cortex_analyst_text_to_sql` tools, one per governed OSI Semantic View
+(`sql/03`). It answers questions *outside* the six themes ("total oil by operator", "downtime hours by
+category") by writing SQL against the semantic layer. Cortex Analyst is the Snowflake analogue of
+Databricks **Genie**, and it is also reachable with no agent object at all:
+
+```
+POST https://<account>.snowflakecomputing.com/api/v2/cortex/analyst/message
+{"messages": [...], "semantic_view": "OAG_FABLE.SEMANTIC.WELL_VOLUMES"}   # returns SQL; caller runs it
+```
+
+`sql/10_service_users.sql` adds the principals that were missing from the `sql/06` role model — until
+now the agent ran as the human `SYSADMIN` developer. Two `TYPE = SERVICE` users, key-pair auth,
+`DEFAULT_SECONDARY_ROLES = ()`, one role each:
+
+| Service user | Role | Reaches | Path |
+|---|---|---|---|
+| `OAG_AGENT_SVC` | `OAG_AGENT` | `PRODUCTION_AGENT` | governed UDF tools, **owner's** rights — the graded six themes |
+| `OAG_ANALYST_SVC` | `OAG_ANALYST` | `ANALYST_AGENT` (+ `PRODUCTION_AGENT`) | Cortex Analyst text-to-SQL, **caller's** rights — ad-hoc |
+
+```bash
+python test_analyst_rest.py            # standalone Analyst + agent tool + the privilege boundary
+OAG_SNOWFLAKE_CONNECTION=oag_agent python test_agent_rest.py    # six themes, least-privilege user
+```
+
+**All six themes still PASS over `:run` as `OAG_AGENT_SVC`** — the graded path now runs end-to-end
+under a service principal that cannot `SELECT` a single table, rather than as the developer role.
+The Analyst suite passes in full:
+
+```
+PASS  standalone:SURVEILLANCE            SQL generated via SEMANTIC_VIEW()
+PASS  standalone:WELL_VOLUMES            SQL generated via SEMANTIC_VIEW()
+PASS  standalone:FORECAST_VOLUMES        SQL generated via SEMANTIC_VIEW()
+PASS  standalone:DOWNTIME                SQL generated via SEMANTIC_VIEW()
+PASS  standalone:WELL_TESTS              SQL generated via SEMANTIC_VIEW()
+PASS  standalone:ALLOCATION              SQL generated via base-table SQL
+PASS  agent:analyst_tool                 analyst_well_volumes executed SQL, 3 row(s)
+PASS  boundary:analyst>ANALYST_AGENT     Analyst path answers (caller-rights SQL allowed)
+PASS  boundary:agent>ANALYST_AGENT       denied (HTTP 401): least privilege holds
+PASS  boundary:agent>PRODUCTION_AGENT    governed theme tool answers under the strict role
+```
+
+Findings (Cortex Analyst + service users):
+
+- **Analyst runs with the CALLER'S rights; governed UDF tools run with the OWNER'S.** The two tool
+  families are opposite privilege models. Analyst also compiles the semantic view down to its **base
+  tables** — a question over `SEMANTIC.SURVEILLANCE` executes `… FROM SEMANTIC._SURVEILLANCE_SRC`, one
+  over `SEMANTIC.WELL_VOLUMES` executes `… FROM CANONICAL.WELL_VOL_DAILY` — so a text-to-SQL caller
+  needs `SELECT` on exactly what the governed-tool design withholds. Least privilege and text-to-SQL
+  are not reconcilable in one role.
+- **Tool access fails closed for the whole agent, not per tool.** The runner resolves *every*
+  `tool_resource` before it picks one. Attaching the `analyst_*` tools to `PRODUCTION_AGENT` (measured,
+  then reverted) took the least-privilege role from 6/6 themes to a blanket
+  `HTTP 400 SQL compilation error: Schema 'OAG_FABLE.SEMANTIC' does not exist or not authorized` — on
+  *theme* questions that never touch a semantic view. Hence one agent object per privilege posture,
+  which is what `sql/09` deploys.
+- **Analyst does not always stay inside the semantic layer.** Five of six views answered via
+  `SEMANTIC_VIEW(… METRICS … DIMENSIONS …)` (`is_semantic_sql: true`); `ALLOCATION` compiled to
+  base-table SQL instead. The semantic view constrains *which* metrics exist, but RBAC — not Analyst —
+  is what actually bounds the data reached.
+- **`CREATE OR REPLACE AGENT` drops every grant on the object.** A redeploy silently revoked
+  `USAGE ON AGENT` and locked out a service user; both agent grants now live in the same file as the
+  `CREATE OR REPLACE` that would otherwise wipe them.
+- **A REST caller cannot choose its role** — `/api/v2/…` runs under the user's `DEFAULT_ROLE`, so the
+  posture is expressed as one principal per role and selected by connection name. Relatedly,
+  `DEFAULT_SECONDARY_ROLES` defaults to `(ALL)`; left alone, a session holds the union of every role
+  granted to the user and the isolation is fiction.
+
+Remaining: **Snowpark Container Services** / **Streamlit-in-Snowflake** as hosts for the client-side
 `ProductionAgent` unchanged.
