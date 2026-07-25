@@ -9,6 +9,13 @@
 -- (snowflake/agent/test_agent_rest.py), NOT from the LLM narrative, so functional correctness
 -- (rubric dimension 1) stays objective under delegation.
 --
+-- This agent stays governed-tools-only ON PURPOSE. Cortex Analyst (text-to-SQL) lives on a SECOND
+-- agent object, ANALYST_AGENT (sql/09), because the agent runner resolves EVERY attached
+-- tool_resource before it runs anything: one semantic view the caller cannot read fails the whole
+-- :run, whatever the question was. Attaching analyst_* tools here therefore made all six graded
+-- themes unreachable for the least-privilege OAG_AGENT role (measured, then reverted — see
+-- snowflake/agent/README.md). One agent per privilege posture keeps this path least-privilege.
+--
 -- Invoke from any HTTP client (key-pair JWT / OAuth / PAT):
 --   POST https://<account>.snowflakecomputing.com/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run
 --
@@ -438,5 +445,10 @@ tool_resources:
 $$;
 
 -- Least-privilege: the agent service role may invoke the agent (tool execution is already covered by
--- sql/06 -- USAGE on the KNOWLEDGE functions + owner's-rights UDTFs + COMPUTE_WH).
+-- sql/06 -- USAGE on the KNOWLEDGE functions + owner's-rights UDTFs + COMPUTE_WH). OAG_ANALYST is
+-- granted it too: that role is a superset of the governed-tool grants, so the Analyst service user
+-- can also reach the six themes on this agent (sql/09, sql/10).
+-- Grants live in this file, not with the roles in sql/06: CREATE OR REPLACE AGENT drops and
+-- recreates the object, so every grant on it is lost on redeploy and must be re-applied here.
 GRANT USAGE ON AGENT OAG_FABLE.KNOWLEDGE.PRODUCTION_AGENT TO ROLE OAG_AGENT;
+GRANT USAGE ON AGENT OAG_FABLE.KNOWLEDGE.PRODUCTION_AGENT TO ROLE OAG_ANALYST;
