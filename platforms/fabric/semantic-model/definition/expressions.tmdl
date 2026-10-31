@@ -1,0 +1,6 @@
+/// Direct Lake source: the oag_reference Warehouse. deploy.py fills in the endpoint and Warehouse id.
+expression DatabaseQuery =
+		let
+		    database = Sql.Database("$(FABRIC_SQL_ENDPOINT)", "$(FABRIC_WAREHOUSE_ID)")
+		in
+		    database

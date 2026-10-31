@@ -274,7 +274,7 @@ use cases. Rules (ADR 0035):
 |---|---|---|---|
 | Databricks | built, all six use cases match gold | Unity Catalog Metric Views | Mosaic AI agent over UC functions |
 | Snowflake | built (ported from Databricks, [`docs/porting.md`](docs/porting.md)), all six match gold | Semantic Views + Cortex Analyst | Cortex Agent over UDFs + knowledge graph |
-| Microsoft Fabric | not started | Fabric semantic model (DAX) | to be decided |
+| Microsoft Fabric | in progress (load + Direct Lake semantic model; all six use cases match gold from DAX measures) | Fabric semantic model (Direct Lake, DAX) | custom agent + Fabric Data Agent (planned) |
 
 **Comparison.** Findings go in [`docs/platform-comparison.md`](docs/platform-comparison.md), across:
 semantic-layer expressiveness (which KPIs are native vs need a workaround), knowledge layer, agent / NL
@@ -285,7 +285,8 @@ against the previous build is itself evidence of how much changed (method in `do
 last test, allocation variance, GOR change, period-over-period Δ, contribution %) are row-level
 products, date differences or cross-window ratios. Neither Metric Views nor Semantic Views express them
 natively; both builds compute them in SQL table functions over the governed measures, mirroring the
-foundation's Python reference compile.
+foundation's Python reference compile. Fabric's DAX expresses all of them as semantic-model measures
+(see [`platforms/fabric/README.md`](platforms/fabric/README.md)).
 
 ---
 

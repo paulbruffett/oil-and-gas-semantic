@@ -16,6 +16,9 @@ built.
 >   not correctness.
 > - **⚠ account-specific** marks findings tied to the tested Snowflake account/region (model
 >   availability, Cortex tool-use), not universal platform statements.
+> - **Microsoft Fabric (in progress):** the Fabric column covers what's built so far, the canonical
+>   load and the Direct Lake semantic model ([`platforms/fabric/README.md`](../platforms/fabric/README.md)).
+>   Agent, knowledge-layer and governance cells come with later slices.
 > - This is a **port**, not two independent from-scratch builds — it measures **translatability and
 >   feature fit**, not peak effort achievable on either platform.
 
@@ -45,13 +48,14 @@ reshaped (without changing the answers). Neither difference affected correctness
 Both are the platform's compile target for the neutral OSI metric manifest; agents *select* governed
 metrics rather than author SQL.
 
-| | Snowflake Semantic View | Databricks Metric View |
-|---|---|---|
-| Authoring | first-class object, **SQL DDL** (`TABLES / RELATIONSHIPS / DIMENSIONS / METRICS`) | `CREATE VIEW … WITH METRICS LANGUAGE YAML` (embedded YAML) |
-| Model shape | **entities + relationships + metrics**; primary keys required | a view with `measures` / `dimensions`; no keys |
-| Source flexibility | logical table must reference a **table/view** | `source:` accepts **arbitrary inline SQL** (UNION / CTE / filter) |
-| Ratio / derived metrics | **reference base metrics** (`efficiency = actual/expected`) | flat re-aggregation (`SUM(a)/SUM(b)`) |
-| Query surface | `SEMANTIC_VIEW(v DIMENSIONS … METRICS … WHERE …)` (row filters inside) | `MEASURE(m)` in ordinary `SELECT … GROUP BY` |
+| | Snowflake Semantic View | Databricks Metric View | Fabric semantic model (Direct Lake) |
+|---|---|---|---|
+| Authoring | first-class object, **SQL DDL** (`TABLES / RELATIONSHIPS / DIMENSIONS / METRICS`) | `CREATE VIEW … WITH METRICS LANGUAGE YAML` (embedded YAML) | **TMDL** files deployed over the Fabric REST API |
+| Model shape | **entities + relationships + metrics**; primary keys required | a view with `measures` / `dimensions`; no keys | **star schema**: tables + relationships + DAX measures; marked date table |
+| Source flexibility | logical table must reference a **table/view** | `source:` accepts **arbitrary inline SQL** (UNION / CTE / filter) | **physical Delta tables only**: no transforms on the way in, so typed copies are materialized |
+| Ratio / derived metrics | **reference base metrics** (`efficiency = actual/expected`) | flat re-aggregation (`SUM(a)/SUM(b)`) | reference base measures (`DIVIDE([Actual Oil], [Expected Oil])`) |
+| Compile-assembled KPIs (deferred volume, decline vs forecast, days since test, allocation variance, GOR change, Δ, contribution %) | SQL UDTFs | SQL table functions | **all eight are DAX measures** (iterators, `CALCULATE` windows, time intelligence) |
+| Query surface | `SEMANTIC_VIEW(v DIMENSIONS … METRICS … WHERE …)` (row filters inside) | `MEASURE(m)` in ordinary `SELECT … GROUP BY` | **DAX only** (XMLA / `executeQueries` REST); not queryable from SQL |
 
 **Positioning.** Snowflake's is the *more opinionated semantic model*: it wants a real relational shape
 (keys + typed relationships) and expresses derived/ratio metrics **by reference**, which matches how a
@@ -60,6 +64,13 @@ any SQL, so a metric with a bespoke shape (a UNION, a cross-fact join) needs no 
 port that flexibility gap was the single sharpest difference — three Metric Views with inline-SQL sources
 became named backing views on Snowflake. **Prefer Snowflake** if you want a governed metric model that
 looks like a semantic model; **prefer Databricks** if your metrics lean on arbitrary source SQL.
+
+**Fabric.** DAX is the most expressive of the three for this workload: every KPI the other two builds
+pushed into SQL functions is a governed measure here, and each reproduces gold from the model alone. The
+cost is on the way in. Direct Lake reads tables as they are, so the cast-and-resolve step that Databricks
+did inline and Snowflake did in views becomes 10 materialized tables to rebuild after each load. Direct
+Lake also gives every dimension a blank member, which measures that default to 0 must guard against. And
+the model speaks only DAX, so a SQL-first agent can't query it directly.
 
 ## 2. Governed functions as agent tools — SQL UDFs vs UC functions
 
@@ -101,14 +112,14 @@ model itself. (Snowflake *does* offer tool-use via the newer Cortex **Agents** A
 
 ## 4. Data load, governance, tooling (supporting)
 
-| Area | Snowflake | Databricks | Net |
-|---|---|---|---|
-| **Canonical load** | STAGE + Parquet FILE FORMAT + `INFER_SCHEMA` + `COPY INTO MATCH_BY_COLUMN_NAME` (2 steps) | Volume + `read_files` CTAS (infer+load, 1 step) | ~even; Databricks slightly terser |
-| **Storage** | `CREATE DATABASE` (no location) | `CREATE CATALOG` (+ `MANAGED LOCATION`) | Snowflake removes a coupling |
-| **RBAC** | roles + `ON ALL`/`ON FUTURE` grants; owner's-rights functions | UC grants to groups/principals | **Snowflake** for least-privilege depth |
-| **LLM governance** | grant `SNOWFLAKE.CORTEX_USER` database role | endpoint permissions | Snowflake integrates the model into RBAC |
-| **Run `.sql` files** | `snow sql -f file.sql` (native) | CLI has no verb; needs Statement Execution API / wrapper | **Snowflake** |
-| **Auth** | key-pair (JWT) via connection config | OAuth / SDK | ~even |
+| Area | Snowflake | Databricks | Fabric | Net |
+|---|---|---|---|---|
+| **Canonical load** | STAGE + Parquet FILE FORMAT + `INFER_SCHEMA` + `COPY INTO MATCH_BY_COLUMN_NAME` (2 steps) | Volume + `read_files` CTAS (infer+load, 1 step) | Lakehouse `Files/` staging + `OPENROWSET(BULK …)` CTAS (1 step); OneLake paths must use GUIDs in T-SQL | ~even; Databricks slightly terser |
+| **Storage** | `CREATE DATABASE` (no location) | `CREATE CATALOG` (+ `MANAGED LOCATION`) | Warehouse + staging Lakehouse are workspace items created over REST, not SQL | Snowflake removes a coupling |
+| **RBAC** | roles + `ON ALL`/`ON FUTURE` grants; owner's-rights functions | UC grants to groups/principals | _later slice_ | **Snowflake** for least-privilege depth |
+| **LLM governance** | grant `SNOWFLAKE.CORTEX_USER` database role | endpoint permissions | _later slice_ | Snowflake integrates the model into RBAC |
+| **Run `.sql` files** | `snow sql -f file.sql` (native) | CLI has no verb; needs Statement Execution API / wrapper | no REST SQL API; a small TDS runner (`mssql-python`, no ODBC install) | **Snowflake** |
+| **Auth** | key-pair (JWT) via connection config | OAuth / SDK | Entra (`az login`) everywhere; two token audiences (Fabric, Power BI) | ~even |
 
 > **RBAC gotcha (Snowflake):** sessions default to **secondary roles = ALL** (the union of every role a
 > user holds). To test a role in true isolation, `USE SECONDARY ROLES NONE` — otherwise a broad role

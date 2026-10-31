@@ -1,0 +1,61 @@
+/// OSI rpen_allocation_factor -- oil allocation factors, TO entity resolved to a well.
+table allocation
+
+	/// OSI allocation_factor (simple).
+	measure 'Allocation Factor' = SUM(allocation[allocation_factor])
+		displayFolder: OSI metrics
+
+	/// Theme 4: the factor for the governed allocation period.
+	measure 'Period Allocation Factor' =
+			VAR s = MAX(params[alloc_period_start])
+			VAR e = MAX(params[alloc_period_end])
+			RETURN CALCULATE([Allocation Factor], allocation[alloc_start_date] = s, allocation[alloc_end_date] = e)
+		displayFolder: 4 Well test
+
+	/// Allocated oil = the field's measured oil x this well's factor (blank when the well measured nothing).
+	measure 'Allocated Oil' = IF([Alloc Measured Oil] > 0, [Field Measured Oil] * [Period Allocation Factor])
+		formatString: #,0.00
+		displayFolder: 4 Well test
+
+	/// Allocation variance = allocated / measured. Compile-assembled on the other platforms.
+	measure 'Allocation Variance' = IF([Alloc Measured Oil] > 0, DIVIDE([Allocated Oil], [Alloc Measured Oil]))
+		displayFolder: 4 Well test
+
+	measure 'Is Anomalous' =
+			IF(NOT ISBLANK([Allocation Variance]) && ABS([Allocation Variance] - 1) > MAX(params[allocation_anomaly_threshold]), 1, 0)
+		displayFolder: 4 Well test
+
+	column rpen_allocation_factor_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: rpen_allocation_factor_id
+
+	column well_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: well_id
+
+	column alloc_start_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: alloc_start_date
+
+	column alloc_end_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: alloc_end_date
+
+	column allocation_factor
+		dataType: double
+		summarizeBy: none
+		sourceColumn: allocation_factor
+
+	partition allocation = entity
+		mode: directLake
+		source
+			entityName: allocation
+			schemaName: semantic
+			expressionSource: DatabaseQuery

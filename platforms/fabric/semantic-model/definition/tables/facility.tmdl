@@ -1,0 +1,36 @@
+/// OSI facility -- battery/facility master (well -> facility -> field hierarchy). Related to well only:
+/// a facility -> field relationship as well would make the well -> field path ambiguous.
+table facility
+
+	column facility_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: facility_id
+
+	column facility_name
+		dataType: string
+		summarizeBy: none
+		sourceColumn: facility_name
+
+	column facility_type
+		dataType: string
+		summarizeBy: none
+		sourceColumn: facility_type
+
+	column field_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: field_id
+
+	column facility_operator
+		dataType: string
+		summarizeBy: none
+		sourceColumn: facility_operator
+
+	partition facility = entity
+		mode: directLake
+		source
+			entityName: facility
+			schemaName: semantic
+			expressionSource: DatabaseQuery

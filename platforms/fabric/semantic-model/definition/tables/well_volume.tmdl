@@ -1,0 +1,292 @@
+/// OSI well_vol_daily -- measured daily well volumes (the actuals).
+table well_volume
+
+	/// TRUE when the current group (well, field, facility, operator) has any measured volumes at all. Direct
+	/// Lake gives every dimension a blank member; measures that default to 0 use this so that member stays blank.
+	measure 'Has Volumes' = NOT ISEMPTY(CALCULATETABLE(well_volume, REMOVEFILTERS(calendar)))
+		displayFolder: OSI metrics
+
+	/// OSI actual_oil (simple).
+	measure 'Actual Oil' = SUM(well_volume[oil_volume])
+		formatString: #,0.00
+		displayFolder: OSI metrics
+
+	/// OSI actual_gas (simple), Mscf.
+	measure 'Actual Gas' = SUM(well_volume[gas_volume])
+		formatString: #,0.00
+		displayFolder: OSI metrics
+
+	/// OSI actual_water (simple).
+	measure 'Actual Water' = SUM(well_volume[water_volume])
+		formatString: #,0.00
+		displayFolder: OSI metrics
+
+	/// OSI cumulative_oil (simple): measured oil over the filtered window.
+	measure 'Cumulative Oil' = [Actual Oil]
+		formatString: #,0.00
+		displayFolder: OSI metrics
+
+	/// OSI on_stream_hours (simple).
+	measure 'On Stream Hours' = SUM(well_volume[hours_on])
+		displayFolder: OSI metrics
+
+	/// OSI calendar_days (simple): count of daily volume records.
+	measure 'Calendar Days' = COUNTROWS(well_volume)
+		displayFolder: OSI metrics
+
+	/// OSI uptime_pct (derived): on-stream hours / calendar hours x 100.
+	measure 'Uptime %' = DIVIDE([On Stream Hours], [Calendar Days] * 24) * 100
+		displayFolder: OSI metrics
+
+	/// OSI production_efficiency (ratio): actual oil / expected oil.
+	measure 'Production Efficiency' = DIVIDE([Actual Oil], [Expected Oil])
+		displayFolder: OSI metrics
+
+	/// OSI oil_shortfall (derived): expected oil - actual oil.
+	measure 'Oil Shortfall' = [Expected Oil] - [Actual Oil]
+		formatString: #,0.00
+		displayFolder: OSI metrics
+
+	/// OSI water_cut (derived): water / (oil + water).
+	measure 'Water Cut' = DIVIDE([Actual Water], [Actual Oil] + [Actual Water])
+		displayFolder: OSI metrics
+
+	/// OSI gor (derived): gas x 1000 / oil (scf/bbl).
+	measure GOR = DIVIDE([Actual Gas] * 1000, [Actual Oil])
+		displayFolder: OSI metrics
+
+	/// Days fully off-stream (HOURS_ON = 0). Compile-assembled on the other platforms; a filtered count here.
+	measure 'Days Down' = IF([Has Volumes], COALESCE(CALCULATE(COUNTROWS(well_volume), well_volume[hours_on] = 0), 0))
+		displayFolder: OSI metrics
+
+	/// Period-over-period with native time intelligence: same measure shifted back one calendar month.
+	measure 'Oil Prior Month' = CALCULATE([Actual Oil], DATEADD(calendar[date], -1, MONTH))
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	measure 'Oil Delta vs Prior Month' = [Actual Oil] - [Oil Prior Month]
+		formatString: #,0.00
+		displayFolder: Time intelligence
+
+	/// Contribution %: this group's oil / oil across every well, field and facility in the filtered window.
+	measure 'Oil Contribution %' =
+			DIVIDE(
+				[Actual Oil],
+				CALCULATE([Actual Oil], REMOVEFILTERS(well), REMOVEFILTERS(field), REMOVEFILTERS(facility))
+			) * 100
+		displayFolder: Time intelligence
+
+	/// Theme 1: actual oil over the surveillance window (0 when the well reported nothing).
+	measure 'Surveillance Actual Oil' =
+			IF(
+				[Has Volumes],
+				COALESCE(CALCULATE([Actual Oil], DATESBETWEEN(calendar[date], MAX(params[surveillance_start]), MAX(params[surveillance_end]))), 0)
+			)
+		formatString: #,0.00
+		displayFolder: 1 Surveillance
+
+	measure 'Surveillance Shortfall' = [Surveillance Expected Oil] - [Surveillance Actual Oil]
+		formatString: #,0.00
+		displayFolder: 1 Surveillance
+
+	measure 'Surveillance Efficiency' = DIVIDE([Surveillance Actual Oil], [Surveillance Expected Oil])
+		displayFolder: 1 Surveillance
+
+	/// 1 when the well has a forecast in the window and produced below the flag threshold x expected.
+	measure 'Is Below Expected' =
+			IF(
+				NOT ISBLANK([Surveillance Expected Oil])
+					&& [Surveillance Actual Oil] < MAX(params[surveillance_flag_threshold]) * [Surveillance Expected Oil],
+				1,
+				0
+			)
+		displayFolder: 1 Surveillance
+
+	/// Theme 2: fleet uptime over the deferment window.
+	measure 'Deferment Uptime %' =
+			CALCULATE([Uptime %], DATESBETWEEN(calendar[date], MAX(params[deferment_start]), MAX(params[deferment_end])))
+		displayFolder: 2 Deferment
+
+	measure 'Deferment Wells Evaluated' =
+			CALCULATE(DISTINCTCOUNT(well_volume[well_id]), DATESBETWEEN(calendar[date], MAX(params[deferment_start]), MAX(params[deferment_end])))
+		displayFolder: 2 Deferment
+
+	/// Theme 3: annualized effective decline of the mean daily oil rate between the first and last month,
+	/// 1 - (rate_last / rate_first) ^ (1 / span_years), span from the mean day index of each month's rows.
+	measure 'Actual Annual Decline' =
+			VAR fm = MAX(params[decline_first_month])
+			VAR lm = MAX(params[decline_last_month])
+			VAR s0 = CALCULATE(SUM(well_volume[oil_volume]), REMOVEFILTERS(calendar), calendar[month] = fm)
+			VAR n0 = CALCULATE(COUNTROWS(well_volume), REMOVEFILTERS(calendar), calendar[month] = fm)
+			VAR i0 = CALCULATE(AVERAGEX(well_volume, RELATED(calendar[day_index])), REMOVEFILTERS(calendar), calendar[month] = fm)
+			VAR s1 = CALCULATE(SUM(well_volume[oil_volume]), REMOVEFILTERS(calendar), calendar[month] = lm)
+			VAR n1 = CALCULATE(COUNTROWS(well_volume), REMOVEFILTERS(calendar), calendar[month] = lm)
+			VAR i1 = CALCULATE(AVERAGEX(well_volume, RELATED(calendar[day_index])), REMOVEFILTERS(calendar), calendar[month] = lm)
+			VAR span = (i1 - i0) / 365.25
+			RETURN
+				IF(n0 > 0 && n1 > 0 && s0 > 0 && span > 0, 1 - POWER((s1 / n1) / (s0 / n0), 1 / span))
+		displayFolder: 3 Decline
+
+	measure 'Decline Gap' = [Actual Annual Decline] - [Forecast Annual Decline]
+		displayFolder: 3 Decline
+
+	/// 1 when actual decline exceeds forecast decline by more than the materiality band.
+	measure 'Is Declining Faster' =
+			IF(
+				NOT ISBLANK([Actual Annual Decline]) && NOT ISBLANK([Forecast Annual Decline])
+					&& [Decline Gap] > MAX(params[decline_faster_gap_threshold]),
+				1,
+				0
+			)
+		displayFolder: 3 Decline
+
+	/// Cumulative oil over the whole dataset span (theme 3 field selection and per-well cumulative).
+	measure 'Dataset Cumulative Oil' =
+			CALCULATE([Actual Oil], DATESBETWEEN(calendar[date], MAX(params[start_date]), MAX(params[end_date])))
+		formatString: #,0.00
+		displayFolder: 3 Decline
+
+	/// Theme 4: measured oil over the allocation period (0 when none).
+	measure 'Alloc Measured Oil' =
+			IF(
+				[Has Volumes],
+				COALESCE(CALCULATE([Actual Oil], DATESBETWEEN(calendar[date], MAX(params[alloc_period_start]), MAX(params[alloc_period_end]))), 0)
+			)
+		formatString: #,0.00
+		displayFolder: 4 Well test
+
+	/// Measured oil over the allocation period for the current well's whole field.
+	measure 'Field Measured Oil' =
+			VAR f = SELECTEDVALUE(well[field_id])
+			RETURN CALCULATE([Alloc Measured Oil], REMOVEFILTERS(well), well[field_id] = f)
+		formatString: #,0.00
+		displayFolder: 4 Well test
+
+	/// Theme 5: water cut, days down and GOR over the current watchlist window; GOR also over the baseline.
+	measure 'Watchlist Water Cut' =
+			CALCULATE([Water Cut], DATESBETWEEN(calendar[date], MAX(params[watchlist_curr_start]), MAX(params[watchlist_curr_end])))
+		displayFolder: 5 Watchlist
+
+	measure 'Watchlist Days Down' =
+			CALCULATE([Days Down], DATESBETWEEN(calendar[date], MAX(params[watchlist_curr_start]), MAX(params[watchlist_curr_end])))
+		displayFolder: 5 Watchlist
+
+	measure 'GOR Current' =
+			CALCULATE([GOR], DATESBETWEEN(calendar[date], MAX(params[watchlist_curr_start]), MAX(params[watchlist_curr_end])))
+		displayFolder: 5 Watchlist
+
+	measure 'GOR Baseline' =
+			CALCULATE([GOR], DATESBETWEEN(calendar[date], MAX(params[watchlist_base_start]), MAX(params[watchlist_base_end])))
+		displayFolder: 5 Watchlist
+
+	/// GOR change: current-window GOR / baseline-window GOR - 1.
+	measure 'GOR Change %' =
+			VAR c = [GOR Current]
+			VAR b = [GOR Baseline]
+			RETURN IF(NOT ISBLANK(c) && b > 0, c / b - 1)
+		displayFolder: 5 Watchlist
+
+	measure 'Is Down' = IF([Watchlist Days Down] >= MAX(params[watchlist_days_down_threshold]), 1, 0)
+		displayFolder: 5 Watchlist
+
+	measure 'Is Watering Out' =
+			IF(NOT ISBLANK([Watchlist Water Cut]) && [Watchlist Water Cut] > MAX(params[watchlist_watercut_threshold]), 1, 0)
+		displayFolder: 5 Watchlist
+
+	measure 'Is GOR Change' =
+			IF(NOT ISBLANK([GOR Change %]) && ABS([GOR Change %]) > MAX(params[watchlist_gor_change_threshold]), 1, 0)
+		displayFolder: 5 Watchlist
+
+	/// Theme 6: oil/gas/water over the current and prior rollup periods, delta and oil contribution %.
+	measure 'Rollup Oil Current' =
+			IF([Has Volumes], COALESCE(CALCULATE([Actual Oil], DATESBETWEEN(calendar[date], MAX(params[rollup_curr_start]), MAX(params[rollup_curr_end]))), 0))
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Gas Current' =
+			IF([Has Volumes], COALESCE(CALCULATE([Actual Gas], DATESBETWEEN(calendar[date], MAX(params[rollup_curr_start]), MAX(params[rollup_curr_end]))), 0))
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Water Current' =
+			IF([Has Volumes], COALESCE(CALCULATE([Actual Water], DATESBETWEEN(calendar[date], MAX(params[rollup_curr_start]), MAX(params[rollup_curr_end]))), 0))
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Oil Prior' =
+			IF([Has Volumes], COALESCE(CALCULATE([Actual Oil], DATESBETWEEN(calendar[date], MAX(params[rollup_prior_start]), MAX(params[rollup_prior_end]))), 0))
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Gas Prior' =
+			IF([Has Volumes], COALESCE(CALCULATE([Actual Gas], DATESBETWEEN(calendar[date], MAX(params[rollup_prior_start]), MAX(params[rollup_prior_end]))), 0))
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Water Prior' =
+			IF([Has Volumes], COALESCE(CALCULATE([Actual Water], DATESBETWEEN(calendar[date], MAX(params[rollup_prior_start]), MAX(params[rollup_prior_end]))), 0))
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Oil Delta' = [Rollup Oil Current] - [Rollup Oil Prior]
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Gas Delta' = [Rollup Gas Current] - [Rollup Gas Prior]
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Water Delta' = [Rollup Water Current] - [Rollup Water Prior]
+		formatString: #,0.00
+		displayFolder: 6 Rollups
+
+	measure 'Rollup Oil Contribution %' =
+			DIVIDE(
+				[Rollup Oil Current],
+				CALCULATE([Rollup Oil Current], REMOVEFILTERS(well), REMOVEFILTERS(field), REMOVEFILTERS(facility))
+			) * 100
+		displayFolder: 6 Rollups
+
+	column well_volume_daily_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: well_volume_daily_id
+
+	column well_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: well_id
+
+	column volume_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: volume_date
+
+	column hours_on
+		dataType: double
+		summarizeBy: none
+		sourceColumn: hours_on
+
+	column oil_volume
+		dataType: double
+		summarizeBy: none
+		sourceColumn: oil_volume
+
+	column gas_volume
+		dataType: double
+		summarizeBy: none
+		sourceColumn: gas_volume
+
+	column water_volume
+		dataType: double
+		summarizeBy: none
+		sourceColumn: water_volume
+
+	partition well_volume = entity
+		mode: directLake
+		source
+			entityName: well_volume
+			schemaName: semantic
+			expressionSource: DatabaseQuery
