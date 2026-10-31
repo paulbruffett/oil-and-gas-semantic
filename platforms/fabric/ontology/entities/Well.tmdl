@@ -1,0 +1,43 @@
+/// A producing well. Rolls up to a facility and a field; identified by UWI.
+entity Well
+	lineageTag: 8c34bc64-0620-5011-b7c5-86aeb18fcbfb
+	backingTable: well
+	keyProperty: well_id
+	synonym producer
+
+	property well_id
+		lineageTag: 0101c0a3-d326-5375-aff7-929775d60116
+		dataType: int64
+		backingConfiguration
+			valueColumn: well.well_id
+
+	/// Unique well identifier, e.g. NO 15/9-F-1.
+	property uwi
+		lineageTag: 9cb7d592-fc9c-540b-856b-972f73ce0bed
+		dataType: string
+		backingConfiguration
+			valueColumn: well.uwi
+
+	property well_name
+		lineageTag: 0072b621-42a4-5e8a-aeaf-a2a598d11604
+		dataType: string
+		backingConfiguration
+			valueColumn: well.well_name
+
+	property field_id
+		lineageTag: c852e619-f1a4-59be-a2c8-0a6991ef0790
+		dataType: int64
+		backingConfiguration
+			valueColumn: well.field_id
+
+	property facility_id
+		lineageTag: f4e10eb7-8ab3-5380-9f6e-056fa9d44d7d
+		dataType: int64
+		backingConfiguration
+			valueColumn: well.facility_id
+
+	property operator
+		lineageTag: 8d3661d8-c672-5ce9-a0bf-60451feb7d23
+		dataType: string
+		backingConfiguration
+			valueColumn: well.operator

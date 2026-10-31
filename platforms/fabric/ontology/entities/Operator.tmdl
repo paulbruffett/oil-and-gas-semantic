@@ -1,0 +1,11 @@
+/// The company operating wells and facilities.
+entity Operator
+	lineageTag: bc440a17-b5d9-557f-a31d-45cf88169744
+	backingTable: operator
+	keyProperty: operator
+
+	property operator
+		lineageTag: dd0e20c9-ec23-501e-9071-14631c7fd23b
+		dataType: string
+		backingConfiguration
+			valueColumn: operator.operator

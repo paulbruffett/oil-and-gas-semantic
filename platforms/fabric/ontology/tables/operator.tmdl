@@ -1,0 +1,23 @@
+table operator
+	lineageTag: e863b509-e88c-512a-84c5-7ed8418e133b
+
+	column operator
+		lineageTag: 4a1e7134-74d4-5a25-93d4-10197313b26c
+		dataType: string
+		sourceColumn: operator
+
+	partition operator = entity
+		mode: directLake
+		source
+			entityName: operator
+			schemaName: knowledge
+			expressionSource: DatabaseQuery
+
+		annotation ONT_WorkspaceId = $(FABRIC_WORKSPACE_ID)
+		annotation ONT_ItemId = $(FABRIC_WAREHOUSE_ID)
+		annotation ONT_ItemKind = Warehouse
+		annotation ONT_ItemName = oag_reference
+		annotation ONT_WorkspaceName = oag-reference
+		annotation ONT_SqlEndpoint = $(FABRIC_SQL_ENDPOINT)
+		annotation ONT_SqlDatabase = oag_reference
+		annotation ONT_PinnedAtUtc = 2026-10-31T00:00:00Z

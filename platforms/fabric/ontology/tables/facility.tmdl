@@ -1,0 +1,43 @@
+table facility
+	lineageTag: 559c6d31-32c2-52fb-b169-c8d3388c68f8
+
+	column facility_id
+		lineageTag: 486b9f7c-20e8-5654-947f-1f8000c1a654
+		dataType: int64
+		sourceColumn: facility_id
+
+	column facility_name
+		lineageTag: 0f5283a7-4cac-5362-be1c-1954537f7c5c
+		dataType: string
+		sourceColumn: facility_name
+
+	column facility_type
+		lineageTag: e6dd89fa-a5c6-566c-a1f6-21e01a2bdfb6
+		dataType: string
+		sourceColumn: facility_type
+
+	column field_id
+		lineageTag: 0cd9af9e-70a3-5c1a-914d-60ad174baf56
+		dataType: int64
+		sourceColumn: field_id
+
+	column facility_operator
+		lineageTag: 0593ae2d-1661-5ef9-8073-48141cb552e6
+		dataType: string
+		sourceColumn: facility_operator
+
+	partition facility = entity
+		mode: directLake
+		source
+			entityName: facility
+			schemaName: semantic
+			expressionSource: DatabaseQuery
+
+		annotation ONT_WorkspaceId = $(FABRIC_WORKSPACE_ID)
+		annotation ONT_ItemId = $(FABRIC_WAREHOUSE_ID)
+		annotation ONT_ItemKind = Warehouse
+		annotation ONT_ItemName = oag_reference
+		annotation ONT_WorkspaceName = oag-reference
+		annotation ONT_SqlEndpoint = $(FABRIC_SQL_ENDPOINT)
+		annotation ONT_SqlDatabase = oag_reference
+		annotation ONT_PinnedAtUtc = 2026-10-31T00:00:00Z

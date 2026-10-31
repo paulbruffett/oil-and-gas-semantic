@@ -1,0 +1,28 @@
+table field
+	lineageTag: 1c13ad63-53ce-5573-bee7-865f76c92ef5
+
+	column field_id
+		lineageTag: f668a865-823a-56c9-964a-e1805168ea0b
+		dataType: int64
+		sourceColumn: field_id
+
+	column field_name
+		lineageTag: 18160845-97dc-5ebb-9cbe-0f8cc6c73f68
+		dataType: string
+		sourceColumn: field_name
+
+	partition field = entity
+		mode: directLake
+		source
+			entityName: field
+			schemaName: semantic
+			expressionSource: DatabaseQuery
+
+		annotation ONT_WorkspaceId = $(FABRIC_WORKSPACE_ID)
+		annotation ONT_ItemId = $(FABRIC_WAREHOUSE_ID)
+		annotation ONT_ItemKind = Warehouse
+		annotation ONT_ItemName = oag_reference
+		annotation ONT_WorkspaceName = oag-reference
+		annotation ONT_SqlEndpoint = $(FABRIC_SQL_ENDPOINT)
+		annotation ONT_SqlDatabase = oag_reference
+		annotation ONT_PinnedAtUtc = 2026-10-31T00:00:00Z

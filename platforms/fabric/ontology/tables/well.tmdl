@@ -1,0 +1,48 @@
+table well
+	lineageTag: 851ce522-7b87-593a-97e0-49ea6bfb1cd4
+
+	column well_id
+		lineageTag: 8714888e-d32a-5471-94f7-1baadd6eae83
+		dataType: int64
+		sourceColumn: well_id
+
+	column uwi
+		lineageTag: 8ac87aa7-5ff9-510e-b723-ae108b69a399
+		dataType: string
+		sourceColumn: uwi
+
+	column well_name
+		lineageTag: 50ba5e0a-ad71-5a35-a5db-56266d479cd5
+		dataType: string
+		sourceColumn: well_name
+
+	column operator
+		lineageTag: 527664f7-abfd-56a5-be5c-5e0bec74e95d
+		dataType: string
+		sourceColumn: operator
+
+	column field_id
+		lineageTag: 4ec98405-579e-5cfa-a21e-9994c8f23a49
+		dataType: int64
+		sourceColumn: field_id
+
+	column facility_id
+		lineageTag: 801e9c97-a703-511d-98f8-8de5f587295c
+		dataType: int64
+		sourceColumn: facility_id
+
+	partition well = entity
+		mode: directLake
+		source
+			entityName: well
+			schemaName: semantic
+			expressionSource: DatabaseQuery
+
+		annotation ONT_WorkspaceId = $(FABRIC_WORKSPACE_ID)
+		annotation ONT_ItemId = $(FABRIC_WAREHOUSE_ID)
+		annotation ONT_ItemKind = Warehouse
+		annotation ONT_ItemName = oag_reference
+		annotation ONT_WorkspaceName = oag-reference
+		annotation ONT_SqlEndpoint = $(FABRIC_SQL_ENDPOINT)
+		annotation ONT_SqlDatabase = oag_reference
+		annotation ONT_PinnedAtUtc = 2026-10-31T00:00:00Z

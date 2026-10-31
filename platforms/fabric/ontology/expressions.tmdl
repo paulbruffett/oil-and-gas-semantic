@@ -1,0 +1,6 @@
+expression DatabaseQuery =
+		let
+		    database = Sql.Database("$(FABRIC_SQL_ENDPOINT)", "$(FABRIC_WAREHOUSE_ID)")
+		in
+		    database
+	lineageTag: 5b6c46cc-3fba-5bad-90ef-28757c602ed6
