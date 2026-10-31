@@ -177,6 +177,7 @@ class ProductionAgent(ResponsesAgent):
 
         results: dict[str, str] = {}          # bare tool name -> last CSV result
         field_arg = 0
+        unresolved_field: str | None = None   # a field name resolve_field could not resolve
         final_text = ""
         for _ in range(8):
             resp = llm.chat.completions.create(
@@ -195,10 +196,25 @@ class ProductionAgent(ResponsesAgent):
                 final_text = msg.content or ""
                 break
             for tc in msg.tool_calls:
-                bare = (self._tool_map.get(tc.function.name) or tc.function.name).split(".")[-1]
-                args = json.loads(tc.function.arguments or "{}")
+                # Only the offered tools run; a bad name or bad JSON goes back to the model as an error.
+                if tc.function.name not in self._tool_map:
+                    out = f"ERROR: unknown tool {tc.function.name!r}"
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
+                    continue
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    out = "ERROR: tool arguments were not valid JSON"
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
+                    continue
+                bare = self._tool_map[tc.function.name].split(".")[-1]
                 out = self._exec_tool(tc.function.name, args)
+                results.pop(bare, None)  # re-insert so dict order is call order
                 results[bare] = out
+                if bare == "resolve_field":
+                    # A non-integer result (NULL or error) means the named field is unknown.
+                    resolved = str(out or "").strip()
+                    unresolved_field = None if resolved.lstrip("-").isdigit() else str(args.get("name", ""))
                 if bare == "surveillance_below_expected":
                     try:
                         field_arg = int(args.get("arg_field_id", 0) or 0)
@@ -206,7 +222,7 @@ class ProductionAgent(ResponsesAgent):
                         field_arg = 0
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": str(out)})
 
-        submission = self._build_submission(results, field_arg, final_text)
+        submission = self._build_submission(results, field_arg, final_text, unresolved_field)
         item = self.create_text_output_item(text=json.dumps(submission), id=str(uuid.uuid4()))
         return ResponsesAgentResponse(output=[item], custom_outputs={"answer_submission": submission})
 
@@ -219,7 +235,8 @@ class ProductionAgent(ResponsesAgent):
             out.append(row)
         return out
 
-    def _build_submission(self, results: dict[str, str], field_arg: int, final_text: str) -> dict[str, Any]:
+    def _build_submission(self, results: dict[str, str], field_arg: int, final_text: str,
+                          unresolved_field: str | None = None) -> dict[str, Any]:
         # Which theme? The last theme-related tool the model called (primary or secondary). If it called
         # none, DO NOT fabricate a surveillance answer with the wrong question_id -- abstain honestly
         # (also the correct outcome for an adversarial clarification that calls no governed tool).
@@ -233,6 +250,17 @@ class ProductionAgent(ResponsesAgent):
                 "provenance": {"metrics": [], "dimensions": [], "filters": [], "entities": []},
             }
         t = THEMES[theme_key]
+
+        # A named field that did not resolve: ask, never fall back to the whole fleet (same as the
+        # Snowflake port, enforced in code rather than only by the prompt).
+        if theme_key == "surveillance_below_expected" and field_arg <= 0 and unresolved_field is not None:
+            return {
+                "question_id": t["question_id"],
+                "answer": f"The field '{unresolved_field}' is not known in this dataset; please clarify.",
+                "key_values": {t["set_key"]: []},
+                "behavior": "clarification-requested",
+                "provenance": {"metrics": t["metrics"], "dimensions": [], "filters": [], "entities": []},
+            }
 
         # Re-execute the primary tool in code for an authoritative, deterministic result set -- so
         # key_values does not depend on the LLM's captured output, and a transient tool ERROR cannot

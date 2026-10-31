@@ -220,6 +220,8 @@ for item in '{"displayName":"oag_reference","type":"Warehouse"}' '{"displayName"
 done
 export FABRIC_LAKEHOUSE_ID=$(az rest --resource https://api.fabric.microsoft.com -u "https://api.fabric.microsoft.com/v1/workspaces/$FABRIC_WORKSPACE_ID/lakehouses" --query "value[?displayName=='oag_staging'].id" -o tsv)
 export FABRIC_SQL_ENDPOINT=$(az rest --resource https://api.fabric.microsoft.com -u "https://api.fabric.microsoft.com/v1/workspaces/$FABRIC_WORKSPACE_ID/warehouses" --query "value[?displayName=='oag_reference'].properties.connectionString" -o tsv)
+# Creating a Warehouse is asynchronous: if this is empty, wait a minute and re-run the line above.
+echo "SQL endpoint: ${FABRIC_SQL_ENDPOINT:-<empty: Warehouse still provisioning>}"
 
 # 2. Stage the Parquet in the Lakehouse, then build the canonical tables
 RUN="uv run --no-project --with-requirements requirements.txt python"
@@ -246,7 +248,8 @@ $RUN deploy.py ontology                     # creates or updates oag_reference_o
 `verify_knowledge.py` should print `MATCH` for all seven checks. Don't edit the `lineageTag` lines in
 `ontology/`: the service keys state on them (see Findings above).
 
-`02_load_canonical.sql` closes with a row-count check: expect `8208, 8208, 21, 18, 3, 6, 282, 251, 18`.
+`02_load_canonical.sql` closes with a row-count check (`8208, 8208, 21, 18, 3, 6, 282, 251, 18`) that
+fails the run if any count differs.
 Value checksums verified on this build (Fabric vs the local Parquet via DuckDB): `SUM(OIL_VOLUME)`
 70204149.21, `SUM(GAS_VOLUME)` 66145182.84 and date range 2024-01-01..2025-03-31 on `well_vol_daily`;
 `SUM(VOLUME)` 80342782.449 on `product_volume_summary`; `SUM(DURATION_HOURS)` 4327.98 on

@@ -12,7 +12,6 @@ Env: FABRIC_WORKSPACE_ID; FABRIC_SEMANTIC_MODEL (default oag_reference_model); O
 """
 
 import json
-import math
 import os
 import sys
 import urllib.error
@@ -118,9 +117,11 @@ SUMMARIZECOLUMNS(field[field_id],
 
 
 def close(a, b) -> bool:
+    """Same tolerance as the shared gold check (oag_semantic.grading): relative 1e-6, floored at 1.0."""
     if a is None or b is None:
         return a is None and b is None
-    return math.isclose(float(a), float(b), rel_tol=1e-6, abs_tol=1e-9)
+    a, b = float(a), float(b)
+    return abs(a - b) <= 1e-6 * max(abs(a), abs(b), 1.0)
 
 
 failures = 0
