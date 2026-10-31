@@ -95,21 +95,6 @@ JOIN canonical.reporting_entity re
 WHERE a.PRODUCT = 'Oil';
 GO
 
--- Calendar: every date any fact refers to, with the month bucket and the day index (days since the
--- dataset start) that the annualized-decline KPI averages.
-DROP TABLE IF EXISTS semantic.calendar;
-GO
-CREATE TABLE semantic.calendar AS
-SELECT d AS [date], CAST(FORMAT(d, 'yyyy-MM') AS VARCHAR(7)) AS [month],
-       DATEDIFF(day, CAST('2024-01-01' AS DATE), d) AS day_index   -- params.start_date
-FROM (
-  SELECT volume_date AS d FROM semantic.well_volume
-  UNION SELECT forecast_date FROM semantic.forecast_oil
-  UNION SELECT event_date FROM semantic.downtime
-  UNION SELECT test_date FROM semantic.well_test
-) AS dates;
-GO
-
 -- Dataset parameters: the frozen windows and thresholds (one row, typed) that the DAX measures read, so
 -- no window is hard-coded in a measure. Values are the reference config's derived windows (the same set
 -- as the Snowflake DATASET_PARAM table).
@@ -132,6 +117,35 @@ SELECT CAST('12a110eecfe2' AS VARCHAR(20)) AS config_hash,
        CAST(1 AS INT) AS watchlist_days_down_threshold,
        CAST('2025-03-01' AS DATE) AS rollup_curr_start,          CAST('2025-03-31' AS DATE) AS rollup_curr_end,
        CAST('2025-02-01' AS DATE) AS rollup_prior_start,         CAST('2025-02-28' AS DATE) AS rollup_prior_end;
+GO
+
+-- Calendar: one row per day, with no gaps, from the earliest to the latest date any fact refers to (DAX
+-- time intelligence such as DATEADD needs a contiguous date table). Carries the month bucket and the day
+-- index (days since params.start_date) that the annualized-decline KPI averages. The digits cross join
+-- generates up to 10,000 days.
+DROP TABLE IF EXISTS semantic.calendar;
+GO
+CREATE TABLE semantic.calendar AS
+SELECT DATEADD(day, n.n, b.lo) AS [date],
+       CAST(FORMAT(DATEADD(day, n.n, b.lo), 'yyyy-MM') AS VARCHAR(7)) AS [month],
+       DATEDIFF(day, p.start_date, DATEADD(day, n.n, b.lo)) AS day_index
+FROM (
+  SELECT MIN(d) AS lo, MAX(d) AS hi FROM (
+    SELECT volume_date AS d FROM semantic.well_volume
+    UNION SELECT forecast_date FROM semantic.forecast_oil
+    UNION SELECT event_date FROM semantic.downtime
+    UNION SELECT test_date FROM semantic.well_test
+  ) AS dates
+) AS b
+CROSS JOIN semantic.params AS p
+CROSS JOIN (
+  SELECT a.n + 10 * t.n + 100 * h.n + 1000 * k.n AS n
+  FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) AS a(n)
+  CROSS JOIN (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) AS t(n)
+  CROSS JOIN (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) AS h(n)
+  CROSS JOIN (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) AS k(n)
+) AS n
+WHERE n.n <= DATEDIFF(day, b.lo, b.hi);
 GO
 
 SELECT 'field' AS t, COUNT(*) AS n FROM semantic.field UNION ALL SELECT 'facility', COUNT(*) FROM semantic.facility

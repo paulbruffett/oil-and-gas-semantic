@@ -99,21 +99,32 @@ def main() -> None:
         if status == 202:
             wait(headers)
         _, _, listing = call("GET", f"{FABRIC}/workspaces/{workspace}/semanticModels")
-        model_id = next(m["id"] for m in listing["value"] if m["displayName"] == name)
+        model_id = next((m["id"] for m in listing["value"] if m["displayName"] == name), None)
+        if model_id is None:
+            sys.exit(f"created {name}, but it isn't listed yet; re-run deploy.py to update and refresh it")
         print(f"created {name} ({model_id})")
 
-    # Refresh (Direct Lake framing) and wait for it.
+    # Refresh (Direct Lake framing) and wait for it. Note the newest refresh before starting, so the
+    # poll can't mistake an earlier completed refresh for this one.
     pbi = "https://analysis.windows.net/powerbi/api/.default"
+    history = f"{POWERBI}/groups/{workspace}/datasets/{model_id}/refreshes?$top=1"
+
+    def latest() -> dict | None:
+        rows = call("GET", history, scope=pbi)[2].get("value", [])
+        return rows[0] if rows else None
+
+    before = (latest() or {}).get("requestId")
     call("POST", f"{POWERBI}/groups/{workspace}/datasets/{model_id}/refreshes", {"type": "full"}, scope=pbi)
     while True:
         time.sleep(5)
-        _, _, body = call("GET", f"{POWERBI}/groups/{workspace}/datasets/{model_id}/refreshes?$top=1", scope=pbi)
-        latest = body["value"][0]
-        if latest["status"] == "Completed":
+        run = latest()
+        if run is None or run.get("requestId") == before:
+            continue  # this refresh isn't listed yet
+        if run["status"] == "Completed":
             print("refresh completed")
             return
-        if latest["status"] == "Failed":
-            sys.exit(f"refresh failed: {latest.get('serviceExceptionJson')}")
+        if run["status"] in ("Failed", "Cancelled", "Disabled"):
+            sys.exit(f"refresh {run['status'].lower()}: {run.get('serviceExceptionJson')}")
 
 
 if __name__ == "__main__":
