@@ -7,8 +7,9 @@ filled from environment variables, so the Warehouse endpoint and id stay out of 
 
     python deploy.py                 # semantic-model/ -> oag_reference_model
     python deploy.py ontology        # ontology/       -> oag_reference_ontology
+    python deploy.py data-agent      # data-agent/     -> oag_reference_data_agent
 
-Env: FABRIC_WORKSPACE_ID, FABRIC_SQL_ENDPOINT, FABRIC_WAREHOUSE_ID.
+Env: FABRIC_WORKSPACE_ID, FABRIC_SQL_ENDPOINT, FABRIC_WAREHOUSE_ID; FABRIC_SEMANTIC_MODEL_ID (data agent).
 """
 
 import base64
@@ -26,13 +27,14 @@ from azure.identity import DefaultAzureCredential
 FABRIC = "https://api.fabric.microsoft.com/v1"
 POWERBI = "https://api.powerbi.com/v1.0/myorg"
 workspace = os.environ["FABRIC_WORKSPACE_ID"]
-# kind -> (source folder, item display name, REST collection, platform file, refresh after deploy)
+# kind -> (source folder, item display name, REST collection, definition files, refresh after deploy)
 ITEMS = {
-    "semantic-model": ("semantic-model", "oag_reference_model", "semanticModels", "definition.pbism", True),
-    "ontology": ("ontology", "oag_reference_ontology", "ontologies", ".platform", False),
+    "semantic-model": ("semantic-model", "oag_reference_model", "semanticModels", ["definition.pbism", "**/*.tmdl"], True),
+    "ontology": ("ontology", "oag_reference_ontology", "ontologies", [".platform", "**/*.tmdl"], False),
+    "data-agent": ("data-agent", "oag_reference_data_agent", "dataAgents", ["**/*.json"], False),
 }
 kind = sys.argv[1] if len(sys.argv) > 1 else "semantic-model"
-folder, name, collection, platform_file, refresh = ITEMS[kind]
+folder, name, collection, patterns, refresh = ITEMS[kind]
 root = Path(__file__).parent / folder
 credential = DefaultAzureCredential()
 
@@ -75,7 +77,7 @@ def substitute(text: str) -> str:
 
 
 def parts() -> list[dict]:
-    files = [root / platform_file, *sorted(root.rglob("*.tmdl"))]
+    files = [f for pattern in patterns for f in sorted(root.glob(pattern))]
     return [
         {
             "path": f.relative_to(root).as_posix(),

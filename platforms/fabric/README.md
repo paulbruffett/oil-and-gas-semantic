@@ -3,7 +3,8 @@
 The Fabric reference build (DESIGN.md §7, ADR 0035): the reference dataset (`configs/reference.yaml`,
 `config_hash 12a110eecfe2`) loaded into a Fabric **Warehouse** as the canonical OSDU tables, and the
 OSI semantic model as a **Direct Lake** Fabric semantic model with DAX measures, and the knowledge layer
-as a **Fabric IQ ontology** (preview); later slices add an agent and the gold check. It follows `platforms/databricks/` and `platforms/snowflake/` and does
+as a **Fabric IQ ontology** (preview), and agents that answer the six use cases: a custom agent graded
+against gold, and a Fabric data agent as the native comparison point. It follows `platforms/databricks/` and `platforms/snowflake/` and does
 not edit the foundation.
 
 | Slice | Status |
@@ -11,7 +12,7 @@ not edit the foundation.
 | 1. Canonical load (Warehouse) | done: 9 tables, row counts and value checksums match the Parquet |
 | 2. Semantic model (DAX) | done: Direct Lake model; every OSI metric plus all eight compile-assembled KPIs are DAX measures; all six use cases match gold from measures alone |
 | 3. Knowledge layer (Fabric IQ ontology) | done: entities, relationships, aliases and business terms; resolution, rollups and terms match the reference LPG over the ontology's MCP endpoint |
-| 4. Agent (custom + Fabric Data Agent) | not started |
+| 4. Agent (custom + Fabric data agent) | custom agent done: **6/6 gold** ([`agent/`](agent/README.md)); data agent deployed, evaluation blocked until the workspace is on a paid F2+ capacity |
 | 5. Gold check | not started |
 
 > **⚠ Capacity: the trial ends around 2026-11-08.** This build runs on an FTL64 trial capacity. Before
@@ -44,7 +45,8 @@ workspace oag-reference            Fabric workspace on an F-SKU or trial capacit
     └── knowledge                  SCHEMA     tables the ontology binds to beside semantic.well/field/facility
         └── operator · field_alias · well_alias · business_term             (3 · 6 · 36 · 5)
 ├── oag_reference_model            SEMANTIC MODEL  Direct Lake over the semantic schema; TMDL in semantic-model/
-└── oag_reference_ontology         ONTOLOGY (preview)  entities + relationships + rule; TMDL in ontology/
+├── oag_reference_ontology         ONTOLOGY (preview)  entities + relationships + rule; TMDL in ontology/
+└── oag_reference_data_agent       DATA AGENT (preview)  over the semantic model; JSON definition in data-agent/
     └── …_graph_<id> · …_eh_<id>   GRAPH MODEL + EVENTHOUSE + KQL DATABASE, created and deleted with the ontology
 ```
 
@@ -243,7 +245,20 @@ $RUN deploy.py ontology                     # creates or updates oag_reference_o
 (cd ../.. && uv run --with azure-identity python platforms/fabric/verify_knowledge.py)   # several minutes: one ask_ontology call per check
 ```
 
-`verify_knowledge.py` should print `MATCH` for all seven checks. Don't edit the `lineageTag` lines in
+`verify_knowledge.py` should print `MATCH` for all seven checks.
+
+```bash
+# 5. Agents. The custom agent needs a Foundry deployment (gpt-6-luna) and keyless access to it
+#    ("Cognitive Services OpenAI User" on the resource); the endpoint stays in your environment.
+export OAG_FOUNDRY_ENDPOINT=https://<your-foundry-resource>.cognitiveservices.azure.com/openai/v1
+(cd ../.. && uv run --with azure-identity python platforms/fabric/agent/test_local.py)      # six questions -> gold check 6/6
+export FABRIC_SEMANTIC_MODEL_ID=$(az rest --resource https://api.fabric.microsoft.com -u "https://api.fabric.microsoft.com/v1/workspaces/$FABRIC_WORKSPACE_ID/semanticModels" --query "value[?displayName=='oag_reference_model'].id" -o tsv)
+$RUN deploy.py data-agent                   # creates or updates and publishes oag_reference_data_agent
+(cd ../.. && uv run --with azure-identity python platforms/fabric/agent/eval_data_agent.py) # needs a paid F2+ capacity
+```
+
+`test_local.py` should print `gold check: 6/6 (100%)` plus two `PASS` lines (field-scoped question,
+by-operator rollup). Don't edit the `lineageTag` lines in
 `ontology/`: the service keys state on them (see Findings above).
 
 `02_load_canonical.sql` closes with a row-count check: expect `8208, 8208, 21, 18, 3, 6, 282, 251, 18`.

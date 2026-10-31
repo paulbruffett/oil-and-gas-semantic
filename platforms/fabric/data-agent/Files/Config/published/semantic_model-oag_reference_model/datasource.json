@@ -1,0 +1,61 @@
+{
+  "$schema": "1.0.0",
+  "artifactId": "$(FABRIC_SEMANTIC_MODEL_ID)",
+  "workspaceId": "$(FABRIC_WORKSPACE_ID)",
+  "displayName": "oag_reference_model",
+  "type": "semantic_model",
+  "userDescription": "Direct Lake semantic model: OSI metrics and per-use-case measures over the canonical OSDU tables.",
+  "dataSourceInstructions": "Use the per-use-case measures; they already apply the governed windows and thresholds.",
+  "elements": [
+    {
+      "display_name": "well",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "field",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "facility",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "calendar",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "params",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "well_volume",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "forecast_oil",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "downtime",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "well_test",
+      "type": "semantic_model.table",
+      "is_selected": true
+    },
+    {
+      "display_name": "allocation",
+      "type": "semantic_model.table",
+      "is_selected": true
+    }
+  ]
+}
