@@ -29,9 +29,10 @@ import urllib.request
 from pathlib import Path
 
 import pyarrow.parquet as pq
+import yaml
 from azure.identity import DefaultAzureCredential
 
-from oag_semantic.lpg import load_lpg
+from oag_semantic.lpg import VOCABULARY_PATH, load_lpg
 
 FABRIC = "https://api.fabric.microsoft.com/v1"
 workspace = os.environ["FABRIC_WORKSPACE_ID"]
@@ -54,7 +55,9 @@ def post(url: str, body: dict | None = None, method: str = "POST") -> dict:
 
 
 items = post(f"{FABRIC}/workspaces/{workspace}/items", method="GET")["value"]
-ontology = next(i for i in items if i["type"] == "Ontology" and i["displayName"] == ontology_name)
+ontology = next((i for i in items if i["type"] == "Ontology" and i["displayName"] == ontology_name), None)
+if ontology is None:
+    sys.exit(f"ontology {ontology_name!r} not found in the workspace; run `deploy.py ontology` first")
 mcp_url = f"{FABRIC}/mcp/dataPlane/workspaces/{workspace}/items/{ontology['id']}/ontologyEndpoint"
 post(mcp_url, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
                "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "oag-verify", "version": "1"}}})
@@ -76,7 +79,20 @@ def ask(request: str) -> list[dict]:
 
 
 lpg = load_lpg(dataset_dir)
+# The synonyms and phrases to probe come from the vocabulary itself, so a new entry there is checked too.
+vocabulary = yaml.safe_load(VOCABULARY_PATH.read_text())
+field_synonyms = [s.lower() for s in (vocabulary.get("field_synonyms") or {})]
+phrases = sorted({s.lower() for t in vocabulary["terms"].values() for s in t.get("synonyms", [])})
 failures = []
+
+
+def as_map(rows: list[dict], key: str, value: str, cast=int) -> dict:
+    """Rows -> {key: value}. A key that maps to two different values is kept as a set, so the
+    comparison with the (single-valued) reference fails instead of hiding the ambiguity."""
+    seen: dict[str, set] = {}
+    for r in rows:
+        seen.setdefault(r[key].lower(), set()).add(cast(r[value]))
+    return {k: next(iter(v)) if len(v) == 1 else v for k, v in seen.items()}
 
 
 def check(name: str, got, want) -> None:
@@ -92,9 +108,9 @@ TABLE = " Return every row as one markdown table with exactly these columns and 
 # 1. Entity resolution ------------------------------------------------------------------------------
 rows = ask("List every FieldAlias entity instance with the field_id of the Field it is linked to through "
            "the 'Alias Of Field' relationship." + TABLE + " Columns: alias, field_id.")
-probes = sorted({f.field_name.lower() for f in lpg.fields.values()} | {"volve field", "the volve", "sleipner ost"})
+probes = sorted({f.field_name.lower() for f in lpg.fields.values()} | set(field_synonyms))
 check("field resolution: every alias (names + vocabulary synonyms) -> field",
-      {r["alias"].lower(): int(r["field_id"]) for r in rows}, {p: lpg.resolve_field(p).field_id for p in probes})
+      as_map(rows, "alias", "field_id"), {p: lpg.resolve_field(p).field_id for p in probes})
 
 rows = ask("List every WellAlias entity instance with the well_id of the Well it is linked to through the "
            "'Alias Of Well' relationship." + TABLE + " Columns: alias, well_id.")
@@ -103,7 +119,7 @@ for w in lpg.wells.values():
     want[w.uwi.lower()] = w.well_id
 for wid, name in zip(*[pq.read_table(dataset_dir / "canonical" / "well.parquet").to_pydict()[c] for c in ("WELL_ID", "WELL_NAME")]):
     want[name.lower()] = wid
-check("well resolution: every alias (UWI + well name) -> well", {r["alias"].lower(): int(r["well_id"]) for r in rows}, want)
+check("well resolution: every alias (UWI + well name) -> well", as_map(rows, "alias", "well_id"), want)
 
 rows = ask("Which Well does the name 'NO 15/9-F-1' resolve to? Match it against WellAlias.alias in lower case "
            "and follow 'Alias Of Well'." + TABLE + " Columns: well_id, uwi, field_id.")
@@ -125,7 +141,6 @@ check("facility -> field", {int(r["facility_id"]): int(r["field_id"]) for r in r
 
 # 3. Business vocabulary ----------------------------------------------------------------------------
 rows = ask("List every BusinessTerm entity instance." + TABLE + " Columns: phrase, metric, comparison, threshold_ref.")
-phrases = ["below expected", "under-performing", "underperforming", "below forecast", "below plan"]
 check("business terms -> governed metric",
       {r["phrase"].lower(): (r["metric"], r["comparison"], r["threshold_ref"]) for r in rows},
       {p: (lpg.resolve_term(p).metric, lpg.resolve_term(p).comparison, lpg.resolve_term(p).threshold_ref) for p in phrases})

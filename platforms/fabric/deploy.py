@@ -8,7 +8,9 @@ filled from environment variables, so the Warehouse endpoint and id stay out of 
     python deploy.py                 # semantic-model/ -> oag_reference_model
     python deploy.py ontology        # ontology/       -> oag_reference_ontology
 
-Env: FABRIC_WORKSPACE_ID, FABRIC_SQL_ENDPOINT, FABRIC_WAREHOUSE_ID.
+Env: FABRIC_WORKSPACE_ID, FABRIC_SQL_ENDPOINT, FABRIC_WAREHOUSE_ID; FABRIC_SEMANTIC_MODEL (default
+oag_reference_model) and FABRIC_ONTOLOGY (default oag_reference_ontology), the names the verify scripts
+also read.
 """
 
 import base64
@@ -28,10 +30,14 @@ POWERBI = "https://api.powerbi.com/v1.0/myorg"
 workspace = os.environ["FABRIC_WORKSPACE_ID"]
 # kind -> (source folder, item display name, REST collection, platform file, refresh after deploy)
 ITEMS = {
-    "semantic-model": ("semantic-model", "oag_reference_model", "semanticModels", "definition.pbism", True),
-    "ontology": ("ontology", "oag_reference_ontology", "ontologies", ".platform", False),
+    "semantic-model": ("semantic-model", os.environ.get("FABRIC_SEMANTIC_MODEL", "oag_reference_model"),
+                       "semanticModels", "definition.pbism", True),
+    "ontology": ("ontology", os.environ.get("FABRIC_ONTOLOGY", "oag_reference_ontology"),
+                 "ontologies", ".platform", False),
 }
 kind = sys.argv[1] if len(sys.argv) > 1 else "semantic-model"
+if kind not in ITEMS:
+    sys.exit(f"unknown item {kind!r}; use one of: {', '.join(ITEMS)}")
 folder, name, collection, platform_file, refresh = ITEMS[kind]
 root = Path(__file__).parent / folder
 credential = DefaultAzureCredential()
