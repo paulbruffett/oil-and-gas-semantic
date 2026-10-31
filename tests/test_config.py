@@ -108,7 +108,7 @@ def test_breakthrough_anchor_well_must_be_structural_when_enabled():
 
 
 def test_breakthrough_anchor_must_differ_from_trap_well():
-    """The breakthrough anchor and the adversarial trap are structurally distinct seeded populations
+    """The breakthrough anchor and the data-quality scenario well are structurally distinct seeded populations
     (ADR 0024/0032), so anchoring the scenario on the trap well is rejected."""
     with pytest.raises(ValueError, match="trap_well_id"):
         Config(breakthrough={"fraction": 0.2, "anchor_well_id": 1})  # default trap_well_id is 1

@@ -1,5 +1,7 @@
 # Frozen contest config: configs/contest.yaml is the fork-tag dataset config (applies 0032/0033, closes #44)
 
+> **Status: amended by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). `configs/contest.yaml` is now `configs/reference.yaml`, the reference dataset every platform build loads (`config_hash 12a110eecfe2`, unchanged). The fork-tag and held-out-seed framing is superseded.
+
 **Context.** The Volve-faithful default config leaves watering-out and GOR-change structurally dark and
 the decline flag noise-driven (#44/#35): a fork tag cut against it would ship a contest dataset that
 cannot discriminate on those dimensions. The scenario knobs now exist (ADR 0032/0033) but no config

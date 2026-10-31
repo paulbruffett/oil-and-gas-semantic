@@ -146,8 +146,7 @@ DEFAULT_ADVERSARIAL = {
 # shipped calibration stays honestly Volve-faithful (ADR 0023) and the default dataset is unchanged.
 # When enabled, the **anchor well** is pinned into the minority with the earliest onset and maximal
 # rises (the ADR 0024 worst-actor pattern; its draws still run, so every other well is unaffected),
-# guaranteeing non-empty watering-out/GOR-change gold on any seed -- required for the held-out
-# evaluation seed (ADR 0016). On a window too short for the pinned rises to clear the thresholds,
+# guaranteeing non-empty watering-out/GOR-change gold on any seed. On a window too short for the pinned rises to clear the thresholds,
 # fewer (or no) wells flag -- a domain effect, like the overlapping watchlist windows (ADR 0022).
 DEFAULT_BREAKTHROUGH = {
     "fraction": 0.0,                 # share of wells that suffer a breakthrough (0.0 = off)

@@ -9,7 +9,7 @@ emitted answer-submission against the shell grading contract (set_key + id_key +
     OAG_GOLD_DIR=/path/to/gold python test_local.py            # gold dir (default ../../../data/frozen/gold)
 
 The frozen gold is regenerated, not vendored (docs/porting.md): if data/frozen/gold is absent, run
-`uv run oag-generate -c configs/contest.yaml -o data/frozen` (config_hash 12a110eecfe2) first, or point
+`uv run oag-generate -c configs/reference.yaml -o data/frozen` (config_hash 12a110eecfe2) first, or point
 OAG_GOLD_DIR at an existing gold directory.
 """
 

@@ -88,8 +88,8 @@ The generator draws each parameter ~Uniform(min, max) per well. Ranges bracket t
    config-gated minority of wells gets a modeled post-onset watercut/GOR acceleration. The watchlist
    **engineering fixture** (`tests/conftest.py::watchlist_config`) turns that knob on (default off),
    exercising the exception at the shipped default thresholds without touching the calibrated
-   distributions. On the default config the watchlist GOR dimension stays quiet; the frozen contest
-   config surfaces it via the same knob (issue #44). The two-population performance model (ADR 0009) is
+   distributions. On the default config the watchlist GOR dimension stays quiet; the frozen reference
+   config (`configs/reference.yaml`) surfaces it via the same knob (issue #44). The two-population performance model (ADR 0009) is
    similarly a synthetic knob left as a documented default per issue #13.
 
 ## Determinism note

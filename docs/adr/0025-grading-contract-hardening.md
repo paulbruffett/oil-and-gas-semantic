@@ -1,5 +1,7 @@
 # Grading-contract hardening: unanswered gradable questions fail, the graded answer shape is catalog-authored, submissions are schema-validated at grading time
 
+> **Status: amended by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The grading rules here (catalog-authored answer shapes, committed worked examples, schema validation, unanswered questions fail) now live in the gold check, `oag_semantic.grading`. The contest framing is superseded.
+
 **Context.** The contest-readiness review (#48) found three dimension-1 integrity gaps: a catalog
 question with no submission was *skipped* rather than failed (so `pass_rate = n_correct / n_graded`
 let a contestant score 100% by submitting only their surest answers), the graded `key_values` shape

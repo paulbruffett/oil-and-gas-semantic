@@ -25,10 +25,10 @@ class Provenance:
 class AnswerSubmission:
     """NL answer + key values + provenance for a single question.
 
-    ``behavior`` (ADR 0013) is what the implementation did: ``answered`` for straight questions, or
-    ``assumptions-stated`` / ``clarification-requested`` / ``refused-data-quality`` for the
-    adversarial tier, where gold encodes the *expected* behavior. The allowed values are the
-    ``behavior`` enum in ``spec/questions/answer_submission.schema.json``.
+    ``behavior`` is what the implementation did: ``answered`` (every catalog question expects this),
+    or ``assumptions-stated`` / ``clarification-requested`` / ``refused-data-quality`` when it
+    declined or qualified its answer. The allowed values are the ``behavior`` enum in
+    ``spec/questions/answer_submission.schema.json``.
     """
 
     question_id: str

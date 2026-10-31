@@ -1,5 +1,7 @@
 # Sealed change-request custody uses a deterministic sha256 file-manifest digest, not a tar-archive hash (refines 0015)
 
+> **Status: superseded by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The coding-assistant contest this decision served was dropped; kept for history.
+
 **Context.** ADR 0015 clause (3) fixes the sealed change-request set's custody as "the archive's
 sha256 committed publicly pre-tag." A literal tar/zip archive hash is machine-dependent — member
 ordering, mtimes, uid/gid, and (for `.gz`) a compression timestamp all bleed into the bytes — so the

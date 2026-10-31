@@ -834,7 +834,7 @@ def test_breakthrough_fires_all_watchlist_signals_at_default_thresholds(watchlis
 @pytest.mark.parametrize("seed", [2, 7, 99, 123])
 def test_breakthrough_anchor_guarantees_signals_on_any_seed(tmp_path, seed):
     """The pinned anchor well is watering-out AND GOR-changed on every seed (the ADR 0024 worst-actor
-    pattern), so a frozen or held-out-seed dataset can never have empty gold on these dimensions.
+    pattern), so a dataset on any seed can never have empty gold on these dimensions.
     Deliberately a 6-month horizon -- half the fixture's -- because the anchor's watercut base + rise
     are pinned along with the scenario parameters (ADR 0032); the guarantee must not depend on a
     lucky calibration draw or a long window."""

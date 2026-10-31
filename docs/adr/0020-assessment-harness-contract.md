@@ -1,5 +1,7 @@
 # Axis-B assessment-harness structure + submission/scorecard contract
 
+> **Status: superseded by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The coding-assistant contest this decision served was dropped; kept for history.
+
 **Context.** Issue #9 builds the harness that scores competing implementations on the seven-dimension
 Axis-B rubric (DESIGN §7), where **every dimension has an objective anchor** and the multi-LLM panel
 is the tiebreaker (ADR 0015). The harness needs a home distinct from the generator (data seam) and the

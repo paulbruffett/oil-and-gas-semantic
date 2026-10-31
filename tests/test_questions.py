@@ -63,8 +63,8 @@ def test_every_question_declares_its_grading_shape(catalog):
 
 def test_question_id_equals_gold_id(catalog):
     # Submissions and gold are both keyed on gold_id, but the catalog identifies questions by id.
-    # Until the harness joins id -> gold_id explicitly, the two must be equal or a correct answer
-    # would be keyed where the grader can't find it. Pin the invariant the code relies on.
+    # Until the gold check joins id -> gold_id explicitly, the two must be equal or a correct answer
+    # would be keyed where the gold check can't find it. Pin the invariant the code relies on.
     for q in catalog.questions():
         assert q.id == q.gold_id, f"{q.id!r}: id must equal gold_id (see questions.question_id)"
 

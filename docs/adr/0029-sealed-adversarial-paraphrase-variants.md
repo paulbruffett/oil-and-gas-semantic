@@ -1,5 +1,7 @@
 # Adversarial phrasings are defended by sealed, config-templated paraphrase variants released only in the eval bundle (extends 0024, applies 0016 to behaviors)
 
+> **Status: superseded by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The coding-assistant contest this decision served was dropped; kept for history.
+
 **Context.** The held-out evaluation seed (ADR 0016) keeps the adversarial tier's *values* unseen, but
 the catalog phrasings, tiers, and the trap-well mention are public in every fork, and the trap well is
 structurally seed-invariant by design (ADR 0024). So a phrasing-matcher ("text names the trap well +

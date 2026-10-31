@@ -1,5 +1,7 @@
 # Adversarial question tier: compound / ambiguous / trap questions, behavior-graded
 
+> **Status: partly superseded by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The adversarial question tier was removed. The seeded well-1 data-quality defect it relied on is kept as a documented data-quality scenario, so the reference dataset is unchanged.
+
 **Context.** The Axis-B discrimination scope (ADR 0013, DESIGN §5 story 36, issue #22) calls for an
 **adversarial question tier** where frontier agents actually diverge: **compound** questions spanning
 ≥2 governed metrics, **ambiguous** questions whose right move is to ask before answering, and **trap**

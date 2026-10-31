@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/paulbruffett/oil-and-gas-semantic/spec/questions/answer_submission.schema.json",
   "title": "Answer submission",
-  "description": "The minimal structured output every implementation returns for a catalog question (ADR 0005, DESIGN.md §6.4): a natural-language answer + key numeric value(s) + optional provenance. `behavior` lets the adversarial tier (ADR 0013) encode expected behavior -- and a submission report its actual behavior -- so ambiguous/trap questions grade as objectively as straight ones. This schema governs both submitted answers and the behavior-encoding of gold answers.",
+  "description": "The minimal structured output every implementation returns for a catalog question (ADR 0005, DESIGN.md §6.4): a natural-language answer + key numeric value(s) + optional provenance. `behavior` reports what the implementation did (every catalog question expects `answered`).",
   "type": "object",
   "required": ["question_id", "answer", "key_values"],
   "additionalProperties": false,
@@ -29,7 +29,7 @@
         "refused-data-quality"
       ],
       "default": "answered",
-      "description": "What the implementation did. Straight questions expect `answered`; the adversarial tier gold-encodes the expected value here."
+      "description": "What the implementation did. Every catalog question expects `answered`; the other values let an implementation report that it qualified its answer, asked for clarification, or declined over data quality."
     },
     "provenance": {
       "type": "object",

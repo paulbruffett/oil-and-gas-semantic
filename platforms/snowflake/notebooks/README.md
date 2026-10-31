@@ -24,7 +24,7 @@ jupyter lab platforms/snowflake/notebooks/snowflake_walkthrough.ipynb
 Run the cells top-to-bottom. The connection parameters are read from the `snow` CLI's `config.toml`
 exactly as `platforms/snowflake/agent/agent.py` does — **no credentials live in the repo**. Prerequisite: the
 `OAG_FABLE` database is stood up (`platforms/snowflake/README.md`, `sql/01`–`08`) and the frozen gold is present in
-`data/frozen/gold/` (`uv run oag-generate -c configs/contest.yaml -o data/frozen`, config_hash
+`data/frozen/gold/` (`uv run oag-generate -c configs/reference.yaml -o data/frozen`, config_hash
 `12a110eecfe2`).
 
 The notebook is read-only apart from warehouse compute and a couple of Cortex calls (the agent's router
