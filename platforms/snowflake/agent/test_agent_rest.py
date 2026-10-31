@@ -29,7 +29,7 @@ import tomllib
 import urllib.request
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 GOLD_DIR = Path(os.environ.get("OAG_GOLD_DIR", REPO / "data" / "frozen" / "gold"))
 CONNECTION = os.environ.get("OAG_SNOWFLAKE_CONNECTION", "proton")
 _CONFIG = os.path.expanduser("~/Library/Application Support/snowflake/config.toml")

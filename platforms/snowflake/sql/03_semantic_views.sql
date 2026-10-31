@@ -1,10 +1,10 @@
 -- OSI governed metrics as Snowflake Semantic Views (DESIGN §4 layer 3, ADR 0008/0011, story 12).
--- Snowflake port of databricks/sql/03_metric_views.sql (locus 2, PORTING.md). Platform-native
+-- Snowflake port of platforms/databricks/sql/03_metric_views.sql (locus 2, docs/porting.md). Platform-native
 -- translation of semantic/metrics.yaml + semantic/semantic_models.yaml. Every measure/dimension expr
 -- maps onto a canonical OSDU PDM column (ADR 0010). Query with the SEMANTIC_VIEW() table function:
 --   SELECT * FROM SEMANTIC_VIEW(<view> DIMENSIONS <dims> METRICS <metrics> [WHERE <row filter>]);
 --
--- Databricks -> Snowflake seam substitutions (see snowflake/README.md feature table):
+-- Databricks -> Snowflake seam substitutions (see platforms/snowflake/README.md feature table):
 --   * Metric View `source:` accepts arbitrary inline SQL (UNION/join/filter). A Snowflake Semantic
 --     View logical table must reference a TABLE or VIEW, so the three custom sources
 --     (surveillance UNION, forecast/allocation join+filter) become named backing views below

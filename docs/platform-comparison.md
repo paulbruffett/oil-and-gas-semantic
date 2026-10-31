@@ -4,9 +4,9 @@ A summary comparison of **Databricks** and **Snowflake** for the workload this r
 **governed semantic layer** (OSI KPI definitions) + a **knowledge/LPG layer** + a **natural-language
 agent** ("AI over BI") over OSDU/PDM oil-&-gas production data.
 
-It is grounded in a *controlled port*: the Databricks reference build (`databricks/`) was translated to
-Snowflake (`snowflake/`) by **substitution at the seams**, holding the data, the OSI/LPG specs, the six
-use-case questions, and the gold answers **constant** (see [`PORTING.md`](../PORTING.md)). Because only
+It is grounded in a *controlled port*: the Databricks reference build (`platforms/databricks/`) was translated to
+Snowflake (`platforms/snowflake/`) by **substitution at the seams**, holding the data, the OSI/LPG specs, the six
+use-case questions, and the gold answers **constant** (see [`docs/porting.md`](porting.md)). Because only
 the platform changes, the differences below are attributable to the platform, not to how each side was
 built.
 
@@ -130,11 +130,11 @@ model itself. (Snowflake *does* offer tool-use via the newer Cortex **Agents** A
 ## Evidence & reproducibility
 
 - **Correctness parity:** all six themes reproduce the frozen gold (`config_hash 12a110eecfe2`) exactly
-  on both platforms — see [`snowflake/README.md`](README.md) and [`snowflake/agent/README.md`](agent/README.md)
+  on both platforms — see [`platforms/snowflake/README.md`](../platforms/snowflake/README.md) and [`platforms/snowflake/agent/README.md`](../platforms/snowflake/agent/README.md)
   (gold-validation tables) and their Databricks counterparts.
 - **Blast radius:** the full Databricks→Snowflake port is 11 files, ~1465 lines, 100% within
-  `snowflake/`, zero edits to shared collateral — the per-locus and total diff are recorded in
-  [`PORTING.md`](../PORTING.md) ("The comparison deliverable").
+  `platforms/snowflake/`, zero edits to shared collateral — the per-locus and total diff are recorded in
+  [`docs/porting.md`](porting.md) ("The comparison deliverable").
 - **Caveats restated:** Cortex model availability and the missing `tools` parameter are properties of the
   tested account/region; and this is a controlled port, so it measures translatability and feature fit
   rather than the ceiling of either platform.

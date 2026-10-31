@@ -1,7 +1,7 @@
 -- OAG_FABLE — database, schemas, Parquet file format, staging area (DESIGN §4/§6).
--- Snowflake port of databricks/sql/01_catalog_and_schemas.sql (locus 1, PORTING.md).
+-- Snowflake port of platforms/databricks/sql/01_catalog_and_schemas.sql (locus 1, docs/porting.md).
 --
--- Platform mapping (feature table, snowflake/README.md):
+-- Platform mapping (feature table, platforms/snowflake/README.md):
 --   Databricks CATALOG oag_fable        -> Snowflake DATABASE OAG_FABLE
 --   Databricks SCHEMA  canonical/semantic -> Snowflake SCHEMA  CANONICAL/SEMANTIC
 --   Databricks VOLUME  canonical._staging  -> Snowflake internal STAGE CANONICAL._STAGING

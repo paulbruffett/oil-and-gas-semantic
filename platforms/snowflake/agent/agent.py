@@ -1,6 +1,6 @@
 """Production-analytics agent for all six use-case themes — Snowflake port (DESIGN §4 layer 5).
 
-Snowflake port of databricks/agent/agent.py (locus 3, PORTING.md). Same contract, same theme routing,
+Snowflake port of platforms/databricks/agent/agent.py (locus 3, docs/porting.md). Same contract, same theme routing,
 same deterministic assembler; the platform seam that moves is HOW tools are executed and which model
 drives routing:
 
@@ -12,7 +12,7 @@ drives routing:
     analogue. On this account Cortex COMPLETE does NOT expose the OpenAI-style `tools` (function-calling)
     parameter the Databricks endpoint did, so the LLM routes via a **structured-output completion**
     (pick the governed tool + resolve the field); the deterministic-answer / LLM-reasoning split
-    (databricks/agent/README.md) is preserved. Flip models with OAG_AGENT_LLM.
+    (platforms/databricks/agent/README.md) is preserved. Flip models with OAG_AGENT_LLM.
 
 Run/validate locally with test_local.py (drives every theme, grades vs data/frozen/gold).
 """
@@ -36,7 +36,7 @@ def _fn(name: str) -> str:
     return f"{CATALOG}.{KSCHEMA}.{name}"
 
 
-# Theme registry keyed by the PRIMARY tool (bare name). Mirrors databricks/agent/agent.py verbatim
+# Theme registry keyed by the PRIMARY tool (bare name). Mirrors platforms/databricks/agent/agent.py verbatim
 # (the catalog.yaml grading block is the source of truth): the answer-submission question_id and the
 # graded set (set_key + id column + value columns, integer columns typed), so key_values is assembled
 # deterministically from the governed tool result. `extra_sets` attach the other rollup groupings.
@@ -162,7 +162,7 @@ class ProductionAgent:
         _, rows = self._query("SELECT SNOWFLAKE.CORTEX.COMPLETE(%s, %s)", (self._model, prompt))
         return rows[0][0] if rows else ""
 
-    # --- Deterministic assembly (mirrors databricks/agent/agent.py) ---------------------------------
+    # --- Deterministic assembly (mirrors platforms/databricks/agent/agent.py) ---------------------------------
     @staticmethod
     def _num(v: Any, as_int: bool = False):
         if v is None or v == "":

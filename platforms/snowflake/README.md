@@ -1,13 +1,13 @@
 # Snowflake instantiation — Step 1 (substrate: canonical + semantic)
 
-Snowflake **port** of the round-1 Databricks build (`databricks/`), by controlled substitution at the
-seams (PORTING.md, DESIGN §4). This directory holds the **reproducible SQL** that stands up the
+Snowflake **port** of the round-1 Databricks build (`platforms/databricks/`), by controlled substitution at the
+seams (docs/porting.md, DESIGN §4). This directory holds the **reproducible SQL** that stands up the
 `OAG_FABLE` database from the frozen fork-point dataset (`config_hash 12a110eecfe2`) and authors the
 shell's OSI metrics as **Snowflake Semantic Views**.
 
 > Scope: DESIGN §4 layers 2–5 (canonical OSDU/PDM + OSI semantic + LPG knowledge + agent). The neutral
 > OSI manifest (`semantic/*.yaml`) stays the source of truth (ADR 0008/0011); these views are what a
-> Snowflake target compiles it to (story 12). `databricks/` stays in place as the diff anchor (PORTING.md).
+> Snowflake target compiles it to (story 12). `platforms/databricks/` stays in place as the diff anchor (docs/porting.md).
 
 ## Layout
 
@@ -66,7 +66,7 @@ the semantic views `CAST(... AS DATE)`, mirroring the Databricks build.
 
 `03_semantic_views.sql` is the platform-native translation of `semantic/metrics.yaml` +
 `semantic/semantic_models.yaml`, the Snowflake counterpart of Databricks Metric Views
-(`databricks/sql/03_metric_views.sql`). Feature mapping (comparison deliverable #2, PORTING.md):
+(`platforms/databricks/sql/03_metric_views.sql`). Feature mapping (comparison deliverable #2, docs/porting.md):
 
 | Databricks Metric View | Snowflake Semantic View | Note / finding |
 |---|---|---|
@@ -80,7 +80,7 @@ the semantic views `CAST(... AS DATE)`, mirroring the Databricks build.
 
 No OSI construct failed to translate: every metric in `metrics.yaml` (simple, ratio, derived) has a
 Semantic View equivalent. The only structural additions are the three `_*_SRC` backing views — all
-in-locus (semantic layer), none out-of-locus (PORTING.md).
+in-locus (semantic layer), none out-of-locus (docs/porting.md).
 
 ## Querying a semantic view
 
@@ -113,17 +113,17 @@ checks as the Databricks build:
 Compile-assembled KPIs (deferred volume, decline vs forecast, days-since-test, allocation variance,
 period-over-period Δ, GOR-change) are **not** semantic views on either platform — they are row-level
 products / date-diffs / cross-window ratios computed downstream over these governed measures (see
-`semantic/metrics.yaml`, `databricks/README.md`, ADR 0017/0018/0019/0021/0022).
+`semantic/metrics.yaml`, `platforms/databricks/README.md`, ADR 0017/0018/0019/0021/0022).
 
 ## Reproduce
 
 Prereqs: Snowflake CLI (`snow`) with a connection configured (this build used connection `proton`,
 key-pair auth); a running warehouse; role with `CREATE DATABASE`. Credentials live in
-`~/.snowflake/` / `~/.ssh/`, **never** in the repo (PORTING.md; ADR 0015 analogue).
+`~/.snowflake/` / `~/.ssh/`, **never** in the repo (docs/porting.md; ADR 0015 analogue).
 
 ```bash
 CONN=proton                       # your `snow` connection name
-FROZEN=../data/frozen             # `oag-generate -c ../configs/contest.yaml -o $FROZEN` if absent
+FROZEN=../../data/frozen             # `oag-generate -c ../../configs/contest.yaml -o $FROZEN` if absent
 
 # 1. Database, schemas, Parquet file format, staging area
 snow sql -c $CONN -f sql/01_database_and_schemas.sql

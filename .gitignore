@@ -36,5 +36,5 @@ spec/questions/adversarial-variants/.sealed/
 
 
 # Local MLflow tracking artifacts from databricks/agent deploy runs
-databricks/agent/mlflow.db
-databricks/agent/mlruns/
+platforms/databricks/agent/mlflow.db
+platforms/databricks/agent/mlruns/

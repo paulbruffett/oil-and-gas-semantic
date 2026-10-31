@@ -1,6 +1,6 @@
 -- Load the frozen canonical Parquet into managed tables (row counts per data/frozen/dataset.json).
--- Snowflake port of databricks/sql/02_load_canonical.sql (locus 1, PORTING.md).
--- Prereq: the Parquet files were PUT to @OAG_FABLE.CANONICAL._STAGING (see snowflake/README.md).
+-- Snowflake port of platforms/databricks/sql/02_load_canonical.sql (locus 1, docs/porting.md).
+-- Prereq: the Parquet files were PUT to @OAG_FABLE.CANONICAL._STAGING (see platforms/snowflake/README.md).
 --
 -- Databricks did one statement per table: CREATE OR REPLACE TABLE ... AS SELECT * FROM read_files(...),
 -- which both infers the schema and loads. Snowflake splits that into two: INFER_SCHEMA materializes the

@@ -1,10 +1,10 @@
 -- Knowledge layer (LPG) as Snowflake objects (DESIGN §4 layer 4, ADR 0004; story 14/15).
--- Snowflake port of databricks/sql/04_knowledge_layer.sql (locus 3, PORTING.md). The neutral shell
+-- Snowflake port of platforms/databricks/sql/04_knowledge_layer.sql (locus 3, docs/porting.md). The neutral shell
 -- builds this in-memory over DuckDB (src/oag_semantic/lpg.py); here the same capabilities are governed
 -- Snowflake objects: vocabulary + entity tables, and SQL functions the agent calls as TOOLS so NL maps
 -- to governed metrics without authoring SQL.
 --
--- Databricks -> Snowflake substitutions (feature table, snowflake/agent/README.md):
+-- Databricks -> Snowflake substitutions (feature table, platforms/snowflake/agent/README.md):
 --   * UC SQL functions `RETURNS t RETURN <expr>` -> Snowflake SQL UDFs `RETURNS t AS $$ <expr> $$`
 --     (COMMENT clause takes `=`); UC table functions -> Snowflake SQL UDTFs `RETURNS TABLE(...) AS $$..$$`.
 --   * `contains(a,b)` -> `CONTAINS(a,b)`; `array_sort(array_agg(x))` -> `ARRAY_AGG(x) WITHIN GROUP (ORDER BY x)`.

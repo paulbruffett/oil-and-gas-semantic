@@ -1,7 +1,7 @@
 # Production-analytics agent — Mosaic AI Agent Framework (DESIGN §4 layer 5)
 
 A tool-calling agent that answers **all six** use-case themes over the governed `oag_fable` substrate
-and returns the [`answer_submission.schema.json`](../../spec/questions/answer_submission.schema.json)
+and returns the [`answer_submission.schema.json`](../../../spec/questions/answer_submission.schema.json)
 contract. It routes an NL question to the right governed tool, then assembles the graded `key_values`
 set deterministically from the tool result.
 

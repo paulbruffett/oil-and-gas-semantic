@@ -2,11 +2,11 @@
 -- Tools: all six use-case themes (governed answers over the sql/04+05 UDTFs) + the four
 -- knowledge-graph traversal tools (sql/08) for entity resolution and relationship navigation.
 --
--- Same deterministic-answer / LLM-reasoning split as snowflake/agent/agent.py, moved server-side:
+-- Same deterministic-answer / LLM-reasoning split as platforms/snowflake/agent/agent.py, moved server-side:
 -- the agent plans and narrates, but its tools are the governed owner's-rights KNOWLEDGE functions —
 -- it can never author SQL or touch a canonical table. Callers reconstruct the graded
 -- answer-submission key_values from the tool_result payload in the :run response
--- (snowflake/agent/test_agent_rest.py), NOT from the LLM narrative, so functional correctness
+-- (platforms/snowflake/agent/test_agent_rest.py), NOT from the LLM narrative, so functional correctness
 -- (rubric dimension 1) stays objective under delegation.
 --
 -- This agent stays governed-tools-only ON PURPOSE. Cortex Analyst (text-to-SQL) lives on a SECOND
@@ -14,7 +14,7 @@
 -- tool_resource before it runs anything: one semantic view the caller cannot read fails the whole
 -- :run, whatever the question was. Attaching analyst_* tools here therefore made all six graded
 -- themes unreachable for the least-privilege OAG_AGENT role (measured, then reverted — see
--- snowflake/agent/README.md). One agent per privilege posture keeps this path least-privilege.
+-- platforms/snowflake/agent/README.md). One agent per privilege posture keeps this path least-privilege.
 --
 -- Invoke from any HTTP client (key-pair JWT / OAuth / PAT):
 --   POST https://<account>.snowflakecomputing.com/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run

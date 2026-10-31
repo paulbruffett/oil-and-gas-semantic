@@ -5,7 +5,7 @@
 -- locus-2 Semantic Views (sql/03). The semantic layer is what keeps that honest — Analyst can only
 -- reach metrics and dimensions the OSI model declares.
 --
--- Two deployment surfaces, both exercised by snowflake/agent/test_analyst_rest.py:
+-- Two deployment surfaces, both exercised by platforms/snowflake/agent/test_analyst_rest.py:
 --
 --   1. STANDALONE, no agent object required — POST a question plus one semantic view:
 --        POST https://<account>.snowflakecomputing.com/api/v2/cortex/analyst/message

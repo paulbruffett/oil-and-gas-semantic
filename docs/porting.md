@@ -1,4 +1,4 @@
-# PORTING.md — Snowflake port of the Databricks implementation
+# Porting — Snowflake port of the Databricks implementation
 
 **What this repo is.** A platform-to-platform **prototype**: the Databricks implementation
 (`paulbruffett/oag-fable`, remote `fable-impl` here) ported to Snowflake by **controlled substitution
@@ -24,20 +24,20 @@ observed difference is attributable to the platform, not to builder variance.
 ## Port loci (the only places allowed to change)
 
 1. **Canonical load** — `data/frozen` Parquet → Snowflake database/schema (stage + `COPY INTO` or
-   external stage), replacing `databricks/sql/01_*`/`02_*` and `run-sql.sh`.
+   external stage), replacing `platforms/databricks/sql/01_*`/`02_*` and `run-sql.sh`.
 2. **Semantic layer** — shell OSI definitions → **Snowflake Semantic Views**, replacing the
-   OSI → Metric Views mapping in `databricks/sql/03_metric_views.sql`. The OSI YAML in `semantic/`
+   OSI → Metric Views mapping in `platforms/databricks/sql/03_metric_views.sql`. The OSI YAML in `semantic/`
    is shared collateral: **do not edit it** — if Snowflake can't express a construct, log it (below)
    and implement the closest equivalent; that gap is a first-class finding.
-3. **Agent query wiring** — re-point the agent's tool layer (`databricks/agent/`) from the
+3. **Agent query wiring** — re-point the agent's tool layer (`platforms/databricks/agent/`) from the
    Databricks SQL endpoint / Metric Views to Snowflake (Semantic Views SQL and/or **Cortex Analyst**
    as the Genie analogue). The answer-submission schema, theme routing, and LPG use stay unchanged.
 4. **Governance** — UC catalog/schema grants → Snowflake role/RBAC equivalents; document as the
-   Databricks build did (`databricks/README.md` pattern → `snowflake/README.md`).
+   Databricks build did (`platforms/databricks/README.md` pattern → `platforms/snowflake/README.md`).
 
-Suggested layout: a sibling `snowflake/` directory mirroring `databricks/`
+Suggested layout: a sibling `platforms/snowflake/` directory mirroring `platforms/databricks/`
 (`README.md`, `sql/01_database_and_schemas.sql`, `sql/02_load_canonical.sql`,
-`sql/03_semantic_views.sql`, `agent/`), leaving `databricks/` in place as the diff anchor.
+`sql/03_semantic_views.sql`, `agent/`), leaving `platforms/databricks/` in place as the diff anchor.
 
 ## Rules
 
@@ -64,7 +64,7 @@ Suggested layout: a sibling `snowflake/` directory mirroring `databricks/`
 
 ### Results — loci 1–4 complete (`port-base` = `892d88d` → `main`)
 
-**1. The diff is the measurement.** `git diff port-base..HEAD --stat` over `snowflake/`:
+**1. The diff is the measurement.** `git diff port-base..HEAD --stat` over `platforms/snowflake/`:
 
 | Locus | Primary files | Diff (that locus's commit) |
 |---|---|---|
@@ -72,16 +72,16 @@ Suggested layout: a sibling `snowflake/` directory mirroring `databricks/`
 | 2 — Semantic layer | `sql/03_semantic_views.sql`, `README.md` | +255 / −1 |
 | 3 — Agent wiring | `sql/04_knowledge_layer.sql`, `sql/05_theme_functions.sql`, `agent/` (agent.py, test_local.py, requirements.txt, README.md), `README.md` | +926 / −11 |
 | 4 — Governance | `sql/06_governance.sql`, `README.md` | +114 / −1 |
-| **Total (unique)** | **11 files, all under `snowflake/`** | **+1465** |
+| **Total (unique)** | **11 files, all under `platforms/snowflake/`** | **+1465** |
 
-**The blast radius is 100% inside `snowflake/`** — zero edits to shared collateral (`semantic/` OSI,
+**The blast radius is 100% inside `platforms/snowflake/`** — zero edits to shared collateral (`semantic/` OSI,
 `spec/`, `knowledge/`, `src/`, `configs/`, gold). The Out-of-locus change log below stayed empty across
 all four loci: the semantic seam held, so every platform difference is a *finding*, not a coupling
-change. (`git diff port-base..HEAD` also shows `PORTING.md` itself — this port-protocol doc, committed
+change. (`git diff port-base..HEAD` also shows `docs/porting.md` itself — this port-protocol doc, committed
 as scaffolding at `83010f8` before the port began, not a ported artifact.)
 
-**2. Feature-mapping tables** live where the Databricks build documented governance — `snowflake/README.md`
-and `snowflake/agent/README.md`. Headline mappings & findings:
+**2. Feature-mapping tables** live where the Databricks build documented governance — `platforms/snowflake/README.md`
+and `platforms/snowflake/agent/README.md`. Headline mappings & findings:
 
 - **Metric Views ↔ Semantic Views:** clean, but Metric View inline `source:` SQL has no analogue — a
   Semantic View logical table must reference a table/view, so 3 custom sources became `_*_SRC` backing

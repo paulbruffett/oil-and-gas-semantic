@@ -294,7 +294,7 @@
 
       <div class="howto">
         <b>How to read this map</b>
-        <p>It descends the <span class="u">agent stack</span> the way a request flows: the <b>agent</b> plans, calls a <b>governed tool</b>, which reads the <b>semantic model</b> or the <b>knowledge graph</b> over the <b>canonical</b> tables — all inside a <b>governance</b> boundary. Every Snowflake feature is paired with the <code>snowflake/…</code> file that instantiates it and the gold result that proves it works. Facts are current against the live <code>OAG_FABLE</code> database (Snowflake account <code>kj94708</code>, region <code>us-east-2</code>).</p>
+        <p>It descends the <span class="u">agent stack</span> the way a request flows: the <b>agent</b> plans, calls a <b>governed tool</b>, which reads the <b>semantic model</b> or the <b>knowledge graph</b> over the <b>canonical</b> tables — all inside a <b>governance</b> boundary. Every Snowflake feature is paired with the <code>platforms/snowflake/…</code> file that instantiates it and the gold result that proves it works. Facts are current against the live <code>OAG_FABLE</code> database (Snowflake account <code>kj94708</code>, region <code>us-east-2</code>).</p>
       </div>
     </section>
 
@@ -386,7 +386,7 @@
       <h3>PRODUCTION_AGENT — the Cortex Agent object</h3>
       <div class="prose"><p>Created from a YAML <em>specification</em> inside SQL DDL: an <code>instructions</code> block (orchestration policy + response style + sample questions), an <code>orchestration</code> budget, a <code>tools</code> list of <code>generic</code> tool specs, and a <code>tool_resources</code> map binding each tool name to a governed Snowflake function. It carries <strong>all six use-case themes plus the four knowledge-graph tools</strong> — thirteen in total.</p></div>
       <figure class="code">
-        <figcaption><span class="fp"><b>snowflake/sql/07_agent.sql</b>:138–184</span><span class="lang">sql · agent spec</span></figcaption>
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/07_agent.sql</b>:138–184</span><span class="lang">sql · agent spec</span></figcaption>
         <div class="scroll"><pre><span class="k">CREATE OR REPLACE AGENT</span> OAG_FABLE.KNOWLEDGE.<span class="f">PRODUCTION_AGENT</span>
 <span class="k">FROM SPECIFICATION</span> $$
 instructions:
@@ -414,7 +414,7 @@ $$;</pre></div>
       <h3>The deterministic-answer / LLM-reasoning split</h3>
       <div class="prose"><p>The design principle that survives every tier: the LLM <em>reasons</em> (routes across themes, resolves entities, writes the narrative) but the <strong>graded values are assembled from the governed tool result, never from the model's prose</strong>. That keeps functional correctness objective even when the whole question is delegated to the agent object.</p></div>
       <figure class="code">
-        <figcaption><span class="fp"><b>snowflake/agent/agent.py</b>:222–238</span><span class="lang">python</span></figcaption>
+        <figcaption><span class="fp"><b>platforms/snowflake/agent/agent.py</b>:222–238</span><span class="lang">python</span></figcaption>
         <div class="scroll"><pre><span class="c"># Re-execute the primary tool authoritatively, so key_values does NOT depend on the LLM</span>
 <span class="c"># and a transient tool ERROR is surfaced as a refusal, not an empty set.</span>
 primary = self.<span class="f">_exec_tool</span>(theme_key, args)
@@ -459,7 +459,7 @@ key_values = { t[<span class="s">"set_key"</span>]: self.<span class="f">_rows</
 
       <h4>Agent-to-agent: the REST hand-off an external orchestrator calls</h4>
       <figure class="code">
-        <figcaption><span class="fp"><b>snowflake/agent/test_agent_rest.py</b>:100–113</span><span class="lang">http · :run</span></figcaption>
+        <figcaption><span class="fp"><b>platforms/snowflake/agent/test_agent_rest.py</b>:100–113</span><span class="lang">http · :run</span></figcaption>
         <div class="scroll"><pre>POST https://&lt;account&gt;.snowflakecomputing.com
      /api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run
 Authorization: Bearer &lt;key-pair JWT&gt;
@@ -511,7 +511,7 @@ X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
           <h4>A governed tool reads the semantic layer — it never authors SQL</h4>
           <p style="font-size:14px;color:var(--ink-soft);max-width:var(--maxprose)">The hero tool is a UDTF whose body is a <code>SEMANTIC_VIEW()</code> read of the governed surveillance metrics. The window and threshold come from <code>DATASET_PARAM</code> (governed data, not literals), so the only argument is the optional field scope. Its output columns are exactly the answer-submission <code>flagged</code> shape.</p>
           <figure class="code">
-            <figcaption><span class="fp"><b>snowflake/sql/04_knowledge_layer.sql</b>:137–151</span><span class="lang">sql · UDTF</span></figcaption>
+            <figcaption><span class="fp"><b>platforms/snowflake/sql/04_knowledge_layer.sql</b>:137–151</span><span class="lang">sql · UDTF</span></figcaption>
             <div class="scroll"><pre><span class="k">CREATE OR REPLACE FUNCTION</span> KNOWLEDGE.<span class="f">SURVEILLANCE_BELOW_EXPECTED</span>(arg_field_id NUMBER)
   <span class="k">RETURNS TABLE</span>(well_id NUMBER, uwi STRING, ..., efficiency FLOAT) <span class="k">AS</span> $$
     <span class="k">SELECT</span> well_id, uwi, field_id, expected_oil, actual_oil, oil_shortfall, production_efficiency
@@ -528,7 +528,7 @@ X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
           <h4>NL &rarr; governed metric: the business vocabulary</h4>
           <p style="font-size:14px;color:var(--ink-soft);max-width:var(--maxprose)">Term resolution maps a business phrase onto a governed metric so the agent can stay in ubiquitous language. <code>RESOLVE_TERM('watering out')</code> and its synonyms resolve by longest-match substring — mirroring the shell's in-memory LPG.</p>
           <figure class="code">
-            <figcaption><span class="fp"><b>snowflake/sql/04_knowledge_layer.sql</b>:91–97</span><span class="lang">sql · UDF</span></figcaption>
+            <figcaption><span class="fp"><b>platforms/snowflake/sql/04_knowledge_layer.sql</b>:91–97</span><span class="lang">sql · UDF</span></figcaption>
             <div class="scroll"><pre><span class="k">CREATE OR REPLACE FUNCTION</span> KNOWLEDGE.<span class="f">RESOLVE_TERM</span>(phrase STRING) <span class="k">RETURNS</span> STRING <span class="k">AS</span> $$
     (<span class="k">SELECT</span> metric <span class="k">FROM</span> KNOWLEDGE.VOCABULARY_TERM
      <span class="k">WHERE</span> <span class="f">CONTAINS</span>(KNOWLEDGE.<span class="f">NORM</span>(phrase), synonym)   <span class="c"># 'below expected' -> production_efficiency</span>
@@ -561,7 +561,7 @@ X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
       <h4>Metrics reference metrics — closer to the neutral OSI spec than a flat re-aggregation</h4>
       <div class="prose"><p>The sharpest modeling difference from Databricks Metric Views: Snowflake <strong>rejects</strong> <code>SUM(metric)</code>. A ratio metric must reference base metrics — which is exactly how OSI defines <code>ratio</code>/<code>derived</code> types. The hero view declares two base sums and two derived metrics that reference them.</p></div>
       <figure class="code">
-        <figcaption><span class="fp"><b>snowflake/sql/03_semantic_views.sql</b>:73–92</span><span class="lang">sql · semantic view</span></figcaption>
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/03_semantic_views.sql</b>:73–92</span><span class="lang">sql · semantic view</span></figcaption>
         <div class="scroll"><pre><span class="k">CREATE OR REPLACE SEMANTIC VIEW</span> OAG_FABLE.SEMANTIC.<span class="f">SURVEILLANCE</span>
   <span class="k">TABLES</span> (
     surv <span class="k">AS</span> SEMANTIC._SURVEILLANCE_SRC <span class="k">PRIMARY KEY</span> (surv_row_id),
@@ -578,7 +578,7 @@ X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
       <h4>Reading a Semantic View — filters go <em>inside</em> the function</h4>
       <div class="prose"><p>You name dimensions and metrics inside the <code>SEMANTIC_VIEW()</code> table function; row-level filters go in its inner <code>WHERE</code>, and an outer <code>WHERE</code> only filters the aggregated output. This query reproduces <code>gold/surveillance.json</code> — the 12 flagged wells — exactly.</p></div>
       <figure class="code">
-        <figcaption><span class="fp"><b>snowflake/README.md</b> · querying a semantic view</span><span class="lang">sql</span></figcaption>
+        <figcaption><span class="fp"><b>platforms/snowflake/README.md</b> · querying a semantic view</span><span class="lang">sql</span></figcaption>
         <div class="scroll"><pre><span class="k">SELECT</span> well_id, expected_oil, actual_oil, oil_shortfall, production_efficiency
 <span class="k">FROM</span> <span class="f">SEMANTIC_VIEW</span>(OAG_FABLE.SEMANTIC.SURVEILLANCE
   <span class="k">DIMENSIONS</span> surv.well_id
@@ -613,7 +613,7 @@ X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
       <h4>Nodes and edges built from canonical FK columns</h4>
       <div class="prose"><p>Node ids are <code>'&lt;type&gt;:&lt;key&gt;'</code> strings so one column references any entity type; field nodes carry their synonyms as a property (feeding <code>kg_resolve</code>). Informational PK/FK constraints keep the graph discoverable from <code>INFORMATION_SCHEMA</code>.</p></div>
       <figure class="code">
-        <figcaption><span class="fp"><b>snowflake/sql/08_knowledge_graph.sql</b>:23–68</span><span class="lang">sql · derived tables</span></figcaption>
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/08_knowledge_graph.sql</b>:23–68</span><span class="lang">sql · derived tables</span></figcaption>
         <div class="scroll"><pre><span class="k">CREATE OR REPLACE TABLE</span> KNOWLEDGE.KG_NODE <span class="k">AS</span>
   <span class="k">SELECT</span> <span class="s">'well:'</span> || WELL_ID <span class="k">AS</span> node_id, <span class="s">'well'</span> <span class="k">AS</span> node_type, WELL_NAME <span class="k">AS</span> name,
          <span class="f">OBJECT_CONSTRUCT</span>(<span class="s">'uwi'</span>, UWI, <span class="s">'x'</span>, X_COORDINATE, <span class="s">'y'</span>, Y_COORDINATE) <span class="k">AS</span> properties
@@ -628,7 +628,7 @@ X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
       <h4>Traversal is a cycle-guarded recursive CTE — the agent walks it without table access</h4>
       <div class="prose"><p>Four owner's-rights UDTFs — <code>KG_RESOLVE</code>, <code>KG_NEIGHBORS</code>, <code>KG_TRAVERSE</code>, <code>KG_PATH</code> — treat edges as bidirectional and guard cycles by array membership. They answer entity-resolution and relationship questions server-side.</p></div>
       <figure class="code">
-        <figcaption><span class="fp"><b>snowflake/sql/08_knowledge_graph.sql</b>:124–150</span><span class="lang">sql · recursive CTE</span></figcaption>
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/08_knowledge_graph.sql</b>:124–150</span><span class="lang">sql · recursive CTE</span></figcaption>
         <div class="scroll"><pre><span class="k">WITH RECURSIVE</span> bidir <span class="k">AS</span> (                         <span class="c"># an edge is navigable from either end</span>
   <span class="k">SELECT</span> src_node_id a, dst_node_id b, <span class="s">'-['</span>||edge_type||<span class="s">']-&gt;'</span> hop <span class="k">FROM</span> KG_EDGE
   <span class="k">UNION ALL SELECT</span> dst_node_id, src_node_id, <span class="s">'&lt;-['</span>||edge_type||<span class="s">']-'</span> <span class="k">FROM</span> KG_EDGE ),
@@ -759,24 +759,24 @@ python agent.py <span class="s">"Which wells are watering out?"</span></pre></di
         <div class="card">
           <h4>Start here, in order</h4>
           <ul class="tight" style="margin:4px 0 0">
-            <li><code>snowflake/README.md</code> — the full port + gold-validation tables</li>
-            <li><code>snowflake/agent/README.md</code> — the agent, REST path, and Cortex findings</li>
-            <li><code>snowflake/COMPARISON.md</code> — Databricks vs Snowflake, feature by feature</li>
-            <li><code>notebooks/snowflake_walkthrough.ipynb</code> — the executable companion</li>
-            <li><code>PORTING.md</code> · <code>DESIGN.md</code> — the seams and the source of truth</li>
+            <li><code>platforms/snowflake/README.md</code> — the full port + gold-validation tables</li>
+            <li><code>platforms/snowflake/agent/README.md</code> — the agent, REST path, and Cortex findings</li>
+            <li><code>docs/platform-comparison.md</code> — Databricks vs Snowflake, feature by feature</li>
+            <li><code>platforms/snowflake/notebooks/snowflake_walkthrough.ipynb</code> — the executable companion</li>
+            <li><code>docs/porting.md</code> · <code>DESIGN.md</code> — the seams and the source of truth</li>
           </ul>
         </div>
         <div class="card">
           <h4>The companion notebook</h4>
           <p>A Jupyter notebook drives this same stack with the Snowflake Python driver: it inventories the objects as built (schemas, Semantic Views, the agent, the graph), reproduces gold through <code>SEMANTIC_VIEW()</code>, walks the knowledge graph, and invokes <code>PRODUCTION_AGENT</code> over <code>:run</code> — the executable twin of this page.</p>
-          <span class="fp">notebooks/snowflake_walkthrough.ipynb</span>
+          <span class="fp">platforms/snowflake/notebooks/snowflake_walkthrough.ipynb</span>
         </div>
       </div>
     </section>
 
     <footer>
       A Snowflake agentic-intelligence primer for <b>OAG_FABLE</b> — the Snowflake instantiation of the oil-and-gas-semantic reference.<br>
-      Source of truth: <code>DESIGN.md</code> · <code>snowflake/README.md</code>. Every <code>file:line</code> reference points into the tree; facts verified live against the <code>OAG_FABLE</code> database.
+      Source of truth: <code>DESIGN.md</code> · <code>platforms/snowflake/README.md</code>. Every <code>file:line</code> reference points into the tree; facts verified live against the <code>OAG_FABLE</code> database.
     </footer>
   </main>
 </div>

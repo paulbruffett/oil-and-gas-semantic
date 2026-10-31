@@ -1,4 +1,4 @@
--- Governance / RBAC for the OAG_FABLE port (DESIGN §4 layer 6, rubric dim 5; PORTING.md locus 4).
+-- Governance / RBAC for the OAG_FABLE port (DESIGN §4 layer 6, rubric dim 5; docs/porting.md locus 4).
 -- Snowflake role/RBAC equivalent of the Databricks UC catalog/schema grant model. The Databricks build's
 -- governance posture (ADR 0015): a per-consumer principal with SCOPED, least-privilege grants over the
 -- catalog; credentials never in the repo; lineage from the platform. This reproduces that on Snowflake

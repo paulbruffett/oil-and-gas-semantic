@@ -28,7 +28,7 @@ from mlflow.pyfunc import ResponsesAgent
 from mlflow.types.responses import ResponsesAgentRequest, ResponsesAgentResponse
 from unitycatalog.ai.core.databricks import DatabricksFunctionClient
 
-# See databricks/agent/README.md: intended databricks-claude-opus-4-8 (disabled on this account);
+# See platforms/databricks/agent/README.md: intended databricks-claude-opus-4-8 (disabled on this account);
 # Qwen3-next-80b does reliable structured tool-calling. Override with OAG_AGENT_LLM.
 LLM_ENDPOINT = os.environ.get("OAG_AGENT_LLM", "databricks-qwen3-next-80b-a3b-instruct")
 CATALOG, KSCHEMA = "oag_fable", "knowledge"

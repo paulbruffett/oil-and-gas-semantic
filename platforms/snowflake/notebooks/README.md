@@ -3,7 +3,7 @@
 Interactive companions to the Snowflake reference documentation.
 
 - **[`snowflake_walkthrough.ipynb`](./snowflake_walkthrough.ipynb)** — the executable twin of the
-  [Agentic-Intelligence primer](../docs/snowflake-agentic-primer.html). It drives the **live `OAG_FABLE`
+  [Agentic-Intelligence primer](../docs/agentic-primer.html). It drives the **live `OAG_FABLE`
   database** with the Snowflake Python driver, top-down through the agent stack: inventories the objects
   as built (schemas, canonical tables, Semantic Views, the Cortex Agent, the knowledge graph), reproduces
   the hero gold through `SEMANTIC_VIEW()`, walks the LPG with the `KG_*` traversal tools, calls the
@@ -18,12 +18,12 @@ The kernel needs the Snowflake driver plus `pandas`/`pyarrow`, and a working `sn
 
 ```bash
 pip install "snowflake-connector-python[pandas]" pandas pyarrow jupyterlab
-jupyter lab notebooks/snowflake_walkthrough.ipynb
+jupyter lab platforms/snowflake/notebooks/snowflake_walkthrough.ipynb
 ```
 
 Run the cells top-to-bottom. The connection parameters are read from the `snow` CLI's `config.toml`
-exactly as `snowflake/agent/agent.py` does — **no credentials live in the repo**. Prerequisite: the
-`OAG_FABLE` database is stood up (`snowflake/README.md`, `sql/01`–`08`) and the frozen gold is present in
+exactly as `platforms/snowflake/agent/agent.py` does — **no credentials live in the repo**. Prerequisite: the
+`OAG_FABLE` database is stood up (`platforms/snowflake/README.md`, `sql/01`–`08`) and the frozen gold is present in
 `data/frozen/gold/` (`uv run oag-generate -c configs/contest.yaml -o data/frozen`, config_hash
 `12a110eecfe2`).
 

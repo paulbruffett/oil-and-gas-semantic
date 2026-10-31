@@ -1,8 +1,8 @@
 # Production-analytics agent — Snowflake port (DESIGN §4 layer 5)
 
-Snowflake port of `databricks/agent/` (locus 3, PORTING.md). A governed-tool agent that answers **all
+Snowflake port of `platforms/databricks/agent/` (locus 3, docs/porting.md). A governed-tool agent that answers **all
 six** use-case themes over the `OAG_FABLE` substrate and returns the
-[`answer_submission.schema.json`](../../spec/questions/answer_submission.schema.json) contract. It routes
+[`answer_submission.schema.json`](../../../spec/questions/answer_submission.schema.json) contract. It routes
 an NL question to the right governed tool, then assembles the graded `key_values` set deterministically
 from the tool result. The answer-submission schema, theme registry, and LPG use are **unchanged** — only
 the platform seam (tool execution + the driving model) is re-pointed.
@@ -58,7 +58,7 @@ one overridable constant, flip and re-run once native tool-use is enabled).
 
 Prereqs: `snow` CLI connection (default `proton`, key-pair) with a running warehouse; Cortex enabled;
 `sql/01`–`05` applied; the frozen gold generated (`uv run oag-generate -c configs/contest.yaml -o data/frozen`,
-config_hash 12a110eecfe2 — the gold is regenerated, not vendored, per PORTING.md).
+config_hash 12a110eecfe2 — the gold is regenerated, not vendored, per docs/porting.md).
 
 ```bash
 pip install -r requirements.txt

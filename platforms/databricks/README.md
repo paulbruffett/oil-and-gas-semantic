@@ -71,7 +71,7 @@ CLI has no "run a .sql file" verb; `run-sql.sh` wraps the Statement Execution AP
 ./run-sql.sh sql/01_catalog_and_schemas.sql   # or paste into the SQL editor
 
 # 2. Stage the frozen Parquet into the volume, then build managed tables
-for f in ../data/frozen/canonical/*.parquet; do
+for f in ../../data/frozen/canonical/*.parquet; do
   databricks fs cp "$f" "dbfs:/Volumes/oag_fable/canonical/_staging/$(basename "$f")" --overwrite
 done
 ./run-sql.sh sql/02_load_canonical.sql

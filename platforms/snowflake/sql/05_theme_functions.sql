@@ -1,5 +1,5 @@
 -- Theme 2-6 governed answers as Snowflake table functions (DESIGN §6 themes 2-6, ADR 0017-0022).
--- Snowflake port of databricks/sql/05_theme_functions.sql (locus 3, PORTING.md). Each reproduces the
+-- Snowflake port of platforms/databricks/sql/05_theme_functions.sql (locus 3, docs/porting.md). Each reproduces the
 -- shell reference-compile (src/oag_semantic/compile.py) as SQL over the canonical tables, so the
 -- compile-assembled KPIs (deferred volume, decline-vs-forecast, days-since-test, allocation variance,
 -- period-over-period delta, GOR-change) are computed ON-PLATFORM and reused as agent tools.

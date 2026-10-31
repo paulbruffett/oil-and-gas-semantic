@@ -1,29 +1,24 @@
-"""Drive the Snowflake production agent locally and grade every theme vs frozen gold.
+"""Drive the production agent locally against the live workspace and grade every theme vs frozen gold.
 
-Snowflake port of databricks/agent/test_local.py (locus 3). Runs the real route-then-execute loop
-(Cortex COMPLETE routing + OAG_FABLE.KNOWLEDGE.* Snowflake tools) from this machine and checks each
-emitted answer-submission against the shell grading contract (set_key + id_key + value_keys, rel tol
-1e-6). Auth reuses the `snow` CLI connection (default `proton`, key-pair) via agent.py.
+Runs the real tool-calling loop (FM endpoint + oag_fable.knowledge UC tools) from this machine and
+checks each emitted answer-submission against the shell's grading contract (set_key + id_key +
+value_keys, rel tol 1e-6). Requires DATABRICKS_CONFIG_PROFILE (OAuth) for workspace auth.
 
-    python test_local.py [theme ...]
-    OAG_GOLD_DIR=/path/to/gold python test_local.py            # gold dir (default ../../data/frozen/gold)
-
-The frozen gold is regenerated, not vendored (PORTING.md): if data/frozen/gold is absent, run
-`uv run oag-generate -c configs/contest.yaml -o data/frozen` (config_hash 12a110eecfe2) first, or point
-OAG_GOLD_DIR at an existing gold directory.
+    DATABRICKS_CONFIG_PROFILE=adb-... python test_local.py [theme ...]
 """
 
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
+REPO = Path(__file__).resolve().parents[3]
+
+from mlflow.types.responses import ResponsesAgentRequest  # noqa: E402
+
 from agent import ProductionAgent  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[2]
-GOLD_DIR = Path(os.environ.get("OAG_GOLD_DIR", REPO / "data" / "frozen" / "gold"))
 TOL = 1e-6
 
 # theme -> (question, gold file, set_key, id_key, value_keys)
@@ -68,8 +63,9 @@ def main() -> int:
     all_ok = True
     for theme in which:
         q, goldfile, set_key, id_key, value_keys = THEMES[theme]
-        sub = agent.answer(q)
-        gold = json.loads((GOLD_DIR / f"{goldfile}.json").read_text())
+        resp = agent.predict(ResponsesAgentRequest(input=[{"role": "user", "content": q}]))
+        sub = resp.custom_outputs["answer_submission"]
+        gold = json.loads((REPO / "data" / "frozen" / "gold" / f"{goldfile}.json").read_text())
         ok, missing, extra, mism = grade(sub["key_values"], gold, set_key, id_key, value_keys)
         all_ok &= ok
         n = len(sub["key_values"].get(set_key, []))

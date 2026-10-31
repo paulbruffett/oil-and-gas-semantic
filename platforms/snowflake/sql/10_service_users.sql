@@ -119,5 +119,5 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE OAG_ANALYST;   -- Analyst is a
 --                                                                                 -- DENIED
 -- As OAG_ANALYST_SVC (`snow sql -c oag_analyst -q ...`): all three succeed.
 -- End to end over REST — the Analyst path, the denial, and the six graded themes under the strict role:
---   python snowflake/agent/test_analyst_rest.py
---   OAG_SNOWFLAKE_CONNECTION=oag_agent python snowflake/agent/test_agent_rest.py
+--   python platforms/snowflake/agent/test_analyst_rest.py
+--   OAG_SNOWFLAKE_CONNECTION=oag_agent python platforms/snowflake/agent/test_agent_rest.py
