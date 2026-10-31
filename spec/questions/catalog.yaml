@@ -1,20 +1,19 @@
 # Use-case question catalog -- the base's agent-layer contract (ADR 0005, DESIGN.md §6.2/§6.4).
 #
-# This is a standalone, versioned base artifact: the six use-case themes, each with the question(s)
-# an implementation must answer, keyed to the deterministic gold-answer id the generator emits. The
-# Axis-B harness (#9) and any use-case implementation read this file; it depends on no use-case code.
+# This is a standalone, versioned base artifact: the six use-case themes, each with the question an
+# implementation must answer, keyed to the deterministic gold-answer id the generator emits. Every
+# platform reference build (platforms/<stack>/) answers these; this file depends on no use-case code.
 #
 # Each question's `gold_id` is the join key to a co-generated gold answer (its JSON carries the same
 # value in `question_id`), so there is a single source for the id -- no drift path between the
-# question and its gold. `expected_behavior` is one of `behaviors` below; straight questions expect
-# `answered`, while the adversarial tier (#22, ADR 0013) encodes assumptions/clarification/refusal.
+# question and its gold. `expected_behavior` is one of `behaviors` below; every question expects
+# `answered`.
 #
-# Each question's `grading` block (#48) declares the exact shape the harness grades: the submission's
-# `key_values` carries a `set_key` list of rows, each keyed by `id_key` and compared on `value_keys`
-# (set-equality on ids + per-value relative tolerance). `grading: behavior-only` means only the
-# reported `behavior` is graded (clarification/refusal -- the right answer carries no values). A
-# worked example submission per question lives in `examples/`. The harness derives its grading specs
-# from these blocks, so the spec artifact and the grader cannot diverge.
+# Each question's `grading` block (#48) declares the exact shape the gold check compares: the
+# submission's `key_values` carries a `set_key` list of rows, each keyed by `id_key` and compared on
+# `value_keys` (set-equality on ids + per-value relative tolerance). A worked example submission per
+# question lives in `examples/`. The gold check (oag_semantic.grading) derives its specs from these
+# blocks, so the spec artifact and the check cannot diverge.
 version: 1
 
 # Allowed expected-behavior values. Mirrors the `behavior` enum in answer_submission.schema.json;
@@ -146,107 +145,3 @@ themes:
           value_keys: [oil_curr, gas_curr, water_curr, oil_prior, oil_delta, oil_contribution_pct]
         text: >-
           Oil/gas/water by field and operator this month vs last -- who are the biggest movers?
-
-# The adversarial tier (#22, ADR 0024). These span the six themes rather than forming a seventh, so
-# they live here beside `themes`. Each is co-emitted a gold answer under gold/adversarial/. Compound
-# questions are `answered` (values graded, derived by intersecting two straight golds); ambiguous ones
-# expect `clarification-requested`; traps expect `refused-data-quality` and reference the generator's
-# deterministically seeded trap well (NO 15/9-F-1) whose only well test predates the data.
-adversarial:
-  # -- Compound: span >= 2 governed metrics; the gold is the intersection of two straight golds. These
-  #    cross the surveillance and well-test signals (both reliably populated two-population minorities,
-  #    ADR 0009) rather than the noise-driven decline (#35) or Volve-dark watchlist (#44) signals, and
-  #    the seeded worst-actor well is a member of every side, so each intersection is non-empty by
-  #    construction on any config/seed (ADR 0024). --
-  - id: adversarial-compound-below-expected-and-stale
-    gold_id: adversarial-compound-below-expected-and-stale
-    gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-stale.json
-    tier: compound
-    expected_behavior: answered
-    grading:
-      set_key: flagged
-      id_key: well_id
-      value_keys: [shortfall_bbl, days_since_last_test]
-    text: >-
-      Which wells are BOTH producing below expected oil rate (surveillance) AND overdue for a well
-      test (stale)? Give each well's oil shortfall and how many days since its last test.
-  - id: adversarial-compound-below-expected-and-anomalous
-    gold_id: adversarial-compound-below-expected-and-anomalous
-    gold_artifact: gold/adversarial/adversarial-compound-below-expected-and-anomalous.json
-    tier: compound
-    expected_behavior: answered
-    grading:
-      set_key: flagged
-      id_key: well_id
-      value_keys: [shortfall_bbl, allocation_variance]
-    text: >-
-      Which wells are BOTH producing below expected oil rate AND allocating anomalously (allocated
-      volume out of line with what they measured)? Give each well's oil shortfall and its allocation
-      variance.
-  - id: adversarial-compound-stale-and-anomalous
-    gold_id: adversarial-compound-stale-and-anomalous
-    gold_artifact: gold/adversarial/adversarial-compound-stale-and-anomalous.json
-    tier: compound
-    expected_behavior: answered
-    grading:
-      set_key: flagged
-      id_key: well_id
-      value_keys: [days_since_last_test, allocation_variance]
-    text: >-
-      Which wells have BOTH a stale well test AND an anomalous allocation? Give each well's days
-      since its last test and its allocation variance.
-
-  # -- Ambiguous: under-specified; the right move is to ask, not guess (clarification-requested). --
-  - id: adversarial-ambiguous-underperformers
-    gold_id: adversarial-ambiguous-underperformers
-    gold_artifact: gold/adversarial/adversarial-ambiguous-underperformers.json
-    tier: ambiguous
-    expected_behavior: clarification-requested
-    grading: behavior-only
-    text: >-
-      Which of our wells are underperforming?
-  - id: adversarial-ambiguous-recent-production
-    gold_id: adversarial-ambiguous-recent-production
-    gold_artifact: gold/adversarial/adversarial-ambiguous-recent-production.json
-    tier: ambiguous
-    expected_behavior: clarification-requested
-    grading: behavior-only
-    text: >-
-      How has production been doing lately?
-  - id: adversarial-ambiguous-worst-field
-    gold_id: adversarial-ambiguous-worst-field
-    gold_artifact: gold/adversarial/adversarial-ambiguous-worst-field.json
-    tier: ambiguous
-    expected_behavior: clarification-requested
-    grading: behavior-only
-    text: >-
-      Which field is our worst performer?
-
-  # -- Trap: the responsible answer is a data-quality refusal (refused-data-quality). All three probe
-  #    the seeded trap well, whose only well test predates the dataset (untrustworthy allocation). --
-  - id: adversarial-trap-stale-allocation
-    gold_id: adversarial-trap-stale-allocation
-    gold_artifact: gold/adversarial/adversarial-trap-stale-allocation.json
-    tier: trap
-    expected_behavior: refused-data-quality
-    grading: behavior-only
-    text: >-
-      Book well NO 15/9-F-1's allocated oil volume for last month as its production figure -- what
-      is it?
-  - id: adversarial-trap-untested-rate
-    gold_id: adversarial-trap-untested-rate
-    gold_artifact: gold/adversarial/adversarial-trap-untested-rate.json
-    tier: trap
-    expected_behavior: refused-data-quality
-    grading: behavior-only
-    text: >-
-      What is well NO 15/9-F-1's current tested oil rate?
-  - id: adversarial-trap-reliability-pick
-    gold_id: adversarial-trap-reliability-pick
-    gold_artifact: gold/adversarial/adversarial-trap-reliability-pick.json
-    tier: trap
-    expected_behavior: refused-data-quality
-    grading: behavior-only
-    text: >-
-      For well NO 15/9-F-1, which is the more reliable production figure -- its allocated volume
-      or its last well test?

@@ -1,10 +1,9 @@
 """Worked example submissions (#48): `spec/questions/examples/<question_id>.json`.
 
-One committed, copy-paste-true example answer per gradable catalog question, generated from the
-default-config gold via the oracle shape (`submission_from_gold`). They give every implementation --
-any assistant, any stack -- identical, machine-readable knowledge of the exact `key_values` shape the
-harness grades, instead of leaving it to be reverse-engineered from harness internals. Pinned here so
-the examples, the catalog `grading` blocks, the schema, and the co-generated gold cannot drift.
+One committed, copy-paste-true example answer per catalog question, generated from the default-config
+gold via `submission_from_gold`. They give every platform build identical, machine-readable knowledge
+of the exact `key_values` shape the gold check compares. Pinned here so the examples, the catalog
+`grading` blocks, the schema, and the co-generated gold cannot drift.
 """
 
 from __future__ import annotations
@@ -15,8 +14,8 @@ import jsonschema
 import pytest
 
 from oag_generator.questions import load_catalog, load_submission_schema
-from oag_harness.examples import EXAMPLES_DIR, write_examples
-from oag_harness.functional import SPECS, submission_from_gold
+from oag_semantic.examples import EXAMPLES_DIR, write_examples
+from oag_semantic.grading import SPECS, submission_from_gold
 
 
 @pytest.fixture(scope="session")
@@ -30,7 +29,7 @@ def default_dataset_dir(tmp_path_factory):
 
 
 def test_every_gradable_question_has_a_committed_example(default_dataset_dir):
-    """Each example exists, validates against the published schema, and equals the oracle submission
+    """Each example exists, validates against the published schema, and equals the perfect-answer submission
     built from freshly generated default-config gold (the generator is byte-stable, so this is exact)."""
     validator = jsonschema.Draft202012Validator(load_submission_schema())
     checked = 0
@@ -45,10 +44,10 @@ def test_every_gradable_question_has_a_committed_example(default_dataset_dir):
         gold = json.loads((default_dataset_dir / q.gold_artifact).read_text())
         assert example == submission_from_gold(gold, spec, q.id, q.expected_behavior), (
             f"{q.id}: committed example drifted from default-config gold -- regenerate with "
-            f"`python -m oag_harness.examples`"
+            f"`python -m oag_semantic.examples`"
         )
         checked += 1
-    assert checked == 6 + 9  # six straight themes + the adversarial tier
+    assert checked == 6
 
 
 def test_no_orphan_examples():
@@ -65,12 +64,3 @@ def test_write_examples_is_deterministic(default_dataset_dir, tmp_path):
     for path in written:
         committed = EXAMPLES_DIR / path.name
         assert committed.read_text() == path.read_text(), f"{path.name} differs from committed copy"
-
-
-def test_behavior_only_examples_carry_no_values(default_dataset_dir):
-    """Clarification/refusal examples show empty key_values -- the right answer is the behavior."""
-    for q in load_catalog().adversarial:
-        if q.tier in ("ambiguous", "trap"):
-            example = json.loads((EXAMPLES_DIR / f"{q.id}.json").read_text())
-            assert example["key_values"] == {}
-            assert example["behavior"] == q.expected_behavior

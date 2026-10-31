@@ -254,6 +254,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
+    { name = "jsonschema" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pyarrow" },
@@ -263,13 +264,13 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "dbt-semantic-interfaces" },
-    { name = "jsonschema" },
     { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.1,<2" },
+    { name = "jsonschema", specifier = ">=4,<5" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "pyarrow", specifier = ">=20,<21" },
     { name = "pyyaml", specifier = ">=6,<7" },
@@ -278,7 +279,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "dbt-semantic-interfaces", specifier = ">=0.10,<0.11" },
-    { name = "jsonschema", specifier = ">=4,<5" },
     { name = "pytest", specifier = ">=8,<9" },
 ]
 

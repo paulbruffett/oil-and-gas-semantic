@@ -51,17 +51,14 @@ def test_every_question_is_keyed_to_a_gold_id_and_a_known_behavior(catalog):
 
 
 def test_every_question_declares_its_grading_shape(catalog):
-    """#48: the graded `key_values` shape is a spec artifact, not harness-internal. Every shipped
-    question either declares a full grading block (set/id/value keys) or is explicitly
-    behavior-only (clarification/refusal -- no graded values, ADR 0024)."""
+    """#48: the checked `key_values` shape is a spec artifact. Every shipped question declares a full
+    grading block (set/id/value keys) and expects a normal answer."""
     for q in catalog.questions():
         assert q.grading is not None, f"{q.id!r}: no grading shape declared in catalog.yaml"
-        if q.expected_behavior in ("clarification-requested", "refused-data-quality"):
-            assert q.grading.behavior_only, f"{q.id!r}: expected behavior-only grading"
-        else:
-            assert q.grading.set_key and q.grading.id_key and q.grading.value_keys, (
-                f"{q.id!r}: value-graded question must declare set_key/id_key/value_keys"
-            )
+        assert q.expected_behavior == "answered", q.id
+        assert q.grading.set_key and q.grading.id_key and q.grading.value_keys, (
+            f"{q.id!r}: question must declare set_key/id_key/value_keys"
+        )
 
 
 def test_question_id_equals_gold_id(catalog):
@@ -165,55 +162,6 @@ def test_welltest_theme_matches_the_gold_module(catalog):
     assert theme.status == "implemented"
     (question,) = theme.questions
     assert question.gold_id == WELLTEST_QUESTION_ID
-
-
-# --- adversarial tier (#22, ADR 0024) -----------------------------------------------------------
-
-# Each adversarial tier's questions carry a fixed expected behavior (ADR 0024 §1): compound questions
-# are answered (values graded), ambiguous ones ask for clarification, traps refuse on data quality.
-_TIER_BEHAVIOR = {
-    "compound": "answered",
-    "ambiguous": "clarification-requested",
-    "trap": "refused-data-quality",
-}
-
-
-def test_adversarial_tier_has_at_least_three_per_category(catalog):
-    by_tier: dict[str, int] = {}
-    for q in catalog.adversarial:
-        by_tier[q.tier] = by_tier.get(q.tier, 0) + 1
-    assert set(by_tier) == set(_TIER_BEHAVIOR), f"adversarial tiers present: {sorted(by_tier)}"
-    for tier, n in by_tier.items():
-        assert n >= 3, f"tier {tier!r} has {n} question(s), need >= 3 (issue #22 AC)"
-
-
-def test_adversarial_questions_are_well_formed_and_join_the_catalog(catalog):
-    adversarial_ids = {q.id for q in catalog.adversarial}
-    all_ids = {q.id for q in catalog.questions()}
-    # questions() folds the adversarial tier in beside the six themes, so the harness/oracle walk
-    # (which iterates questions()) grades them without a special case.
-    assert adversarial_ids <= all_ids
-    assert len(all_ids) == len({q.id for q in catalog.questions()})  # still unique across both
-    for q in catalog.adversarial:
-        assert q.id == q.gold_id, f"{q.id!r}: id must equal gold_id (no-drift invariant)"
-        assert q.expected_behavior in BEHAVIORS, f"{q.id!r}: unknown behavior"
-        assert q.text.strip(), f"{q.id!r}: no text"
-        assert q.gold_artifact.startswith("gold/adversarial/"), q.gold_artifact
-
-
-def test_adversarial_behavior_matches_its_tier(catalog):
-    for q in catalog.adversarial:
-        assert q.tier in _TIER_BEHAVIOR, f"{q.id!r}: unexpected tier {q.tier!r}"
-        assert q.expected_behavior == _TIER_BEHAVIOR[q.tier], (
-            f"{q.id!r}: tier {q.tier!r} expects {_TIER_BEHAVIOR[q.tier]!r}, "
-            f"got {q.expected_behavior!r}"
-        )
-
-
-def test_adversarial_tier_is_not_a_seventh_theme(catalog):
-    # The tier spans the six themes rather than adding one (ADR 0024 §4): the theme invariant holds.
-    assert sorted(t.number for t in catalog.themes) == [1, 2, 3, 4, 5, 6]
-    assert all(q.tier != "straight" for q in catalog.adversarial)
 
 
 # --- answer-submission schema -------------------------------------------------------------------

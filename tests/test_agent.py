@@ -1,7 +1,7 @@
 """Answer seam: the agent emits the answer-submission schema and grades correct vs gold (§8, AC #3/#4).
 
 Drives the deterministic semantic-baseline agent end-to-end and grades its answer against the
-co-generated gold -- the functional-correctness dimension of the Axis-B rubric (§7).
+co-generated gold (the gold check every platform build is held to).
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def test_agent_answer_is_functionally_correct(dataset_dir, gold):
     sub = answer_surveillance(dataset_dir).to_dict()
     report = grade_surveillance(sub, gold)
     assert report.correct, report.summary()
-    assert report.n_submitted_flagged == gold["n_flagged"]
+    assert report.n_submitted == gold["n_flagged"]
 
 
 def test_agent_is_deterministic(dataset_dir):
