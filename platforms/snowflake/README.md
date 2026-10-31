@@ -123,7 +123,7 @@ key-pair auth); a running warehouse; role with `CREATE DATABASE`. Credentials li
 
 ```bash
 CONN=proton                       # your `snow` connection name
-FROZEN=../../data/frozen             # `oag-generate -c ../../configs/contest.yaml -o $FROZEN` if absent
+FROZEN="$PWD/../../data/frozen"     # absolute so it survives the cd below; `oag-generate -c ../../configs/contest.yaml -o $FROZEN` if absent
 
 # 1. Database, schemas, Parquet file format, staging area
 snow sql -c $CONN -f sql/01_database_and_schemas.sql
@@ -160,14 +160,14 @@ snow sql -c $CONN -f sql/09_cortex_analyst.sql
 snow sql -c $CONN -f sql/10_service_users.sql
 
 # 11. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
-cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py
+(cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py)
 
 # 12. (optional) drive the deployed Cortex Agent over REST and grade all six themes vs gold (stdlib only)
 #     Use the least-privilege service-user connection from step 10 rather than an admin one.
-cd agent && OAG_GOLD_DIR="$FROZEN/gold" OAG_SNOWFLAKE_CONNECTION=oag_agent python test_agent_rest.py
+(cd agent && OAG_GOLD_DIR="$FROZEN/gold" OAG_SNOWFLAKE_CONNECTION=oag_agent python test_agent_rest.py)
 
 # 13. (optional) exercise Cortex Analyst and assert the privilege boundary between the two paths
-cd agent && python test_analyst_rest.py
+(cd agent && python test_analyst_rest.py)
 ```
 
 `02_load_canonical.sql` closes with a row-count check — expect `8208, 8208, 21, 18, 3, 6, 282, 251, 18`.
