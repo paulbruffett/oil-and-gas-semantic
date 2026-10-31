@@ -14,6 +14,20 @@ for the oil-and-gas-semantic base collateral. See [`DESIGN.md`](DESIGN.md) §4�
 - **Agent** — `oag_semantic.agent`: a deterministic semantic-baseline agent answering the hero
   surveillance question and emitting the answer-submission schema with provenance (ADR 0005).
 
+## Platform reference builds
+
+Each stack's build lives in `platforms/<stack>/` on top of this shared foundation, and must reproduce
+the gold answers from the frozen dataset (ADR 0035):
+
+- [`platforms/databricks/`](platforms/databricks/README.md): Unity Catalog, Metric Views, knowledge
+  functions, Mosaic AI agent (all six use cases).
+- [`platforms/snowflake/`](platforms/snowflake/README.md): Semantic Views, knowledge graph, Cortex
+  Agent and Cortex Analyst (all six use cases). Ported from Databricks; see
+  [`docs/porting.md`](docs/porting.md).
+- Fabric: not started.
+
+Findings so far: [`docs/platform-comparison.md`](docs/platform-comparison.md).
+
 ## Run it
 
 ```bash

@@ -37,3 +37,7 @@ spec/contest/change-requests/.sealed/
 # in the eval-bundle feed; only the manifest's seal.digest is committed pre-tag. Release = `git add -f`.
 spec/questions/adversarial-variants/.sealed/
 
+
+# Local MLflow tracking artifacts from databricks/agent deploy runs
+platforms/databricks/agent/mlflow.db
+platforms/databricks/agent/mlruns/

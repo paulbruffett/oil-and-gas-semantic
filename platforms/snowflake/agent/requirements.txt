@@ -1,0 +1,4 @@
+# Runtime deps for the Snowflake production agent (locus 3 port of platforms/databricks/agent).
+# Tool execution + Cortex routing go through the Snowflake Python connector; no MLflow/Databricks
+# SDK. Python 3.11+ (uses stdlib tomllib to read the `snow` CLI connection).
+snowflake-connector-python>=3.12,<4

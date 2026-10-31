@@ -1,0 +1,802 @@
+<title>OAG_FABLE — Agentic Intelligence on Snowflake</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ============================================================= tokens (frost) */
+  :root {
+    --bg:#EDF2F7; --surface:#F7FAFC; --surface-2:#E2EAF1; --raise:#FCFDFE;
+    --ink:#15222F; --ink-soft:#45586A; --ink-faint:#7A8B9B;
+    --border:#D3DEE8; --border-strong:#BDCEDC;
+    --accent:#1687C4; --accent-soft:#2AA0DA; --accent-tint:#DBEAF6;
+    --good:#3C8C6E; --warn:#B9841F; --crit:#B84E38;
+    /* the tiers, top(agent) -> bottom(substrate) */
+    --l1:#6E56CF; --l2:#0E8DA6; --l3:#2F8479; --l4:#3F6FB0; --l5:#5C6B7A; --l6:#8A93A0;
+    --code-bg:#0E1720; --code-ink:#DCE6EF; --code-faint:#748698; --code-line:#1E2C36;
+    --shadow:0 1px 2px rgba(20,40,60,.06), 0 8px 28px -18px rgba(20,40,60,.30);
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --maxprose:66ch;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0C1319; --surface:#111C24; --surface-2:#17242E; --raise:#15212A;
+      --ink:#E6EEF5; --ink-soft:#A6B5C3; --ink-faint:#6E8093;
+      --border:#213039; --border-strong:#324551;
+      --accent:#3FB0E6; --accent-soft:#5FC3F2; --accent-tint:#112733;
+      --good:#5BA684; --warn:#D19B36; --crit:#D06B52;
+      --l1:#9A85E6; --l2:#2FB4CE; --l3:#41A093; --l4:#5E8AC9; --l5:#8494A2; --l6:#7C8794;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 40px -22px rgba(0,0,0,.75);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#EDF2F7; --surface:#F7FAFC; --surface-2:#E2EAF1; --raise:#FCFDFE;
+    --ink:#15222F; --ink-soft:#45586A; --ink-faint:#7A8B9B;
+    --border:#D3DEE8; --border-strong:#BDCEDC;
+    --accent:#1687C4; --accent-soft:#2AA0DA; --accent-tint:#DBEAF6;
+    --good:#3C8C6E; --warn:#B9841F; --crit:#B84E38;
+    --l1:#6E56CF; --l2:#0E8DA6; --l3:#2F8479; --l4:#3F6FB0; --l5:#5C6B7A; --l6:#8A93A0;
+    --shadow:0 1px 2px rgba(20,40,60,.06), 0 8px 28px -18px rgba(20,40,60,.30);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0C1319; --surface:#111C24; --surface-2:#17242E; --raise:#15212A;
+    --ink:#E6EEF5; --ink-soft:#A6B5C3; --ink-faint:#6E8093;
+    --border:#213039; --border-strong:#324551;
+    --accent:#3FB0E6; --accent-soft:#5FC3F2; --accent-tint:#112733;
+    --good:#5BA684; --warn:#D19B36; --crit:#D06B52;
+    --l1:#9A85E6; --l2:#2FB4CE; --l3:#41A093; --l4:#5E8AC9; --l5:#8494A2; --l6:#7C8794;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 40px -22px rgba(0,0,0,.75);
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); font-size:16px; line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  a{color:inherit}
+  ::selection{background:var(--accent-tint); color:var(--ink)}
+
+  /* ============================================================= shell */
+  .shell{display:grid; grid-template-columns:290px minmax(0,1fr); gap:0; max-width:1360px; margin:0 auto}
+
+  .rail{
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    padding:30px 20px 40px 32px; border-right:1px solid var(--border);
+    background:linear-gradient(180deg, var(--surface), var(--bg) 88%);
+  }
+  .rail::-webkit-scrollbar{width:8px}
+  .rail::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:8px}
+  .brand{display:flex; align-items:baseline; gap:9px; margin-bottom:4px}
+  .brand .dot{width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 3px var(--accent-tint)}
+  .brand b{font-family:var(--mono); font-size:12.5px; letter-spacing:.02em; font-weight:600}
+  .rail .depth-note{font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); letter-spacing:.09em; text-transform:uppercase; margin:0 0 20px 18px}
+
+  nav.toc{display:flex; flex-direction:column; position:relative}
+  nav.toc::before{content:""; position:absolute; left:5px; top:6px; bottom:6px; width:2px; background:var(--border); border-radius:2px}
+  .toc a{
+    position:relative; text-decoration:none; font-size:13.5px; color:var(--ink-soft);
+    padding:5px 6px 5px 22px; border-radius:6px; display:flex; align-items:center; gap:8px;
+    transition:color .15s, background .15s;
+  }
+  .toc a .tick{position:absolute; left:0; width:12px; height:12px; border-radius:50%; background:var(--bg); border:2px solid var(--border-strong); transition:.15s}
+  .toc a.lyr .tick{border-color:var(--lc)}
+  .toc a:hover{color:var(--ink); background:var(--surface-2)}
+  .toc a.active{color:var(--ink); font-weight:600}
+  .toc a.active .tick{background:var(--accent); border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint)}
+  .toc a.lyr.active .tick{background:var(--lc); border-color:var(--lc); box-shadow:0 0 0 3px color-mix(in srgb, var(--lc) 28%, transparent)}
+  .toc .grouplabel{font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); padding:16px 6px 6px 22px}
+  .toc a .ly-n{font-family:var(--mono); font-size:10.5px; color:var(--lc); font-weight:700; width:14px}
+
+  .rail .meta{margin-top:26px; padding-top:18px; border-top:1px solid var(--border); font-family:var(--mono); font-size:11px; color:var(--ink-faint); line-height:1.9}
+  .rail .meta code{color:var(--ink-soft)}
+
+  main{padding:0 clamp(20px,4vw,64px) 120px; min-width:0}
+  section{padding-top:56px; scroll-margin-top:20px}
+  .prose{max-width:var(--maxprose)}
+  p{margin:0 0 15px}
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin:0 0 10px; display:flex; align-items:center; gap:10px}
+  .eyebrow::before{content:""; width:22px; height:1.5px; background:var(--accent)}
+  h1,h2,h3{text-wrap:balance; line-height:1.15; letter-spacing:-.012em}
+  h2{font-size:clamp(24px,3vw,32px); margin:0 0 14px; font-weight:680}
+  h3{font-size:19px; margin:30px 0 10px; font-weight:650}
+  h4{font-size:14.5px; margin:20px 0 8px; font-weight:650; letter-spacing:0}
+  .lead{font-size:19px; line-height:1.55; color:var(--ink-soft); max-width:60ch}
+  strong{font-weight:650; color:var(--ink)}
+  .u{color:var(--accent); font-weight:600}
+
+  .hero{padding-top:52px}
+  .hero h1{font-size:clamp(32px,5vw,54px); font-weight:720; margin:8px 0 20px; max-width:18ch}
+  .hero h1 .frac{color:var(--accent)}
+  .kicker{font-family:var(--mono); font-size:12px; color:var(--ink-faint); letter-spacing:.04em}
+
+  .statgrid{display:grid; grid-template-columns:repeat(6,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin:34px 0 4px}
+  @media(max-width:760px){.statgrid{grid-template-columns:repeat(3,1fr)}}
+  .stat{background:var(--surface); padding:15px 14px}
+  .stat .n{font-family:var(--mono); font-size:23px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums}
+  .stat .l{font-size:11px; color:var(--ink-faint); letter-spacing:.02em; margin-top:2px}
+
+  .howto{margin-top:30px; border-left:3px solid var(--accent); background:var(--accent-tint); padding:14px 18px; border-radius:0 10px 10px 0; max-width:var(--maxprose)}
+  .howto b{font-family:var(--mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--accent)}
+  .howto p{font-size:14px; margin:6px 0 0; color:var(--ink-soft)}
+  .howto code{color:var(--ink)}
+
+  code{font-family:var(--mono); font-size:.88em; background:var(--surface-2); padding:.1em .38em; border-radius:5px; color:var(--ink)}
+  .cite,a.cite{font-family:var(--mono); font-size:11.5px; color:var(--accent); background:var(--accent-tint); border:1px solid color-mix(in srgb,var(--accent) 24%, transparent); padding:1px 7px; border-radius:20px; text-decoration:none; white-space:nowrap; display:inline-block; transition:.13s}
+  a.cite:hover{background:var(--accent); color:#fff}
+
+  figure.code{margin:18px 0; border-radius:11px; overflow:hidden; background:var(--code-bg); border:1px solid var(--code-line); box-shadow:var(--shadow); max-width:880px}
+  figure.code figcaption{display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--code-line); background:rgba(255,255,255,.02)}
+  figure.code figcaption .fp{font-family:var(--mono); font-size:11.5px; color:var(--code-faint)}
+  figure.code figcaption .fp b{color:var(--accent-soft); font-weight:600}
+  figure.code figcaption .lang{margin-left:auto; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--code-faint)}
+  figure.code .scroll{overflow-x:auto}
+  pre{margin:0; padding:14px 16px; font-family:var(--mono); font-size:12.5px; line-height:1.65; color:var(--code-ink); white-space:pre}
+  pre .c{color:var(--code-faint); font-style:italic}
+  pre .k{color:#5FC3F2}
+  pre .s{color:#7FB894}
+  pre .f{color:#8FA6E6}
+  pre .n{color:#C88FC0}
+
+  .cards{display:grid; gap:14px; margin:22px 0}
+  .cols-2{grid-template-columns:1fr 1fr}
+  .cols-3{grid-template-columns:repeat(3,1fr)}
+  @media(max-width:820px){.cols-2,.cols-3{grid-template-columns:1fr}}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:17px 18px; box-shadow:var(--shadow)}
+  .card h4{margin:0 0 6px}
+  .card p{font-size:13.5px; color:var(--ink-soft); margin:0}
+  .card .fp{font-family:var(--mono); font-size:11.5px; color:var(--accent); margin-top:9px; display:block}
+
+  .pkg{border:1px solid var(--border); border-radius:14px; overflow:hidden; margin:22px 0; background:var(--surface); box-shadow:var(--shadow)}
+  .pkg > header{display:flex; align-items:center; gap:14px; padding:16px 20px; border-bottom:1px solid var(--border); background:linear-gradient(90deg, color-mix(in srgb,var(--pc) 12%, transparent), transparent 60%)}
+  .pkg > header .glyph{font-family:var(--mono); font-weight:700; font-size:13px; color:#fff; background:var(--pc); border-radius:8px; padding:4px 9px; letter-spacing:.02em}
+  .pkg > header .path{font-family:var(--mono); font-size:14px; font-weight:600}
+  .pkg > header .role{margin-left:auto; font-size:12.5px; color:var(--ink-faint); text-align:right; max-width:42ch}
+  .pkg .body{padding:6px 20px 20px}
+  .filelist{display:grid; grid-template-columns:1fr 1fr; gap:0 26px; margin:12px 0 4px}
+  @media(max-width:820px){.filelist{grid-template-columns:1fr}}
+  .filelist .fi{display:flex; gap:10px; padding:7px 0; border-bottom:1px dashed var(--border); align-items:baseline}
+  .filelist .fi .fn{font-family:var(--mono); font-size:12.5px; color:var(--ink); font-weight:600; white-space:nowrap}
+  .filelist .fi .fd{font-size:12.5px; color:var(--ink-soft); line-height:1.45}
+  .filelist .fi.seam .fn::after{content:"tool"; font-size:9px; margin-left:6px; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:0 4px; vertical-align:middle; letter-spacing:.05em}
+
+  /* ---- descent / tier stack ---- */
+  .strata{border:1px solid var(--border); border-radius:14px; overflow:hidden; margin:24px 0; box-shadow:var(--shadow)}
+  .stratum{display:grid; grid-template-columns:56px 1fr; align-items:stretch; border-bottom:1px solid var(--border); background:var(--surface); transition:background .15s}
+  .stratum:last-child{border-bottom:0}
+  .stratum:hover{background:var(--surface-2)}
+  .stratum .band{background:var(--sc); display:flex; align-items:center; justify-content:center; color:#fff; font-family:var(--mono); font-weight:700; font-size:13px; position:relative; text-align:center; line-height:1.1}
+  .stratum .s-body{padding:13px 18px; display:grid; grid-template-columns:1fr auto; gap:4px 18px; align-items:center}
+  .stratum .s-body .nm{font-weight:650; font-size:15px}
+  .stratum .s-body .nm span{color:var(--sc); font-family:var(--mono); font-size:12px; margin-left:8px}
+  .stratum .s-body .tech{font-size:13px; color:var(--ink-soft)}
+  .stratum .s-body .maps{grid-column:1/-1; font-family:var(--mono); font-size:11.5px; color:var(--ink-faint)}
+  .stratum .s-body .maps b{color:var(--sc)}
+
+  .seams{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:22px 0}
+  @media(max-width:820px){.seams{grid-template-columns:1fr}}
+  .seam-c{border:1px solid var(--border); border-top:3px solid var(--accent); border-radius:0 0 12px 12px; padding:16px 18px; background:var(--surface); box-shadow:var(--shadow)}
+  .seam-c .n{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); font-weight:700}
+  .seam-c h4{margin:7px 0 7px}
+  .seam-c p{font-size:13px; color:var(--ink-soft); margin:0 0 9px}
+  .seam-c .fp{font-family:var(--mono); font-size:11px; color:var(--ink-faint)}
+
+  .pipe{display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin:26px 0; border:1px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:var(--shadow)}
+  @media(max-width:900px){.pipe{grid-template-columns:1fr}}
+  .step{background:var(--surface); padding:16px 16px; border-right:1px solid var(--border); position:relative}
+  .step:last-child{border-right:0}
+  @media(max-width:900px){.step{border-right:0; border-bottom:1px solid var(--border)}}
+  .step .k{font-family:var(--mono); font-size:11px; color:var(--accent); font-weight:700; letter-spacing:.04em}
+  .step h4{margin:8px 0 6px; font-size:14.5px}
+  .step p{font-size:12.5px; color:var(--ink-soft); margin:0}
+  .step .pill{display:inline-block; margin-top:9px; font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:20px; letter-spacing:.03em}
+  .pill.obj{background:color-mix(in srgb,var(--good) 16%, transparent); color:var(--good); border:1px solid color-mix(in srgb,var(--good) 34%,transparent)}
+  .pill.seal{background:var(--accent-tint); color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+
+  .tablewrap{overflow-x:auto; margin:20px 0; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; min-width:600px; font-size:13.5px}
+  th,td{text-align:left; padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:top}
+  thead th{background:var(--surface-2); font-size:11.5px; letter-spacing:.03em; text-transform:uppercase; color:var(--ink-soft); font-weight:650; position:sticky; top:0}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--surface)}
+  td .dim{font-family:var(--mono); color:var(--accent); font-weight:700}
+  td code{font-size:11.5px}
+  .yes{color:var(--good); font-weight:600}
+  .faint{color:var(--ink-faint)}
+
+  .uc{display:grid; grid-template-columns:auto 1fr auto; gap:10px 16px; align-items:baseline; padding:12px 0; border-bottom:1px solid var(--border)}
+  .uc:last-child{border-bottom:0}
+  .uc .num{font-family:var(--mono); font-weight:700; color:var(--accent); font-size:14px}
+  .uc .q{font-size:14px}
+  .uc .q b{font-weight:650}
+  .uc .q em{color:var(--ink-soft); font-style:normal; font-family:var(--mono); font-size:12px}
+  .uc .hero-badge{font-family:var(--mono); font-size:9.5px; color:#fff; background:var(--accent); padding:1px 6px; border-radius:4px; letter-spacing:.05em}
+  .uc .kpi{font-family:var(--mono); font-size:11px; color:var(--ink-faint); white-space:nowrap}
+
+  .note{font-size:13px; color:var(--ink-soft); border-left:2px solid var(--border-strong); padding-left:14px; margin:16px 0; max-width:var(--maxprose)}
+  .divider{height:1px; background:var(--border); margin:0; border:0}
+  ul.tight{margin:10px 0; padding-left:20px; max-width:var(--maxprose)}
+  ul.tight li{margin:6px 0; font-size:14px}
+  ul.tight li code{font-size:12.5px}
+
+  /* ---- graph mini-diagram ---- */
+  .graph{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:18px 0; font-family:var(--mono); font-size:12.5px}
+  .graph .gn{border:1px solid var(--border-strong); border-radius:20px; padding:4px 12px; background:var(--surface); color:var(--ink); font-weight:600}
+  .graph .gn.f{border-color:var(--l4); color:var(--l4)}
+  .graph .gn.fac{border-color:var(--l3); color:var(--l3)}
+  .graph .gn.fld{border-color:var(--accent); color:var(--accent)}
+  .graph .gn.op{border-color:var(--l1); color:var(--l1)}
+  .graph .ge{color:var(--ink-faint); font-size:11px; letter-spacing:.02em}
+
+  footer{border-top:1px solid var(--border); margin-top:60px; padding-top:22px; color:var(--ink-faint); font-family:var(--mono); font-size:12px; max-width:var(--maxprose)}
+  footer a{color:var(--accent); text-decoration:none}
+
+  .mobilebar{display:none}
+  @media(max-width:900px){
+    .shell{grid-template-columns:1fr}
+    .rail{display:none}
+    .mobilebar{display:flex; position:sticky; top:0; z-index:20; align-items:center; gap:10px; padding:12px 18px; background:color-mix(in srgb,var(--bg) 86%,transparent); backdrop-filter:blur(8px); border-bottom:1px solid var(--border)}
+    .mobilebar b{font-family:var(--mono); font-size:12px}
+    .mobilebar .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+    main{padding-top:8px}
+  }
+</style>
+
+<div class="mobilebar"><span class="dot"></span><b>OAG_FABLE — Agentic Intelligence on Snowflake</b></div>
+
+<div class="shell">
+  <!-- ============================================ RAIL -->
+  <aside class="rail">
+    <div class="brand"><span class="dot"></span><b>OAG_FABLE · snowflake</b></div>
+    <p class="depth-note">agentic intelligence · top-down</p>
+    <nav class="toc" id="toc">
+      <a href="#top"><span class="tick"></span>What this is</a>
+      <a href="#stack"><span class="tick"></span>The agent stack</a>
+
+      <div class="grouplabel">the agent tier</div>
+      <a href="#agents" class="lyr" style="--lc:var(--l1)"><span class="tick"></span><span class="ly-n">A</span>Agents built &amp; available</a>
+      <a href="#invoke" class="lyr" style="--lc:var(--l1)"><span class="tick"></span><span class="ly-n">↦</span>How they're invoked</a>
+
+      <div class="grouplabel">what they stand on</div>
+      <a href="#tools" class="lyr" style="--lc:var(--l2)"><span class="tick"></span><span class="ly-n">T</span>Governed tool surface</a>
+      <a href="#semantic" class="lyr" style="--lc:var(--l3)"><span class="tick"></span><span class="ly-n">S</span>The semantic model</a>
+      <a href="#graph" class="lyr" style="--lc:var(--l4)"><span class="tick"></span><span class="ly-n">K</span>The knowledge graph</a>
+      <a href="#govern" class="lyr" style="--lc:var(--l5)"><span class="tick"></span><span class="ly-n">G</span>The governance boundary</a>
+
+      <div class="grouplabel">how it's built</div>
+      <a href="#populate"><span class="tick"></span>Populated from YAML</a>
+      <a href="#run"><span class="tick"></span>Reproduce &amp; run</a>
+    </nav>
+    <div class="meta">
+      DATABASE <code>OAG_FABLE</code><br>
+      3 schemas &middot; 6 semantic views<br>
+      1 Cortex Agent &middot; 13 tools<br>
+      51 KG nodes &middot; 87 KG edges<br>
+      config_hash <code>12a110ee</code>
+    </div>
+  </aside>
+
+  <main>
+    <!-- ============================================ HERO -->
+    <section id="top" class="hero">
+      <p class="kicker">A primer on Snowflake's agentic features — read against a working build that exercises each one.</p>
+      <h1>Agentic intelligence on Snowflake, <span class="frac">from the agent down</span>.</h1>
+      <p class="lead">One natural-language question — "which wells are producing below expected oil rate?" — enters a <strong>Cortex Agent</strong>, is planned by an LLM, and answered only through <strong>governed tools</strong> that read a <strong>Semantic View</strong> and walk a <strong>knowledge graph</strong>. This page follows that path top-down and shows exactly which repo file stands up each Snowflake feature.</p>
+
+      <div class="statgrid">
+        <div class="stat"><div class="n">1</div><div class="l">Cortex Agent</div></div>
+        <div class="stat"><div class="n">13</div><div class="l">governed tools</div></div>
+        <div class="stat"><div class="n">6</div><div class="l">Semantic Views</div></div>
+        <div class="stat"><div class="n">51/87</div><div class="l">KG nodes/edges</div></div>
+        <div class="stat"><div class="n">6/6</div><div class="l">themes gold-graded</div></div>
+        <div class="stat"><div class="n">3</div><div class="l">RBAC roles</div></div>
+      </div>
+
+      <div class="howto">
+        <b>How to read this map</b>
+        <p>It descends the <span class="u">agent stack</span> the way a request flows: the <b>agent</b> plans, calls a <b>governed tool</b>, which reads the <b>semantic model</b> or the <b>knowledge graph</b> over the <b>canonical</b> tables — all inside a <b>governance</b> boundary. Every Snowflake feature is paired with the <code>platforms/snowflake/…</code> file that instantiates it and the gold result that proves it works. Facts are current against the live <code>OAG_FABLE</code> database (Snowflake account <code>kj94708</code>, region <code>us-east-2</code>).</p>
+      </div>
+    </section>
+
+    <!-- ============================================ STACK -->
+    <section id="stack">
+      <p class="eyebrow">The descent</p>
+      <h2>The agent stack, top to bottom</h2>
+      <div class="prose">
+        <p>Snowflake's agentic surface is layered. At the top a <strong>Cortex Agent</strong> object reasons and orchestrates; below it, everything the agent may touch is a <strong>governed function</strong>; those functions read a governed <strong>semantic model</strong> and a queryable <strong>knowledge graph</strong>; all of it sits over the OSDU/PDM <strong>canonical</strong> tables inside one <strong>RBAC</strong> boundary. Read the column as a request falling through it.</p>
+      </div>
+
+      <div class="strata">
+        <div class="stratum" style="--sc:var(--l1)">
+          <div class="band">AGENT</div>
+          <div class="s-body">
+            <div class="nm">Reasoning &amp; orchestration <span>Cortex Agent</span></div>
+            <div class="tech">plans, routes, narrates — never authors SQL</div>
+            <div class="maps"><code>CREATE AGENT PRODUCTION_AGENT</code> + client <code>ProductionAgent</code> &rarr; <b>sql/07 · agent/agent.py</b></div>
+          </div>
+        </div>
+        <div class="stratum" style="--sc:var(--l2)">
+          <div class="band">TOOLS</div>
+          <div class="s-body">
+            <div class="nm">Governed tool surface <span>SQL UDF / UDTF</span></div>
+            <div class="tech">13 owner's-rights functions = the only actions an agent can take</div>
+            <div class="maps">theme UDTFs + <code>*_ROWS</code> wrappers + KG tools &rarr; <b>sql/04 · sql/05 · sql/07 · sql/08</b></div>
+          </div>
+        </div>
+        <div class="stratum" style="--sc:var(--l3)">
+          <div class="band">SEM</div>
+          <div class="s-body">
+            <div class="nm">Semantic model <span>Semantic Views</span></div>
+            <div class="tech">governed KPIs — entities, relationships, metrics; queried with <code>SEMANTIC_VIEW()</code></div>
+            <div class="maps">6 views compiled from OSI YAML &rarr; <b>sql/03 · semantic/*.yaml</b></div>
+          </div>
+        </div>
+        <div class="stratum" style="--sc:var(--l4)">
+          <div class="band">KG</div>
+          <div class="s-body">
+            <div class="nm">Knowledge graph <span>LPG · KG_NODE/KG_EDGE</span></div>
+            <div class="tech">typed nodes + directed edges; recursive-CTE traversal tools</div>
+            <div class="maps">51 nodes / 87 edges derived from canonical &rarr; <b>sql/08 · knowledge/vocabulary.yaml</b></div>
+          </div>
+        </div>
+        <div class="stratum" style="--sc:var(--l5)">
+          <div class="band">CANON</div>
+          <div class="s-body">
+            <div class="nm">Canonical substrate <span>OSDU / PDM</span></div>
+            <div class="tech">9 Parquet-loaded tables, config-hash stamped</div>
+            <div class="maps"><code>COPY INTO … MATCH_BY_COLUMN_NAME</code> &rarr; <b>sql/01 · sql/02</b></div>
+          </div>
+        </div>
+        <div class="stratum" style="--sc:var(--l6)">
+          <div class="band">RBAC</div>
+          <div class="s-body">
+            <div class="nm">Governance boundary <span>roles · Cortex_User</span></div>
+            <div class="tech">owner's-rights functions turn "no SQL authoring" into an enforced grant</div>
+            <div class="maps">OAG_OWNER / _ANALYST / _AGENT &rarr; <b>sql/06</b></div>
+          </div>
+        </div>
+      </div>
+      <p class="note">The one invariant that makes this safe: <strong>the agent selects governed tools, it never writes SQL and never invents numbers</strong>. Because the tools run with the <em>owner's</em> rights, the agent role can call all 13 yet cannot <code>SELECT</code> a single raw table — so a correct tool selection yields a correct, gradable answer by construction.</p>
+    </section>
+
+    <!-- ============================================ AGENTS -->
+    <section id="agents">
+      <p class="eyebrow" style="color:var(--l1)">the agent tier · DESIGN §4 layer 5</p>
+      <h2>What agents are built — and what Snowflake offers</h2>
+      <div class="prose"><p>Snowflake exposes agentic intelligence at three tiers. This build instantiates the first two and positions the third; all share the same governed-tool contract.</p></div>
+
+      <div class="cards cols-3">
+        <div class="card" style="border-top:3px solid var(--l1)">
+          <h4>Cortex Agent <span class="faint">(built ★)</span></h4>
+          <p>A first-class server-side <code>AGENT</code> object that plans, calls tools, and narrates. <code>OAG_FABLE.KNOWLEDGE.PRODUCTION_AGENT</code> — the delegated entry point an external orchestrator hands a whole question to.</p>
+          <span class="fp">sql/07_agent.sql</span>
+        </div>
+        <div class="card" style="border-top:3px solid var(--l1)">
+          <h4>Cortex COMPLETE <span class="faint">(built ★)</span></h4>
+          <p>The LLM as a SQL function — <code>SNOWFLAKE.CORTEX.COMPLETE(model, prompt)</code>. The client-side <code>ProductionAgent</code> uses it as a router (structured-output completion) with no endpoint to provision.</p>
+          <span class="fp">agent/agent.py</span>
+        </div>
+        <div class="card" style="border-top:3px solid var(--l1)">
+          <h4>Cortex Analyst <span class="faint">(positioned)</span></h4>
+          <p>Native text-to-SQL over a semantic model — the NL&rarr;query analogue of Databricks Genie. The six <code>SEMANTIC</code> views are ready to back a <code>cortex_analyst_text_to_sql</code> tool for ad-hoc questions beyond the governed themes.</p>
+          <span class="fp">agent/README.md · "Remaining"</span>
+        </div>
+      </div>
+
+      <h3>PRODUCTION_AGENT — the Cortex Agent object</h3>
+      <div class="prose"><p>Created from a YAML <em>specification</em> inside SQL DDL: an <code>instructions</code> block (orchestration policy + response style + sample questions), an <code>orchestration</code> budget, a <code>tools</code> list of <code>generic</code> tool specs, and a <code>tool_resources</code> map binding each tool name to a governed Snowflake function. It carries <strong>all six use-case themes plus the four knowledge-graph tools</strong> — thirteen in total.</p></div>
+      <figure class="code">
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/07_agent.sql</b>:138–184</span><span class="lang">sql · agent spec</span></figcaption>
+        <div class="scroll"><pre><span class="k">CREATE OR REPLACE AGENT</span> OAG_FABLE.KNOWLEDGE.<span class="f">PRODUCTION_AGENT</span>
+<span class="k">FROM SPECIFICATION</span> $$
+instructions:
+  orchestration: |
+    You answer oil &amp; gas production-analytics questions using ONLY the governed tools.
+    Never write SQL and never invent numbers or relationships.
+    - surveillance_below_expected: wells below expected oil this week (theme 1) ...
+      If the user names a field, first call kg_resolve to get its node id ('field:1') ...
+  response: |
+    Summarize in 1-3 sentences ... do not restate exact numeric values beyond counts -
+    the caller reads exact values from the tool result.
+orchestration:
+  budget: { seconds: 120, tokens: 16000 }
+tools:
+  - tool_spec: { type: generic, name: surveillance_below_expected, ... }   <span class="c"># 13 total</span>
+tool_resources:
+  surveillance_below_expected:
+    type: function
+    identifier: OAG_FABLE.KNOWLEDGE.SURVEILLANCE_BELOW_EXPECTED_ROWS       <span class="c"># owner's-rights UDF</span>
+    execution_environment: { type: warehouse, warehouse: COMPUTE_WH }
+$$;</pre></div>
+      </figure>
+      <p class="note"><strong>Finding — a UDTF cannot be attached directly.</strong> The generic-tool runner invokes a function <em>scalar-style</em>, so a table function raises "Unknown user-defined function". The fix is a thin scalar wrapper (<code>SURVEILLANCE_BELOW_EXPECTED_ROWS</code>, sql/07) that returns the governed rows as an <code>ARRAY</code> of <code>OBJECT</code>s whose keys are exactly the answer-submission <code>value_keys</code> — so the REST adapter is trivial and the graded values keep full float precision.</p>
+
+      <h3>The deterministic-answer / LLM-reasoning split</h3>
+      <div class="prose"><p>The design principle that survives every tier: the LLM <em>reasons</em> (routes across themes, resolves entities, writes the narrative) but the <strong>graded values are assembled from the governed tool result, never from the model's prose</strong>. That keeps functional correctness objective even when the whole question is delegated to the agent object.</p></div>
+      <figure class="code">
+        <figcaption><span class="fp"><b>platforms/snowflake/agent/agent.py</b>:222–238</span><span class="lang">python</span></figcaption>
+        <div class="scroll"><pre><span class="c"># Re-execute the primary tool authoritatively, so key_values does NOT depend on the LLM</span>
+<span class="c"># and a transient tool ERROR is surfaced as a refusal, not an empty set.</span>
+primary = self.<span class="f">_exec_tool</span>(theme_key, args)
+<span class="k">if</span> primary <span class="k">is None or isinstance</span>(primary, str):     <span class="c"># "ERROR: ..." tool failure</span>
+    <span class="k">return</span> {<span class="s">"behavior"</span>: <span class="s">"refused-data-quality"</span>, ...}
+key_values = { t[<span class="s">"set_key"</span>]: self.<span class="f">_rows</span>(primary, t[<span class="s">"id_key"</span>], ...) }</pre></div>
+      </figure>
+    </section>
+
+    <!-- ============================================ INVOKE -->
+    <section id="invoke">
+      <p class="eyebrow" style="color:var(--l1)">the agent tier · invocation</p>
+      <h2>How the agents are invoked</h2>
+      <div class="prose"><p>The same governed agent is reachable three ways — by another agent or service over REST, by a Python client, or (roadmap) embedded in a user-facing app. Each honors the identical tool contract.</p></div>
+
+      <div class="pipe">
+        <div class="step">
+          <div class="k">01 · REST</div>
+          <h4>Agent <code>:run</code> endpoint</h4>
+          <p>An external orchestrator POSTs an NL question to <code>…/agents/PRODUCTION_AGENT:run</code>. No driver, no session — the platform plans and executes tools server-side.</p>
+          <span class="pill obj">6/6 gold PASS</span>
+        </div>
+        <div class="step">
+          <div class="k">02 · DRIVER</div>
+          <h4>Python client</h4>
+          <p><code>ProductionAgent</code> over the Snowflake connector: Cortex routes, the connector runs <code>TABLE(fn(args))</code>, code assembles the submission.</p>
+          <span class="pill obj">6/6 gold PASS</span>
+        </div>
+        <div class="step">
+          <div class="k">03 · UX</div>
+          <h4>User experiences</h4>
+          <p>Streamlit-in-Snowflake or Snowpark Container Services host the same client unchanged — an in-platform ops console.</p>
+          <span class="pill seal">roadmap</span>
+        </div>
+        <div class="step">
+          <div class="k">04 · AUTH</div>
+          <h4>Key-pair JWT</h4>
+          <p>Every path authenticates with a key-pair JWT (<code>snow connection generate-jwt</code>) or the connector's key-pair auth. Credentials never enter the repo.</p>
+          <span class="pill seal">least-privilege</span>
+        </div>
+      </div>
+
+      <h4>Agent-to-agent: the REST hand-off an external orchestrator calls</h4>
+      <figure class="code">
+        <figcaption><span class="fp"><b>platforms/snowflake/agent/test_agent_rest.py</b>:100–113</span><span class="lang">http · :run</span></figcaption>
+        <div class="scroll"><pre>POST https://&lt;account&gt;.snowflakecomputing.com
+     /api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run
+Authorization: Bearer &lt;key-pair JWT&gt;
+X-Snowflake-Authorization-Token-Type: KEYPAIR_JWT
+
+{<span class="s">"stream"</span>: <span class="k">false</span>, <span class="s">"messages"</span>: [{<span class="s">"role"</span>:<span class="s">"user"</span>,
+  <span class="s">"content"</span>: [{<span class="s">"type"</span>:<span class="s">"text"</span>, <span class="s">"text"</span>: <span class="s">"How is well NO 15/9-F-12 related to AkerBP?"</span>}]}]}</pre></div>
+      </figure>
+      <p class="prose">The response carries the governed rows in a <code>tool_result</code> content item; the caller reads exact <code>key_values</code> from that JSON payload, never from the LLM's sentence. The agent even <em>composes</em> the graph tools unprompted — it plans <code>kg_resolve("AkerBP")</code>, <code>kg_resolve("NO 15/9-F-12")</code>, then <code>kg_path(well:12 → operator:AkerBP, 6)</code> and answers "directly operated by AkerBP — a single OPERATED_BY hop".</p>
+
+      <div class="cards cols-2">
+        <div class="card">
+          <h4>⚠ Account finding — Cortex <code>COMPLETE</code> tool-use</h4>
+          <p>On this account <em>no</em> Cortex <code>COMPLETE</code> model accepts the OpenAI-style <code>tools</code> parameter (<code>claude-sonnet-4-5</code>, <code>mistral-large2</code>, <code>llama3.x</code>, <code>openai-gpt-4.1</code> all reject it). So the client agent routes with a <strong>structured-output completion</strong> instead of a tool-calling loop. Native tool-use <em>does</em> exist at the Agent-object tier — <code>PRODUCTION_AGENT</code> plans and calls tools correctly.</p>
+        </div>
+        <div class="card">
+          <h4>Six themes, one contract</h4>
+          <p>Both the REST and driver paths return the neutral <code>answer_submission</code> schema and grade against the frozen gold — <strong>12 / 5 / 1 / 8 / 11 / 3</strong> flagged rows, exact set + values within <code>1e-6</code>. Field scoping and honest abstention are preserved: an unknown field yields <code>clarification-requested</code>, not a guess.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================ TOOLS -->
+    <section id="tools">
+      <p class="eyebrow" style="color:var(--l2)">what they stand on · the context</p>
+      <h2>The governed tool surface</h2>
+      <div class="prose"><p>An agent's "context" here is not a prompt blob — it is the <strong>set of governed functions it is allowed to call</strong>. Thirteen tools in <code>OAG_FABLE.KNOWLEDGE</code>: nine analytics answers (the six themes, three with extra groupings) and four graph-navigation tools. Each is an owner's-rights UDF/UDTF that reproduces the deterministic reference-compile, so a tool call <em>is</em> a governed answer.</p></div>
+
+      <div class="pkg" style="--pc:var(--l2)">
+        <header>
+          <span class="glyph">TOOLS</span>
+          <span class="path">OAG_FABLE.KNOWLEDGE.*</span>
+          <span class="role">9 analytics + 4 graph · attached to PRODUCTION_AGENT</span>
+        </header>
+        <div class="body">
+          <div class="filelist">
+            <div class="fi seam"><span class="fn">surveillance_below_expected</span><span class="fd">Theme 1 (hero): wells below the expected-oil materiality band this week. Reads <code>SEMANTIC.SURVEILLANCE</code>.</span></div>
+            <div class="fi seam"><span class="fn">deferment_by_cause</span><span class="fd">Theme 2: deferred oil + downtime hours + events by cause (<code>+ deferment_summary</code> for fleet totals).</span></div>
+            <div class="fi seam"><span class="fn">decline_wells_faster</span><span class="fd">Theme 3: wells declining faster than forecast in the top field.</span></div>
+            <div class="fi seam"><span class="fn">welltest_flags</span><span class="fd">Theme 4: stale well tests or anomalous allocation factors.</span></div>
+            <div class="fi seam"><span class="fn">watchlist_flags</span><span class="fd">Theme 5: wells down, watering out, or with a GOR change vs baseline.</span></div>
+            <div class="fi seam"><span class="fn">rollup_by_field</span><span class="fd">Theme 6: oil/gas/water vs last month (<code>+ _operator, _facility</code> groupings).</span></div>
+            <div class="fi seam"><span class="fn">kg_resolve</span><span class="fd">NL mention &rarr; graph node via name / synonym / UWI.</span></div>
+            <div class="fi seam"><span class="fn">kg_neighbors</span><span class="fd">What an entity is directly connected to (1 hop, both directions).</span></div>
+            <div class="fi seam"><span class="fn">kg_traverse</span><span class="fd">Everything within N hops — rollups, "what belongs to X".</span></div>
+            <div class="fi seam"><span class="fn">kg_path</span><span class="fd">How two entities are related; empty = genuinely not connected.</span></div>
+          </div>
+
+          <h4>A governed tool reads the semantic layer — it never authors SQL</h4>
+          <p style="font-size:14px;color:var(--ink-soft);max-width:var(--maxprose)">The hero tool is a UDTF whose body is a <code>SEMANTIC_VIEW()</code> read of the governed surveillance metrics. The window and threshold come from <code>DATASET_PARAM</code> (governed data, not literals), so the only argument is the optional field scope. Its output columns are exactly the answer-submission <code>flagged</code> shape.</p>
+          <figure class="code">
+            <figcaption><span class="fp"><b>platforms/snowflake/sql/04_knowledge_layer.sql</b>:137–151</span><span class="lang">sql · UDTF</span></figcaption>
+            <div class="scroll"><pre><span class="k">CREATE OR REPLACE FUNCTION</span> KNOWLEDGE.<span class="f">SURVEILLANCE_BELOW_EXPECTED</span>(arg_field_id NUMBER)
+  <span class="k">RETURNS TABLE</span>(well_id NUMBER, uwi STRING, ..., efficiency FLOAT) <span class="k">AS</span> $$
+    <span class="k">SELECT</span> well_id, uwi, field_id, expected_oil, actual_oil, oil_shortfall, production_efficiency
+    <span class="k">FROM</span> <span class="f">SEMANTIC_VIEW</span>(OAG_FABLE.SEMANTIC.SURVEILLANCE
+      <span class="k">DIMENSIONS</span> surv.well_id, well.uwi, well.field_id
+      <span class="k">METRICS</span> surv.expected_oil, surv.actual_oil, surv.oil_shortfall, surv.production_efficiency
+      <span class="k">WHERE</span> surv.volume_date <span class="k">BETWEEN</span> KNOWLEDGE.<span class="f">PARAM</span>(<span class="s">'surveillance_window_start'</span>)
+                                 <span class="k">AND</span> KNOWLEDGE.<span class="f">PARAM</span>(<span class="s">'surveillance_window_end'</span>))
+    <span class="k">WHERE</span> (arg_field_id &lt;= 0 <span class="k">OR</span> field_id = arg_field_id)
+      <span class="k">AND</span> production_efficiency &lt; <span class="k">CAST</span>(KNOWLEDGE.<span class="f">PARAM</span>(<span class="s">'surveillance_flag_threshold'</span>) <span class="k">AS</span> FLOAT)
+    <span class="k">ORDER BY</span> oil_shortfall <span class="k">DESC</span>, well_id  $$;</pre></div>
+          </figure>
+
+          <h4>NL &rarr; governed metric: the business vocabulary</h4>
+          <p style="font-size:14px;color:var(--ink-soft);max-width:var(--maxprose)">Term resolution maps a business phrase onto a governed metric so the agent can stay in ubiquitous language. <code>RESOLVE_TERM('watering out')</code> and its synonyms resolve by longest-match substring — mirroring the shell's in-memory LPG.</p>
+          <figure class="code">
+            <figcaption><span class="fp"><b>platforms/snowflake/sql/04_knowledge_layer.sql</b>:91–97</span><span class="lang">sql · UDF</span></figcaption>
+            <div class="scroll"><pre><span class="k">CREATE OR REPLACE FUNCTION</span> KNOWLEDGE.<span class="f">RESOLVE_TERM</span>(phrase STRING) <span class="k">RETURNS</span> STRING <span class="k">AS</span> $$
+    (<span class="k">SELECT</span> metric <span class="k">FROM</span> KNOWLEDGE.VOCABULARY_TERM
+     <span class="k">WHERE</span> <span class="f">CONTAINS</span>(KNOWLEDGE.<span class="f">NORM</span>(phrase), synonym)   <span class="c"># 'below expected' -> production_efficiency</span>
+     <span class="k">ORDER BY</span> <span class="f">LENGTH</span>(synonym) <span class="k">DESC LIMIT</span> 1)  $$;</pre></div>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================ SEMANTIC -->
+    <section id="semantic">
+      <p class="eyebrow" style="color:var(--l3)">what they stand on · the semantic model</p>
+      <h2>The semantic model — Snowflake Semantic Views</h2>
+      <div class="prose"><p>A <strong>Semantic View</strong> is Snowflake's governed metric object: first-class SQL DDL declaring <code>TABLES</code>, typed <code>RELATIONSHIPS</code>, <code>DIMENSIONS</code>, and <code>METRICS</code> — with primary keys required and derived metrics expressed <em>by reference</em>. Six views carry the OSI KPI set; agents (and Cortex Analyst) <em>select</em> these governed metrics rather than authoring aggregation SQL.</p></div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Semantic View</th><th>Fact</th><th>Governed metrics</th><th>Themes</th></tr></thead>
+          <tbody>
+            <tr><td><span class="dim">SURVEILLANCE</span></td><td>cross-fact (actual ∪ forecast)</td><td><code>production_efficiency</code>, <code>oil_shortfall</code>, expected/actual oil</td><td>1 ★</td></tr>
+            <tr><td><span class="dim">WELL_VOLUMES</span></td><td>WELL_VOL_DAILY</td><td>actual oil/gas/water, <code>uptime_pct</code>, <code>water_cut</code>, <code>gor</code>, cumulative</td><td>1/2/3/5/6</td></tr>
+            <tr><td><span class="dim">FORECAST_VOLUMES</span></td><td>PRODUCT_VOLUME_SUMMARY</td><td><code>expected_oil</code> (decline-curve baseline)</td><td>1/3</td></tr>
+            <tr><td><span class="dim">DOWNTIME</span></td><td>DOWN_TIME_EVENT</td><td><code>downtime_hours</code>, <code>n_events</code> by cause</td><td>2</td></tr>
+            <tr><td><span class="dim">WELL_TESTS</span></td><td>WELL_TEST</td><td><code>well_tests_recorded</code>, <code>test_oil_rate</code>, <code>last_test_date</code></td><td>4</td></tr>
+            <tr><td><span class="dim">ALLOCATION</span></td><td>RPEN_ALLOCATION_FACTOR</td><td><code>allocation_factor</code></td><td>4</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Metrics reference metrics — closer to the neutral OSI spec than a flat re-aggregation</h4>
+      <div class="prose"><p>The sharpest modeling difference from Databricks Metric Views: Snowflake <strong>rejects</strong> <code>SUM(metric)</code>. A ratio metric must reference base metrics — which is exactly how OSI defines <code>ratio</code>/<code>derived</code> types. The hero view declares two base sums and two derived metrics that reference them.</p></div>
+      <figure class="code">
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/03_semantic_views.sql</b>:73–92</span><span class="lang">sql · semantic view</span></figcaption>
+        <div class="scroll"><pre><span class="k">CREATE OR REPLACE SEMANTIC VIEW</span> OAG_FABLE.SEMANTIC.<span class="f">SURVEILLANCE</span>
+  <span class="k">TABLES</span> (
+    surv <span class="k">AS</span> SEMANTIC._SURVEILLANCE_SRC <span class="k">PRIMARY KEY</span> (surv_row_id),
+    well <span class="k">AS</span> CANONICAL.WELL <span class="k">PRIMARY KEY</span> (WELL_ID) )
+  <span class="k">RELATIONSHIPS</span> ( surv_to_well <span class="k">AS</span> surv (well_id) <span class="k">REFERENCES</span> well (WELL_ID) )
+  <span class="k">DIMENSIONS</span> ( surv.volume_date <span class="k">AS</span> surv.d, surv.well_id <span class="k">AS</span> surv.well_id, well.uwi <span class="k">AS</span> well.UWI, ... )
+  <span class="k">METRICS</span> (
+    surv.actual_oil   <span class="k">AS</span> <span class="f">SUM</span>(surv.actual_oil_bbl),           <span class="c"># base</span>
+    surv.expected_oil <span class="k">AS</span> <span class="f">SUM</span>(surv.expected_oil_bbl),         <span class="c"># base</span>
+    surv.production_efficiency <span class="k">AS</span> surv.actual_oil / <span class="f">NULLIF</span>(surv.expected_oil, 0),  <span class="c"># derived: references bases</span>
+    surv.oil_shortfall <span class="k">AS</span> surv.expected_oil - surv.actual_oil );      <span class="c"># derived</span></pre></div>
+      </figure>
+
+      <h4>Reading a Semantic View — filters go <em>inside</em> the function</h4>
+      <div class="prose"><p>You name dimensions and metrics inside the <code>SEMANTIC_VIEW()</code> table function; row-level filters go in its inner <code>WHERE</code>, and an outer <code>WHERE</code> only filters the aggregated output. This query reproduces <code>gold/surveillance.json</code> — the 12 flagged wells — exactly.</p></div>
+      <figure class="code">
+        <figcaption><span class="fp"><b>platforms/snowflake/README.md</b> · querying a semantic view</span><span class="lang">sql</span></figcaption>
+        <div class="scroll"><pre><span class="k">SELECT</span> well_id, expected_oil, actual_oil, oil_shortfall, production_efficiency
+<span class="k">FROM</span> <span class="f">SEMANTIC_VIEW</span>(OAG_FABLE.SEMANTIC.SURVEILLANCE
+  <span class="k">DIMENSIONS</span> surv.well_id
+  <span class="k">METRICS</span> surv.expected_oil, surv.actual_oil, surv.oil_shortfall, surv.production_efficiency
+  <span class="k">WHERE</span> surv.volume_date <span class="k">BETWEEN</span> <span class="s">'2025-03-25'</span> <span class="k">AND</span> <span class="s">'2025-03-31'</span>)
+<span class="k">WHERE</span> production_efficiency &lt; 0.9
+<span class="k">ORDER BY</span> oil_shortfall <span class="k">DESC</span>, well_id;   <span class="c"># -> 12 wells, matches gold exactly</span></pre></div>
+      </figure>
+      <p class="note">A Semantic View logical table must reference a <strong>table or view</strong> (unlike a Metric View's arbitrary inline <code>source:</code> SQL). The three metrics with bespoke shapes — the surveillance <em>union</em>, the forecast/allocation join+filter — become named backing views <code>_SURVEILLANCE_SRC</code> / <code>_FORECAST_SRC</code> / <code>_ALLOCATION_SRC</code>, with a <code>ROW_NUMBER()</code> surrogate key where the union has no natural PK. All in-locus in the semantic layer; no OSI construct failed to translate.</p>
+    </section>
+
+    <!-- ============================================ GRAPH -->
+    <section id="graph">
+      <p class="eyebrow" style="color:var(--l4)">what they stand on · the knowledge graph</p>
+      <h2>The knowledge graph — an explicit, queryable LPG</h2>
+      <div class="prose"><p>Where the Semantic Views declare the same joins <em>per view</em> for the metric engine, the knowledge graph holds every business concept and relationship <strong>once, account-wide</strong>, as a Labeled Property Graph the agent can walk. It's the <code>KG_NODE</code>/<code>KG_EDGE</code> pattern — <strong>derived deterministically from the canonical tables</strong>, so graph and substrate cannot drift.</p></div>
+
+      <div class="graph">
+        <span class="gn f">well</span><span class="ge">—[AT_FACILITY]→</span><span class="gn fac">facility</span><span class="ge">—[IN_FIELD]→</span><span class="gn fld">field</span>
+        <span class="ge">&nbsp;·&nbsp;</span><span class="gn f">well</span><span class="ge">—[OPERATED_BY]→</span><span class="gn op">operator</span>
+        <span class="ge">&nbsp;·&nbsp;</span><span class="gn">reporting_entity</span><span class="ge">—[REPORTS_ON]→</span><span class="gn f">well|field</span>
+      </div>
+
+      <div class="statgrid" style="grid-template-columns:repeat(5,1fr)">
+        <div class="stat"><div class="n">18</div><div class="l">well nodes</div></div>
+        <div class="stat"><div class="n">6</div><div class="l">facility nodes</div></div>
+        <div class="stat"><div class="n">3</div><div class="l">field nodes</div></div>
+        <div class="stat"><div class="n">3</div><div class="l">operator nodes</div></div>
+        <div class="stat"><div class="n">21</div><div class="l">reporting entities</div></div>
+      </div>
+
+      <h4>Nodes and edges built from canonical FK columns</h4>
+      <div class="prose"><p>Node ids are <code>'&lt;type&gt;:&lt;key&gt;'</code> strings so one column references any entity type; field nodes carry their synonyms as a property (feeding <code>kg_resolve</code>). Informational PK/FK constraints keep the graph discoverable from <code>INFORMATION_SCHEMA</code>.</p></div>
+      <figure class="code">
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/08_knowledge_graph.sql</b>:23–68</span><span class="lang">sql · derived tables</span></figcaption>
+        <div class="scroll"><pre><span class="k">CREATE OR REPLACE TABLE</span> KNOWLEDGE.KG_NODE <span class="k">AS</span>
+  <span class="k">SELECT</span> <span class="s">'well:'</span> || WELL_ID <span class="k">AS</span> node_id, <span class="s">'well'</span> <span class="k">AS</span> node_type, WELL_NAME <span class="k">AS</span> name,
+         <span class="f">OBJECT_CONSTRUCT</span>(<span class="s">'uwi'</span>, UWI, <span class="s">'x'</span>, X_COORDINATE, <span class="s">'y'</span>, Y_COORDINATE) <span class="k">AS</span> properties
+  <span class="k">FROM</span> CANONICAL.WELL
+  <span class="k">UNION ALL</span> ... <span class="c"># facility, field(+synonyms), operator, reporting_entity</span>
+
+<span class="k">CREATE OR REPLACE TABLE</span> KNOWLEDGE.KG_EDGE <span class="k">AS</span>
+  <span class="k">SELECT</span> <span class="s">'well:'</span> || WELL_ID, <span class="s">'AT_FACILITY'</span>, <span class="s">'facility:'</span> || FACILITY_ID <span class="k">FROM</span> CANONICAL.WELL
+  <span class="k">UNION ALL SELECT</span> <span class="s">'well:'</span> || WELL_ID, <span class="s">'OPERATED_BY'</span>, <span class="s">'operator:'</span> || OPERATOR ...</pre></div>
+      </figure>
+
+      <h4>Traversal is a cycle-guarded recursive CTE — the agent walks it without table access</h4>
+      <div class="prose"><p>Four owner's-rights UDTFs — <code>KG_RESOLVE</code>, <code>KG_NEIGHBORS</code>, <code>KG_TRAVERSE</code>, <code>KG_PATH</code> — treat edges as bidirectional and guard cycles by array membership. They answer entity-resolution and relationship questions server-side.</p></div>
+      <figure class="code">
+        <figcaption><span class="fp"><b>platforms/snowflake/sql/08_knowledge_graph.sql</b>:124–150</span><span class="lang">sql · recursive CTE</span></figcaption>
+        <div class="scroll"><pre><span class="k">WITH RECURSIVE</span> bidir <span class="k">AS</span> (                         <span class="c"># an edge is navigable from either end</span>
+  <span class="k">SELECT</span> src_node_id a, dst_node_id b, <span class="s">'-['</span>||edge_type||<span class="s">']-&gt;'</span> hop <span class="k">FROM</span> KG_EDGE
+  <span class="k">UNION ALL SELECT</span> dst_node_id, src_node_id, <span class="s">'&lt;-['</span>||edge_type||<span class="s">']-'</span> <span class="k">FROM</span> KG_EDGE ),
+walk <span class="k">AS</span> (
+  <span class="k">SELECT</span> arg_node_id node_id, 0 depth, <span class="f">ARRAY_CONSTRUCT</span>(arg_node_id) path
+  <span class="k">UNION ALL SELECT</span> bidir.b, walk.depth+1, <span class="f">ARRAY_APPEND</span>(...)
+  <span class="k">FROM</span> walk <span class="k">JOIN</span> bidir <span class="k">ON</span> bidir.a = walk.node_id
+  <span class="k">WHERE</span> walk.depth &lt; arg_max_hops
+    <span class="k">AND NOT</span> <span class="f">ARRAY_CONTAINS</span>(bidir.b::VARIANT, walk.path) )   <span class="c"># cycle guard</span></pre></div>
+      </figure>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Live check (fixed graph)</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td><code>KG_RESOLVE('the volve')</code></td><td class="yes"><code>field:1</code> via <code>synonym</code> ✓</td></tr>
+            <tr><td><code>KG_TRAVERSE('field:1', 1)</code> well set vs <code>WELLS_IN_FIELD(1)</code></td><td class="yes">exact match ✓ (graph agrees with the sql/04 tool)</td></tr>
+            <tr><td><code>KG_PATH('well:12','operator:AkerBP',2)</code></td><td class="yes">1 hop, <code>OPERATED_BY</code> ✓</td></tr>
+            <tr><td><code>KG_PATH('well:12','operator:Equinor',6)</code></td><td class="yes"><strong>empty</strong> ✓ — 3 disconnected components (one per field); reports true non-connectivity rather than inventing a route</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================ GOVERNANCE -->
+    <section id="govern">
+      <p class="eyebrow" style="color:var(--l5)">what they stand on · the boundary</p>
+      <h2>The governance boundary — owner's rights as a security wall</h2>
+      <div class="prose"><p>The strongest Snowflake finding for agentic workloads: because SQL UDFs run with the <strong>owner's</strong> rights, the governed tools become a <em>security boundary</em>, not a convention. The agent role can call every tool yet cannot <code>SELECT</code> a single raw table — the tightest possible form of "governed tools, no SQL authoring". Three least-privilege roles carry it.</p></div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Role</th><th>Purpose</th><th>Grants</th></tr></thead>
+          <tbody>
+            <tr><td><span class="dim">OAG_OWNER</span></td><td>administers the port</td><td>rolls up to <code>SYSADMIN</code>; parent of the consumer roles</td></tr>
+            <tr><td><span class="dim">OAG_ANALYST</span></td><td>read-only BI consumer</td><td><code>SELECT</code> on tables/views, <code>USAGE</code> on functions — current &amp; future</td></tr>
+            <tr><td><span class="dim">OAG_AGENT</span></td><td>agent service role</td><td><code>USAGE</code> on the <code>KNOWLEDGE.*</code> tools + <code>SNOWFLAKE.CORTEX_USER</code> + <code>COMPUTE_WH</code> — <strong>no</strong> direct table/view access</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Live isolation check (<code>USE SECONDARY ROLES NONE</code>)</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td><code>OAG_AGENT</code> calls <code>SURVEILLANCE_BELOW_EXPECTED(0)</code></td><td class="yes">12 rows ✓</td></tr>
+            <tr><td><code>OAG_AGENT</code> <code>SELECT</code>s <code>CANONICAL.WELL_VOL_DAILY</code></td><td class="yes"><strong>denied</strong> — "schema … not authorized" ✓ (owner-rights isolation)</td></tr>
+            <tr><td><code>OAG_AGENT</code> calls <code>SNOWFLAKE.CORTEX.COMPLETE</code></td><td class="yes">✓ (LLM is a grantable account resource)</td></tr>
+            <tr><td><code>OAG_ANALYST</code> <code>INSERT</code>s into <code>KNOWLEDGE.DATASET_PARAM</code></td><td class="yes"><strong>denied</strong> — read-only ✓</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note"><strong>RBAC gotcha.</strong> Snowflake sessions default to <em>secondary roles = ALL</em> (the union of every role a user holds), so a broad role can leak in and make least-privilege appear to pass when it doesn't. Test isolation with <code>USE SECONDARY ROLES NONE</code>, and give the agent's service user a scoped default role.</p>
+    </section>
+
+    <!-- ============================================ POPULATE -->
+    <section id="populate">
+      <p class="eyebrow">how it's built · from spec to platform</p>
+      <h2>How every layer is populated — YAML in, Snowflake objects out</h2>
+      <div class="prose"><p>Nothing above is hand-entered. The neutral OSI/LPG specs stay the source of truth; eight ordered SQL files translate them into Snowflake objects, and every derived object can be rebuilt by re-running its file — so spec, substrate, and graph cannot diverge.</p></div>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Source of truth</th><th>Populates</th><th>Via</th></tr></thead>
+          <tbody>
+            <tr><td><code>data/frozen/canonical/*.parquet</code> (config_hash <code>12a110eecfe2</code>)</td><td><code>CANONICAL.*</code> — 9 OSDU/PDM tables</td><td><code>PUT</code> &rarr; <code>INFER_SCHEMA</code> &rarr; <code>COPY INTO … MATCH_BY_COLUMN_NAME</code> <span class="faint">(sql/01–02)</span></td></tr>
+            <tr><td><code>semantic/metrics.yaml</code> + <code>semantic_models.yaml</code> (OSI)</td><td><code>SEMANTIC.*</code> — 6 Semantic Views + 3 backing views</td><td>platform-native <code>CREATE SEMANTIC VIEW</code> DDL <span class="faint">(sql/03)</span></td></tr>
+            <tr><td><code>knowledge/vocabulary.yaml</code></td><td><code>KNOWLEDGE</code> vocabulary + entity tables + resolution UDFs</td><td><code>VOCABULARY_TERM</code>, <code>FIELD_SYNONYM</code>, <code>RESOLVE_*</code> <span class="faint">(sql/04)</span></td></tr>
+            <tr><td>reference-compile (<code>src/oag_semantic/compile.py</code>)</td><td>theme 2–6 governed-answer UDTFs</td><td>SQL over canonical, windows from <code>DATASET_PARAM</code> <span class="faint">(sql/05)</span></td></tr>
+            <tr><td>Databricks UC grant model (ADR 0015)</td><td>3 RBAC roles + Cortex grant</td><td><code>CREATE ROLE</code> + <code>ON ALL</code>/<code>ON FUTURE</code> grants <span class="faint">(sql/06)</span></td></tr>
+            <tr><td>the six themes + KG tools</td><td><code>PRODUCTION_AGENT</code> + <code>*_ROWS</code> tool wrappers</td><td><code>CREATE AGENT … FROM SPECIFICATION</code> <span class="faint">(sql/07)</span></td></tr>
+            <tr><td><code>CANONICAL.*</code> FK columns + <code>FIELD_SYNONYM</code></td><td><code>KG_NODE</code>/<code>KG_EDGE</code> + 4 traversal UDTFs</td><td>derived <code>CREATE TABLE AS SELECT</code> + recursive-CTE UDTFs <span class="faint">(sql/08)</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="prose">The six use-case themes the whole stack answers, hero ★ first:</p>
+      <div class="card" style="padding:6px 20px">
+        <div class="uc"><span class="num">1</span><span class="q"><span class="hero-badge">HERO ★</span> <b>Production surveillance</b> · <em>"which wells produced below expected oil rate this week?"</em></span><span class="kpi">efficiency · shortfall</span></div>
+        <div class="uc"><span class="num">2</span><span class="q"><b>Deferment &amp; downtime</b> · <em>"what did we defer, and top causes?"</em></span><span class="kpi">deferred vol · uptime%</span></div>
+        <div class="uc"><span class="num">3</span><span class="q"><b>Decline &amp; trend</b> · <em>"wells declining faster than forecast."</em></span><span class="kpi">decline gap · cumulative</span></div>
+        <div class="uc"><span class="num">4</span><span class="q"><b>Well-test &amp; allocation</b> · <em>"stale tests or anomalous allocation?"</em></span><span class="kpi">days-since-test · alloc var</span></div>
+        <div class="uc"><span class="num">5</span><span class="q"><b>Operational watchlist</b> · <em>"down, watering out, or GOR change?"</em></span><span class="kpi">water cut · GOR · days-down</span></div>
+        <div class="uc"><span class="num">6</span><span class="q"><b>Asset rollups</b> · <em>"oil/gas/water by field &amp; operator vs last?"</em></span><span class="kpi">period-Δ · contribution%</span></div>
+      </div>
+    </section>
+
+    <!-- ============================================ RUN -->
+    <section id="run">
+      <p class="eyebrow">ground yourself, then dig</p>
+      <h2>Reproduce &amp; run</h2>
+      <div class="cards cols-2">
+        <div class="card">
+          <h4>Stand up the stack, in order</h4>
+          <figure class="code" style="margin:8px 0 0">
+            <figcaption><span class="fp">shell · snow CLI (connection <b>proton</b>)</span><span class="lang">bash</span></figcaption>
+            <div class="scroll"><pre>snow sql -c proton -f sql/01_database_and_schemas.sql
+<span class="c"># PUT each frozen Parquet into @_STAGING, then:</span>
+snow sql -c proton -f sql/02_load_canonical.sql   <span class="c"># 8208,8208,21,18,3,6,282,251,18</span>
+snow sql -c proton -f sql/03_semantic_views.sql   <span class="c"># 6 Semantic Views</span>
+snow sql -c proton -f sql/04_knowledge_layer.sql  <span class="c"># vocabulary + tools</span>
+snow sql -c proton -f sql/05_theme_functions.sql  <span class="c"># themes 2-6</span>
+snow sql -c proton -f sql/06_governance.sql       <span class="c"># 3 RBAC roles</span>
+snow sql -c proton -f sql/07_agent.sql            <span class="c"># PRODUCTION_AGENT</span>
+snow sql -c proton -f sql/08_knowledge_graph.sql  <span class="c"># KG_NODE/EDGE + traversal</span></pre></div>
+          </figure>
+        </div>
+        <div class="card">
+          <h4>Drive the agent &amp; grade vs gold</h4>
+          <figure class="code" style="margin:8px 0 0">
+            <figcaption><span class="fp">shell</span><span class="lang">bash</span></figcaption>
+            <div class="scroll"><pre>cd agent
+pip install -r requirements.txt
+
+<span class="c"># client-side: Cortex routes, connector executes tools</span>
+python test_local.py                 <span class="c"># 6/6 PASS</span>
+
+<span class="c"># delegated: drive the deployed Cortex Agent over REST</span>
+python test_agent_rest.py            <span class="c"># 6/6 PASS (stdlib only)</span>
+
+<span class="c"># one-shot</span>
+python agent.py <span class="s">"Which wells are watering out?"</span></pre></div>
+          </figure>
+          <span class="fp">flagged: 12 / 5 / 1 / 8 / 11 / 3, values within 1e-6</span>
+        </div>
+      </div>
+      <div class="cards cols-2">
+        <div class="card">
+          <h4>Start here, in order</h4>
+          <ul class="tight" style="margin:4px 0 0">
+            <li><code>platforms/snowflake/README.md</code> — the full port + gold-validation tables</li>
+            <li><code>platforms/snowflake/agent/README.md</code> — the agent, REST path, and Cortex findings</li>
+            <li><code>docs/platform-comparison.md</code> — Databricks vs Snowflake, feature by feature</li>
+            <li><code>platforms/snowflake/notebooks/snowflake_walkthrough.ipynb</code> — the executable companion</li>
+            <li><code>docs/porting.md</code> · <code>DESIGN.md</code> — the seams and the source of truth</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>The companion notebook</h4>
+          <p>A Jupyter notebook drives this same stack with the Snowflake Python driver: it inventories the objects as built (schemas, Semantic Views, the agent, the graph), reproduces gold through <code>SEMANTIC_VIEW()</code>, walks the knowledge graph, and invokes <code>PRODUCTION_AGENT</code> over <code>:run</code> — the executable twin of this page.</p>
+          <span class="fp">platforms/snowflake/notebooks/snowflake_walkthrough.ipynb</span>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      A Snowflake agentic-intelligence primer for <b>OAG_FABLE</b> — the Snowflake instantiation of the oil-and-gas-semantic reference.<br>
+      Source of truth: <code>DESIGN.md</code> · <code>platforms/snowflake/README.md</code>. Every <code>file:line</code> reference points into the tree; facts verified live against the <code>OAG_FABLE</code> database.
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function(){
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var byId = {};
+    links.forEach(function(a){ var id=a.getAttribute('href').slice(1); byId[id]=a; });
+    var sections = links.map(function(a){ return document.getElementById(a.getAttribute('href').slice(1)); }).filter(Boolean);
+    var current = null;
+    var obs = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          if(current) current.classList.remove('active');
+          var a = byId[e.target.id];
+          if(a){ a.classList.add('active'); current = a; }
+        }
+      });
+    }, { rootMargin: '-12% 0px -75% 0px', threshold: 0 });
+    sections.forEach(function(s){ obs.observe(s); });
+  })();
+</script>
