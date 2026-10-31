@@ -17,7 +17,8 @@ from azure.storage.filedatalake import DataLakeServiceClient
 
 workspace = os.environ.get("FABRIC_WORKSPACE", "oag-reference")
 lakehouse = os.environ.get("FABRIC_LAKEHOUSE", "oag_staging")
-src = Path(sys.argv[1] if len(sys.argv) > 1 else "../../data/frozen/canonical")
+default_src = Path(__file__).resolve().parents[2] / "data" / "frozen" / "canonical"
+src = Path(sys.argv[1]) if len(sys.argv) > 1 else default_src
 
 service = DataLakeServiceClient("https://onelake.dfs.fabric.microsoft.com", credential=DefaultAzureCredential())
 fs = service.get_file_system_client(workspace)
