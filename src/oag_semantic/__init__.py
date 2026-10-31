@@ -5,20 +5,20 @@ The three seams of the hero tracer bullet (DESIGN.md §4):
   (DuckDB reference compile reproducing the gold values, ADR 0011).
 - **knowledge seam** -- ``lpg`` (entity resolution + well->field rollup + business vocabulary).
 - **answer seam** -- ``agent`` (deterministic semantic-baseline agent) emitting the
-  ``answer`` submission schema, graded by ``grading`` against the co-generated gold.
+  ``answer`` submission schema, checked by ``grading`` against the co-generated gold.
 """
 
 from oag_semantic.agent import SemanticBaselineAgent, answer_surveillance
 from oag_semantic.answer import AnswerSubmission
 from oag_semantic.compile import SurveillanceResult, compute_surveillance
-from oag_semantic.grading import GradeReport, grade_surveillance
+from oag_semantic.grading import QuestionGrade, grade_surveillance, score_submissions
 from oag_semantic.lpg import LPG, load_lpg
 from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 
 __all__ = [
     "AnswerSubmission",
-    "GradeReport",
     "LPG",
+    "QuestionGrade",
     "SemanticBaselineAgent",
     "SemanticLayer",
     "SurveillanceResult",
@@ -27,4 +27,5 @@ __all__ = [
     "grade_surveillance",
     "load_lpg",
     "load_semantic_layer",
+    "score_submissions",
 ]

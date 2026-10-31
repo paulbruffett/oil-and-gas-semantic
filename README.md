@@ -35,6 +35,8 @@ uv sync
 
 # 1. Generate the canonical dataset + gold answers.
 uv run oag-generate --out /tmp/oag
+#    The reference dataset every platform build loads (config_hash 12a110eecfe2):
+uv run oag-generate --config configs/reference.yaml --out data/frozen
 
 # 2. Answer the hero surveillance question and grade it against gold (end-to-end).
 uv run oag-answer --dataset /tmp/oag            # or: --generate to do both in one step

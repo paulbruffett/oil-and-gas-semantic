@@ -126,10 +126,11 @@ DEFAULT_WATCHLIST = {
     "days_down_threshold": 1,      # "down" when fully-off-stream days in the window >= this
 }
 
-# Adversarial question tier (issue #22 / ADR 0024). The generator seeds one deterministic **trap
-# well** whose only well test predates the dataset, so its allocation rests on an untrustworthy test
-# -- the data-quality condition the trap questions expect an agent to refuse over. Well identity is
-# structural (seed-independent), so the trap survives the held-out evaluation seed (ADR 0016).
+# Data-quality scenario (ADR 0024, retained by ADR 0036). The generator seeds one deterministic well
+# whose only well test predates the dataset, so its allocation rests on an untrustworthy test -- a
+# realistic data-quality defect a semantic model / agent should be able to surface. The well is also
+# pinned to underperform and be misallocated. The key is still named `adversarial` (and the well
+# `trap_well_id`) because renaming either would change the frozen dataset's config_hash.
 DEFAULT_ADVERSARIAL = {
     "trap_well_id": 1,               # the designated trap well (structural WELL_ID, seed-independent)
     "untrustworthy_test_days": 400,  # its only test is this many days before end_date (>> staleness)
@@ -145,8 +146,7 @@ DEFAULT_ADVERSARIAL = {
 # shipped calibration stays honestly Volve-faithful (ADR 0023) and the default dataset is unchanged.
 # When enabled, the **anchor well** is pinned into the minority with the earliest onset and maximal
 # rises (the ADR 0024 worst-actor pattern; its draws still run, so every other well is unaffected),
-# guaranteeing non-empty watering-out/GOR-change gold on any seed -- required for the held-out
-# evaluation seed (ADR 0016). On a window too short for the pinned rises to clear the thresholds,
+# guaranteeing non-empty watering-out/GOR-change gold on any seed. On a window too short for the pinned rises to clear the thresholds,
 # fewer (or no) wells flag -- a domain effect, like the overlapping watchlist windows (ADR 0022).
 DEFAULT_BREAKTHROUGH = {
     "fraction": 0.0,                 # share of wells that suffer a breakthrough (0.0 = off)
@@ -285,8 +285,8 @@ class Config:
             raise ValueError("watchlist.gor_change_threshold must be > 0")
         if wl["days_down_threshold"] < 1:
             raise ValueError("watchlist.days_down_threshold must be >= 1")
-        # Adversarial trap well: a real structural well, seeded with a test far beyond mere staleness
-        # so its "the allocation is untrustworthy" condition is unambiguous (ADR 0024).
+        # Data-quality scenario well: a real structural well, seeded with a test far beyond mere
+        # staleness so its "the allocation is untrustworthy" condition is unambiguous (ADR 0024).
         adv = self.adversarial
         if not 1 <= adv["trap_well_id"] <= self.n_wells:
             raise ValueError(
@@ -481,26 +481,16 @@ def watchlist_windows(
 def well_uwi(well_seq: int) -> str:
     """The UWI assigned to the well at 1-based sequence ``well_seq`` (which equals its ``WELL_ID``).
 
-    Single source for the UWI scheme, shared by the generator (which stamps every well's ``UWI``) and
-    the adversarial paraphrase variants (#51), which template the trap well's mention from
-    ``adversarial.trap_well_id``. Keeping one function means the question text and the seeded row can
-    never drift on how a well is named.
+    Single source for the UWI scheme used by the generator when it stamps every well's ``UWI``.
     """
     return f"NO 15/9-F-{int(well_seq)}"
 
 
-def trap_well_uwi(adversarial: dict) -> str:
-    """The UWI of the seeded adversarial trap well, from ``adversarial.trap_well_id`` (ADR 0024)."""
-    return well_uwi(int(adversarial["trap_well_id"]))
-
-
 def trap_test_date(end_date: str, untrustworthy_test_days: int) -> str:
-    """The date of the adversarial trap well's only well test (theme #22, ADR 0024).
+    """The date of the data-quality scenario well's only well test (ADR 0024).
 
     Far enough before ``end_date`` (by ``untrustworthy_test_days``) that the well's allocation rests on
-    an untrustworthy test -- the data-quality condition the trap questions expect an agent to refuse
-    over. Single source shared by the generator (which seeds the WELL_TEST row) and the gold module
-    (which cites the date in the trap answer), so the seeded row and the stated evidence cannot diverge.
+    an untrustworthy test.
     """
     return (
         date.fromisoformat(end_date) - timedelta(days=int(untrustworthy_test_days))

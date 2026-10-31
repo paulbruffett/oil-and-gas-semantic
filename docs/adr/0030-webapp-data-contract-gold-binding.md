@@ -1,5 +1,7 @@
 # Operations-console data contract binds every displayed value to a catalog gold value_key, machine-validated (applies ADR 0027's anchor mechanism to the webapp vertical)
 
+> **Status: superseded by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The coding-assistant contest this decision served was dropped; kept for history.
+
 **Context.** The webapp is a contest vertical whose tech stack is a graded contestant choice (ADR 0003),
 so the shell specifies only its *functional* contract — and ADR 0013's "displayed values must match gold
 for the frozen seed" is an *objective* dimension-2 anchor only if machine-checkable, which neither prose

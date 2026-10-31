@@ -57,7 +57,7 @@ one overridable constant, flip and re-run once native tool-use is enabled).
 ## Validate (local, against the live account)
 
 Prereqs: `snow` CLI connection (default `proton`, key-pair) with a running warehouse; Cortex enabled;
-`sql/01`–`05` applied; the frozen gold generated (`uv run oag-generate -c configs/contest.yaml -o data/frozen`,
+`sql/01`–`05` applied; the frozen gold generated (`uv run oag-generate -c configs/reference.yaml -o data/frozen`,
 config_hash 12a110eecfe2 — the gold is regenerated, not vendored, per docs/porting.md).
 
 ```bash

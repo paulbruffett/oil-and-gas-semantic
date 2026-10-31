@@ -6,8 +6,8 @@ those ids -- the generator's gold module and the semantic agent both import them
 hard-coding a literal, so a question and its co-generated gold answer cannot drift apart.
 
 It lives in the base package (`oag_generator`) because the semantic layer already depends on the base,
-never the other way round; the assessment harness (#9) can read the catalog + schema through here
-without importing any use-case implementation.
+never the other way round; the gold check (`oag_semantic.grading`) reads the catalog + schema through
+here.
 """
 
 from __future__ import annotations
@@ -38,19 +38,13 @@ SUBMISSION_SCHEMA_PATH = _spec_file("answer_submission.schema.json")
 
 @dataclass(frozen=True)
 class GradingShape:
-    """How a question's ``key_values`` are graded (#48): a set of ``set_key`` rows keyed by
-    ``id_key``, each compared on ``value_keys``. Declared in the catalog so the graded answer shape
-    is a versioned spec artifact every implementation reads -- not a harness internal it would have
-    to reverse-engineer. A behavior-only question (clarification/refusal, ADR 0024) carries the
-    empty shape: only its reported ``behavior`` is graded."""
+    """How a question's ``key_values`` are checked against gold (#48): a set of ``set_key`` rows keyed
+    by ``id_key``, each compared on ``value_keys``. Declared in the catalog so the answer shape is a
+    versioned spec artifact every platform build reads."""
 
-    set_key: str = ""
-    id_key: str = ""
-    value_keys: tuple[str, ...] = ()
-
-    @property
-    def behavior_only(self) -> bool:
-        return not self.set_key
+    set_key: str
+    id_key: str
+    value_keys: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -63,7 +57,7 @@ class Question:
     tier: str
     expected_behavior: str
     text: str
-    # None = not yet gradable (a planned theme's shell half hasn't landed); the harness skips it.
+    # None = not yet gradable (a planned theme hasn't landed); the gold check skips it.
     grading: GradingShape | None = None
 
 
@@ -88,13 +82,10 @@ class QuestionCatalog:
     version: int
     behaviors: tuple[str, ...]
     themes: tuple[Theme, ...]
-    # The adversarial tier (ADR 0024): compound/ambiguous/trap questions that span the six themes
-    # rather than forming a seventh, so they live beside the themes, not inside one.
-    adversarial: tuple[Question, ...] = ()
 
     def questions(self) -> list[Question]:
-        """Every catalog question: the six themes' straight questions, then the adversarial tier."""
-        return [q for t in self.themes for q in t.questions] + list(self.adversarial)
+        """Every catalog question, in theme order."""
+        return [q for t in self.themes for q in t.questions]
 
 
 def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
@@ -108,11 +99,9 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
         raw = yaml.safe_load(Path(path).read_text())
     except (OSError, yaml.YAMLError) as exc:
         raise RuntimeError(f"question catalog unreadable at {path}: {exc}") from exc
-    def _grading(g: dict | str | None) -> GradingShape | None:
+    def _grading(g: dict | None) -> GradingShape | None:
         if g is None:
             return None
-        if g == "behavior-only":  # clarification/refusal: graded on behavior alone (ADR 0024)
-            return GradingShape()
         return GradingShape(
             set_key=g["set_key"], id_key=g["id_key"], value_keys=tuple(g["value_keys"])
         )
@@ -146,7 +135,6 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
             version=raw["version"],
             behaviors=tuple(raw["behaviors"]),
             themes=themes,
-            adversarial=tuple(_question(q) for q in raw.get("adversarial", [])),
         )
     except KeyError as exc:
         raise RuntimeError(f"question catalog {path} missing required key {exc}") from exc
@@ -170,11 +158,7 @@ def default_catalog() -> QuestionCatalog:
 
 
 def question_id(theme_number: int, *, tier: str = "straight") -> str:
-    """The gold id of a theme's question in ``tier`` (default: the straight question).
-
-    Selects by tier rather than assuming a lone question per theme, so the adversarial tier
-    (ADR 0013) adding a second question to a theme doesn't break this import-time lookup.
-    """
+    """The gold id of a theme's question in ``tier`` (default: the straight question)."""
     theme = next(t for t in _CATALOG.themes if t.number == theme_number)
     matches = [q for q in theme.questions if q.tier == tier]
     if len(matches) != 1:
@@ -196,27 +180,3 @@ WELLTEST_QUESTION_ID = question_id(4)
 WATCHLIST_QUESTION_ID = question_id(5)
 # The asset-rollups question (theme 6); imported by the gold + rollup compile (issue #8).
 ROLLUP_QUESTION_ID = question_id(6)
-
-
-def adversarial_id(qid: str) -> str:
-    """The gold id of an adversarial-tier question, resolved from the catalog (ADR 0024).
-
-    Verifies the id exists in the ``adversarial`` list so the gold module and harness import a
-    checked constant rather than a bare literal that could drift from the catalog.
-    """
-    matches = [q for q in _CATALOG.adversarial if q.id == qid]
-    if len(matches) != 1:
-        raise ValueError(
-            f"adversarial catalog has {len(matches)} question(s) with id {qid!r}, expected 1"
-        )
-    return matches[0].gold_id
-
-
-# Adversarial tier ids (ADR 0024). Compound questions (answered) intersect two straight golds; the
-# gold module keys each derived answer off these. Ambiguous/trap ids are behavior-only and resolved
-# by the harness through the catalog walk, so only the compound ids need a named import here.
-ADV_BELOW_EXPECTED_AND_STALE_ID = adversarial_id("adversarial-compound-below-expected-and-stale")
-ADV_BELOW_EXPECTED_AND_ANOMALOUS_ID = adversarial_id(
-    "adversarial-compound-below-expected-and-anomalous"
-)
-ADV_STALE_AND_ANOMALOUS_ID = adversarial_id("adversarial-compound-stale-and-anomalous")

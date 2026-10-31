@@ -1,0 +1,26 @@
+# Frozen reference config (ADR 0034, renamed from contest.yaml by ADR 0036): THE config the
+# reference dataset every platform build loads is generated from (config_hash 12a110eecfe2).
+# Every difference from the shipped default is a documented scenario choice -- never re-widened
+# calibration: the Volve-faithful distributions (ADR 0023) and the shipped default watchlist
+# thresholds are untouched.
+#   - 15-month window: watering-out gains an honest component (calibrated water cut approaches the
+#     default 0.50 threshold naturally as wells mature) and the decline/GOR trends get real
+#     window-over-window separation, while the trailing watchlist window keeps a healthy down count.
+#   - breakthrough scenario on (ADR 0032/0033): a modeled water/gas-breakthrough minority, with the
+#     pinned anchor well guaranteeing non-empty watering-out/GOR-change gold. fraction 0.35 puts a
+#     member in every field, so the decline flag (scoped to the largest field, ADR 0018) is
+#     populated.
+#   - decline materiality band (ADR 0033): the decline flag detects that population, not
+#     downtime-timing noise (#35).
+# Tests: tests/test_reference_config.py. Changing any value changes config_hash and the data, so
+# every platform build must reload and re-verify gold.
+seed: 42
+start_date: "2024-01-01"
+end_date: "2025-03-31"
+n_fields: 3
+wells_per_field: 6
+operators: ["Equinor", "AkerBP", "Wintershall"]
+breakthrough:
+  fraction: 0.35
+decline:
+  faster_gap_threshold: 0.05

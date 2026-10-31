@@ -123,7 +123,7 @@ key-pair auth); a running warehouse; role with `CREATE DATABASE`. Credentials li
 
 ```bash
 CONN=proton                       # your `snow` connection name
-FROZEN="$PWD/../../data/frozen"     # absolute so it survives the cd below; `oag-generate -c ../../configs/contest.yaml -o $FROZEN` if absent
+FROZEN="$PWD/../../data/frozen"     # absolute so it survives the cd below; `oag-generate -c ../../configs/reference.yaml -o $FROZEN` if absent
 
 # 1. Database, schemas, Parquet file format, staging area
 snow sql -c $CONN -f sql/01_database_and_schemas.sql

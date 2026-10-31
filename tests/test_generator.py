@@ -90,12 +90,12 @@ def test_emits_osdu_pdm_tables(tmp_path, small_config):
 
 
 def test_trap_well_is_seeded_deterministically(tmp_path, small_config):
-    """The adversarial trap well (ADR 0024): its only well test predates the dataset, so its allocation
-    rests on an untrustworthy test regardless of window length or seed."""
+    """The data-quality scenario well (ADR 0024/0036): its only well test predates the dataset, so its
+    allocation rests on an untrustworthy test regardless of window length or seed."""
     m = generate_dataset(small_config, tmp_path)
     wt = _read(m.tables["well_test"])
 
-    trap_id = 1  # default adversarial.trap_well_id
+    trap_id = 1  # default adversarial.trap_well_id (the data-quality scenario well)
     trap_dates = [d for wid, d in zip(wt["WELL_ID"], wt["TEST_DATE"]) if wid == trap_id]
     assert len(trap_dates) == 1, "trap well must carry exactly one (ancient) well test"
     expected = (date.fromisoformat(small_config["end_date"]) - timedelta(days=400)).isoformat()
@@ -121,44 +121,18 @@ def test_trap_seeding_only_moves_the_trap_wells_tests(tmp_path, small_config):
         assert all(d >= small_config["start_date"] for d in dates), "non-trap tests stay in-window"
 
 
-def test_compound_adversarial_gold_is_never_empty(tmp_path, small_config):
-    """Each compound question's gold must be non-empty, by construction, on ANY config/seed (ADR 0024).
-
-    The compounds cross the surveillance x well-test signals, and the seeded worst-actor well is a
-    member of every side (impaired + stale test + anomalous allocation), so each intersection always
-    contains at least that well. Without this the tier could silently ship a *vacuous* question -- an
-    empty gold set an oracle trivially matches -- that tests no recall. Asserted on both the tiny
-    small_config and the fuller default config, and the anchor well is checked to be present."""
-    compound = [
-        "adversarial-compound-below-expected-and-stale",
-        "adversarial-compound-below-expected-and-anomalous",
-        "adversarial-compound-stale-and-anomalous",
-    ]
-    from oag_generator.config import Config
-
-    for label, cfg in (("small_config", dict(small_config)), ("default", {})):
-        m = generate_dataset(cfg, tmp_path / label)
-        trap_id = Config(**cfg).adversarial["trap_well_id"]
-        for qid in compound:
-            gold = json.loads((m.output_dir / "gold" / "adversarial" / f"{qid}.json").read_text())
-            assert gold["n_flagged"] >= 1, f"{label}: compound {qid} has an empty (vacuous) gold set"
-            assert trap_id in [r["well_id"] for r in gold["flagged"]], (
-                f"{label}: worst-actor well {trap_id} must anchor {qid}"
-            )
-
-
-def test_trap_survives_a_held_out_seed(tmp_path, small_config):
-    """The trap is structural, not random (ADR 0024 / ADR 0016): regenerating with a different seed --
-    the held-out eval-seed path -- yields the *same* trap well and the *same* trap gold, so a
-    contestant cannot fit to it."""
+def test_trap_survives_a_different_seed(tmp_path, small_config):
+    """The data-quality defect is structural, not random (ADR 0024): regenerating with a different
+    seed yields the *same* well with the *same* untrustworthy test."""
     a = generate_dataset(small_config, tmp_path / "a")
     b = generate_dataset({**small_config, "seed": small_config["seed"] + 1}, tmp_path / "b")
     assert a.config_hash != b.config_hash  # the seed genuinely changed
-    trap = "gold/adversarial/adversarial-trap-stale-allocation.json"
-    ga = json.loads((a.output_dir / trap).read_text())
-    gb = json.loads((b.output_dir / trap).read_text())
-    assert ga["trap_well"] == gb["trap_well"]  # same well, same untrustworthy test date
-    assert ga["answer"] == gb["answer"]
+
+    def trap_tests(m):
+        wt = _read(m.tables["well_test"])
+        return [d for wid, d in zip(wt["WELL_ID"], wt["TEST_DATE"]) if wid == 1]
+
+    assert trap_tests(a) == trap_tests(b) and len(trap_tests(a)) == 1
 
 
 def test_byte_stable_across_runs(tmp_path, small_config):
@@ -171,12 +145,6 @@ def test_byte_stable_across_runs(tmp_path, small_config):
         )
     for artifact in ("surveillance", "deferment", "decline", "welltest", "watchlist", "rollups"):
         assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes()
-    # The adversarial tier (ADR 0024) is co-generated deterministically too -- byte-stable as well.
-    adv_a = sorted((a.output_dir / "gold" / "adversarial").glob("*.json"))
-    adv_b = sorted((b.output_dir / "gold" / "adversarial").glob("*.json"))
-    assert [p.name for p in adv_a] == [p.name for p in adv_b] and len(adv_a) == 9
-    for pa_, pb_ in zip(adv_a, adv_b):
-        assert pa_.read_bytes() == pb_.read_bytes(), f"adversarial gold {pa_.name} not byte-stable"
 
 
 def test_config_hash_stamped_and_sensitive(tmp_path, small_config):
@@ -753,7 +721,7 @@ def test_breakthrough_off_is_inert(tmp_path):
         assert a.tables[name].read_bytes() == b.tables[name].read_bytes(), (
             f"table {name} changed with breakthrough off"
         )
-    # Every co-emitted gold artifact, including the adversarial tier and whatever future slices add.
+    # Every co-emitted gold artifact, including whatever future slices add.
     assert a.gold.keys() == b.gold.keys()
     for artifact in a.gold:
         assert a.gold[artifact].read_bytes() == b.gold[artifact].read_bytes(), (
@@ -866,7 +834,7 @@ def test_breakthrough_fires_all_watchlist_signals_at_default_thresholds(watchlis
 @pytest.mark.parametrize("seed", [2, 7, 99, 123])
 def test_breakthrough_anchor_guarantees_signals_on_any_seed(tmp_path, seed):
     """The pinned anchor well is watering-out AND GOR-changed on every seed (the ADR 0024 worst-actor
-    pattern), so a frozen or held-out-seed dataset can never have empty gold on these dimensions.
+    pattern), so a dataset on any seed can never have empty gold on these dimensions.
     Deliberately a 6-month horizon -- half the fixture's -- because the anchor's watercut base + rise
     are pinned along with the scenario parameters (ADR 0032); the guarantee must not depend on a
     lucky calibration draw or a long window."""

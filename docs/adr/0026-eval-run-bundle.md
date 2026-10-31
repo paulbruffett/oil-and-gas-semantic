@@ -1,5 +1,7 @@
 # Eval-run bundle: gold-stripped, seed-redacted dataset + text-only re-keyed question feed; answers produced by a fork-documented headless entry point
 
+> **Status: superseded by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The coding-assistant contest this decision served was dropped; kept for history.
+
 **Context.** ADR 0016 grades dimension 1 on a held-out seed, but eval-time answer production was
 unspecified — and the generator + gold pipeline are public in every fork, while the raw dataset
 manifest embeds the full config **including the seed** and ships `gold/`. A contestant pipeline

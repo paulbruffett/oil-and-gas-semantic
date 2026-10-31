@@ -15,13 +15,14 @@ dependencies = [
     # DuckDB is the reference-compile engine for the OSI semantic layer (ADR 0011): it
     # executes the governed metrics as SQL over the canonical Parquet. Runtime-light.
     "duckdb>=1.1,<2",
+    # The gold check (oag_semantic.grading) validates answer submissions against
+    # spec/questions/answer_submission.schema.json at run time.
+    "jsonschema>=4,<5",
 ]
 
 [project.scripts]
 oag-generate = "oag_generator.cli:main"
 oag-answer = "oag_semantic.cli:main"
-oag-assess = "oag_harness.cli:main"
-oag-seal = "oag_harness.seal_cli:main"
 
 [dependency-groups]
 dev = [
@@ -29,9 +30,6 @@ dev = [
     # MetricFlow's manifest schema + validators (ADR 0011): the "validate the OSI
     # manifest is well-formed" gate. Dev-only -- it never runs at answer time.
     "dbt-semantic-interfaces>=0.10,<0.11",
-    # Validates answer submissions against spec/questions/answer_submission.schema.json
-    # (issue #14). Dev-only -- library code ships the schema file, not a runtime validator.
-    "jsonschema>=4,<5",
 ]
 
 [build-system]
@@ -39,7 +37,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/oag_generator", "src/oag_semantic", "src/oag_harness"]
+packages = ["src/oag_generator", "src/oag_semantic"]
 
 # The question catalog + submission schema live at the repo root (spec/questions) as standalone
 # versioned base artifacts, but the base package loads them at run time. Force-include a copy into

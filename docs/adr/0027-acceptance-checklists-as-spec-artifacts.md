@@ -1,5 +1,7 @@
 # Acceptance-criteria checklists are versioned spec artifacts under spec/acceptance/, frozen at the fork tag, with typed anchors per item
 
+> **Status: superseded by [ADR 0036](0036-reference-builds-replace-contest.md)** (2026-10-31). The coding-assistant contest this decision served was dropped; kept for history.
+
 **Context.** DESIGN §7 anchors rubric dimension 2 on "the contest issues' acceptance-criteria
 checklist (objective)" and ADR 0020 deliberately keeps the harness from hard-coding a copy — but
 no `axis-b-contest` issue actually contained one, so the anchor did not exist, and a checklist

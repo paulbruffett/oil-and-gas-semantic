@@ -133,43 +133,19 @@ def watchlist_gold(watchlist_dataset_dir) -> dict:
     return json.loads((watchlist_dataset_dir / "gold" / "watchlist.json").read_text())
 
 
-@pytest.fixture(scope="session")
-def adversarial_dataset_dir(tmp_path_factory) -> Path:
-    """A fuller dataset for grading the adversarial tier (#22, ADR 0024).
-
-    Full default window + 24 wells so the surveillance and well-test minorities each flag several
-    wells and the compound intersections carry more than just the anchor -- a realistic grading target.
-    (Non-emptiness itself is guaranteed by construction via the seeded worst-actor well on *any* config,
-    per ``test_compound_adversarial_gold_is_never_empty``; this fixture just gives the proof test teeth.)
-    """
-    from oag_generator import generate_dataset
-
-    config = {
-        "seed": 7,
-        "start_date": "2024-01-01",
-        "end_date": "2024-06-30",
-        "n_fields": 3,
-        "wells_per_field": 8,
-    }
-    out = tmp_path_factory.mktemp("adversarial_dataset")
-    generate_dataset(config, out)
-    return out
-
-
 @pytest.fixture
 def build_oracle_submissions():
-    """A factory that builds the *oracle* submission set (gold values) for a generated dataset.
+    """A factory that builds the perfect-answer submission set (gold values) for a dataset.
 
-    Shared by the harness tests so the catalog-walk + spec + gold-exists loop lives in one place --
-    when a new gradable theme lands, only this helper changes, and every harness test picks it up.
+    Shared by the gold-check tests so the catalog-walk + spec + gold-exists loop lives in one place.
     """
     from oag_generator.questions import load_catalog
-    from oag_harness.functional import SPECS, submission_from_gold
+    from oag_semantic.grading import SPECS, submission_from_gold
 
     def _build(dataset_dir) -> dict:
         catalog = load_catalog()
         subs: dict = {}
-        for q in catalog.questions():  # six straight themes + the adversarial tier (ADR 0024)
+        for q in catalog.questions():
             spec = SPECS.get(q.gold_id)
             gold_path = dataset_dir / q.gold_artifact
             if spec is None or not gold_path.exists():

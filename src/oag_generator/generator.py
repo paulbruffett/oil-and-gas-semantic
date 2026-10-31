@@ -29,7 +29,6 @@ from oag_generator.config import (
     well_uwi,
 )
 from oag_generator.gold import (
-    compute_adversarial_gold,
     compute_decline_gold,
     compute_deferment_gold,
     compute_rollup_gold,
@@ -95,10 +94,10 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
     # is a day of exposure, not zero; shared by the downtime Poisson exposure and breakthrough onsets
     # so the two can never disagree about how long the window is.
     horizon_years = n_days / 365.25
-    # The adversarial worst-actor well (ADR 0024): the same seeded well that carries the untrustworthy
-    # test is also forced to be a genuine underperformer (impaired) and, below, an anomalously allocated
-    # one -- so it is a member of the surveillance *and* well-test flagged populations at once, which is
-    # what makes every compound intersection non-empty by construction (not by luck of the draw).
+    # Data-quality scenario well (ADR 0024, retained by ADR 0036): the same seeded well that carries the
+    # untrustworthy well test is also pinned to be an underperformer (impaired) and, below, an
+    # anomalously allocated one, so it is always in the surveillance and well-test flagged sets. The
+    # config key is still `adversarial` so the frozen dataset's config_hash is unchanged.
     trap_well_id = int(config.adversarial["trap_well_id"])
     # Downtime cause pool -> parallel value/weight arrays for deterministic weighted sampling.
     cause_values = [c["cause"] for c in config.downtime_causes]
@@ -176,7 +175,7 @@ def _build_tables(config: Config) -> dict[str, dict[str, list]]:
             else:
                 bias = rng.normal(perf["bias_mean"], perf["bias_sd"])
             if well_id == trap_well_id:
-                # Pin the worst-actor's bias to the impaired mean (deterministic, well below the
+                # Pin the scenario well's bias to the impaired mean (deterministic, well below the
                 # surveillance materiality band) so it is *always* flagged below-expected regardless of
                 # seed -- the draws above still ran, so every other well stays byte-identical (ADR 0024).
                 bias = perf["impaired_bias_mean"]
@@ -356,10 +355,10 @@ def _build_welltest_allocation(
     al = config.allocation
     n_wells = len(well["WELL_ID"])
 
-    # Adversarial trap well (ADR 0024): its only test predates the dataset, so its allocation rests on
-    # an untrustworthy test. The date (from the shared config helper, also used by the gold module) is
-    # absolute, which may be before start_date -- fine, a well test can physically predate the
-    # daily-volume window; the trap then manifests on any config, not only windows longer than horizon.
+    # Data-quality defect (ADR 0024, retained by ADR 0036): the scenario well's only test predates the
+    # dataset, so its allocation rests on an untrustworthy test. The date (from the shared config
+    # helper) is absolute, which may be before start_date -- fine, a well test can physically predate
+    # the daily-volume window; the defect then shows on any config, not only long windows.
     trap_well_id = int(config.adversarial["trap_well_id"])
     trap_date = trap_test_date(config.end_date, config.adversarial["untrustworthy_test_days"])
 
@@ -453,10 +452,9 @@ def _build_welltest_allocation(
             else:
                 factor = ideal * (1.0 + rng.normal(0.0, al["healthy_noise_sd"]))
             if well_id == trap_well_id:
-                # Pin the worst-actor's allocation factor beyond the anomaly threshold (deterministic)
-                # so it is *always* flagged anomalous too -- with its impaired production + untrustworthy
-                # test, it anchors the surveillance x well-test compound intersections (ADR 0024). The
-                # is_mis/mag/sign draws above still ran, so every other well is byte-identical.
+                # Pin the scenario well's allocation factor beyond the anomaly threshold (deterministic)
+                # so it is *always* flagged anomalous too (ADR 0024). The is_mis/mag/sign draws above
+                # still ran, so every other well is byte-identical.
                 factor = ideal * (1.0 + al["misalloc_bias_max"])
             factor = max(factor, 0.0)
             paf_seq += 1
@@ -507,15 +505,6 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         path = gold_dir / f"{key}.json"
         path.write_text(json.dumps(answer, indent=2, ensure_ascii=False) + "\n")
         gold_paths[key] = path
-
-    # Adversarial tier (ADR 0024): derived from the six straight golds above, co-emitted under
-    # gold/adversarial/ keyed by each catalog gold_id (the catalog gold_artifact points here).
-    adv_dir = gold_dir / "adversarial"
-    adv_dir.mkdir(parents=True, exist_ok=True)
-    for gold_id, answer in compute_adversarial_gold(cols, cfg, gold_answers).items():
-        path = adv_dir / f"{gold_id}.json"
-        path.write_text(json.dumps(answer, indent=2, ensure_ascii=False) + "\n")
-        gold_paths[gold_id] = path
 
     canonical_config = cfg.to_canonical_dict()
     chash = hash_canonical_config(canonical_config)
