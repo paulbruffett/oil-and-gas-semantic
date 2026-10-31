@@ -5,9 +5,8 @@ Interactive companions to the reference documentation.
 - **[`walkthrough.ipynb`](./walkthrough.ipynb)** — the executable companion to the
   [Core Log](../docs/repo-map.html) walkthrough. It imports the real `oag_*` packages and drives every
   seam end-to-end: generating the deterministic dataset, plotting an Arps decline curve, reproducing gold
-  through the OSI→DuckDB compile, resolving business terms via the LPG, answering + grading the hero
-  question, and exercising the full Axis-B harness (functional grading, the held-out-seed anti-cheat,
-  sealed custody, locus adherence, checklists, probes, the webapp data contract, and the scorecard).
+  through the OSI→DuckDB compile, resolving business terms via the LPG, answering the hero question, and
+  running the gold check every platform build is held to.
 
 ## Launch
 

@@ -14,6 +14,7 @@ blocks (``spec/questions/catalog.yaml``), so the spec and the check cannot drift
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -42,11 +43,15 @@ class GradingSpec:
     value_keys: tuple[str, ...]
 
 
-# One spec per question, derived from the catalog's `grading` blocks.
+def spec_for(question) -> GradingSpec | None:
+    """The grading spec a catalog question declares, or None if it is not yet gradable."""
+    g = question.grading
+    return None if g is None else GradingSpec(g.set_key, g.id_key, tuple(g.value_keys))
+
+
+# One spec per question in the default catalog, keyed by gold id.
 SPECS: dict[str, GradingSpec] = {
-    q.gold_id: GradingSpec(q.grading.set_key, q.grading.id_key, tuple(q.grading.value_keys))
-    for q in default_catalog().questions()
-    if q.grading is not None
+    q.gold_id: spec_for(q) for q in default_catalog().questions() if q.grading is not None
 }
 
 # The published answer-submission schema, enforced when a set is scored: a schema-invalid
@@ -66,6 +71,7 @@ class QuestionGrade:
     n_submitted: int
     missing_ids: list[Any] = field(default_factory=list)  # in gold, not submitted
     extra_ids: list[Any] = field(default_factory=list)  # submitted, not in gold
+    duplicate_ids: list[Any] = field(default_factory=list)  # submitted more than once
     value_mismatches: list[dict[str, Any]] = field(default_factory=list)
     note: str = ""
 
@@ -81,6 +87,8 @@ class QuestionGrade:
             parts.append(f"missing {self.missing_ids}")
         if self.extra_ids:
             parts.append(f"extra {self.extra_ids}")
+        if self.duplicate_ids:
+            parts.append(f"duplicate {self.duplicate_ids}")
         if self.value_mismatches:
             parts.append(f"{len(self.value_mismatches)} value mismatch(es)")
         return "; ".join(parts)
@@ -163,7 +171,11 @@ def grade_answer(
         for r in gold.get(spec.set_key, [])
         if isinstance(r, dict) and spec.id_key in r
     }
-    sub_rows = {r[spec.id_key]: r for r in sub_set if isinstance(r, dict) and spec.id_key in r}
+    sub_list = [r for r in sub_set if isinstance(r, dict) and spec.id_key in r]
+    sub_rows = {r[spec.id_key]: r for r in sub_list}
+    # A row submitted twice is wrong even if one copy matches gold, so it can't hide behind the dict.
+    counts = Counter(r[spec.id_key] for r in sub_list)
+    duplicates = sorted((i for i, n in counts.items() if n > 1), key=_sort_key)
     missing = sorted(set(gold_rows) - set(sub_rows), key=_sort_key)
     extra = sorted(set(sub_rows) - set(gold_rows), key=_sort_key)
 
@@ -179,7 +191,7 @@ def grade_answer(
                 }
             )
 
-    values_correct = not missing and not extra and not mismatches
+    values_correct = not missing and not extra and not duplicates and not mismatches
     return QuestionGrade(
         question_id=question_id,
         correct=behavior_correct and values_correct,
@@ -189,6 +201,7 @@ def grade_answer(
         n_submitted=len(sub_rows),
         missing_ids=list(missing),
         extra_ids=list(extra),
+        duplicate_ids=duplicates,
         value_mismatches=mismatches,
     )
 
@@ -222,7 +235,7 @@ def score_submissions(
     skipped: list[str] = []
 
     for q in catalog.questions():
-        spec = SPECS.get(q.gold_id)
+        spec = spec_for(q)  # from the catalog being scored, not the default one
         gold_path = dataset_dir / q.gold_artifact
         if spec is None or not gold_path.exists():
             skipped.append(q.id)
