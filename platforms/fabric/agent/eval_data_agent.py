@@ -16,7 +16,6 @@ data/frozen); OAG_DEBUG=1 prints each answer.
 """
 
 import json
-import math
 import os
 import sys
 from pathlib import Path
@@ -43,6 +42,19 @@ def number(v):
         return None
 
 
+def is_blank(v) -> bool:
+    return v is None or str(v).strip().lower() in ("", "none", "null", "blank")
+
+
+def close(answer, gold) -> bool:
+    """Same rule as the gold check (oag_semantic.grading): None matches only None (a blank cell counts as
+    None); numbers agree within relative 1e-6, floored at 1.0."""
+    if gold is None or is_blank(answer):
+        return gold is None and is_blank(answer)
+    a = number(answer)
+    return a is not None and abs(a - float(gold)) <= 1e-6 * max(abs(a), abs(float(gold)), 1.0)
+
+
 n_exact = n_cases = 0
 for theme in catalog["themes"]:
     for q in theme["questions"]:
@@ -55,10 +67,9 @@ for theme in catalog["themes"]:
             print(text, "\n")
         got = {str(r.get(g["id_key"], "")).strip(): r for r in markdown_table(text)}
         found, missed, extra = sorted(set(got) & set(gold)), sorted(set(gold) - set(got)), sorted(set(got) - set(gold))
-        wrong = [f"{k}.{v}" for k in found for v in g["value_keys"]
-                 if number(got[k].get(v)) is None
-                 or not math.isclose(number(got[k].get(v)), float(gold[k][v]), rel_tol=1e-6, abs_tol=1e-9)]
-        right_rows = sum(1 for k in found if not any(w.startswith(f"{k}.") for w in wrong))
+        wrong_by_id = {k: [v for v in g["value_keys"] if not close(got[k].get(v), gold[k][v])] for k in found}
+        wrong = [f"{k}.{v}" for k, vs in wrong_by_id.items() for v in vs]
+        right_rows = sum(1 for vs in wrong_by_id.values() if not vs)
         status = "MATCH" if not missed and not extra and not wrong else "DIFF"
         n_cases += 1
         n_exact += status == "MATCH"

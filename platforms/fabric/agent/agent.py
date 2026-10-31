@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fabric import Ontology, dax, item_id, request, theme_query  # noqa: E402
+from fabric import FabricError, Ontology, dax, item_id, request, theme_query  # noqa: E402
 
 FOUNDRY = os.environ["OAG_FOUNDRY_ENDPOINT"].rstrip("/")
 MODEL = os.environ.get("OAG_AGENT_LLM", "gpt-6-luna")
@@ -142,7 +142,7 @@ class ProductionAgent:
     def answer(self, question: str) -> dict[str, Any]:
         items: list[dict] = [{"role": "user", "content": question}]
         previous = None
-        chosen: tuple[str, int | None, list[dict]] | None = None   # (tool, field_id, rows)
+        chosen: tuple[str, int | None, dict | None] | None = None   # (tool, field_id, rows or None if it failed)
         resolved: list[dict] = []
         narrative = ""
         for _ in range(MAX_TURNS):
@@ -156,14 +156,31 @@ class ProductionAgent:
             items = []
             for call in calls:
                 name = call["name"]
-                args = json.loads(call.get("arguments") or "{}")
-                if name == "resolve_field":
-                    result: Any = self.resolve_field(args.get("name", ""))
+                try:
+                    args = json.loads(call.get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = None
+                if args is None:
+                    result: Any = {"error": "tool arguments were not valid JSON"}
+                elif name == "resolve_field":
+                    try:
+                        result = self.resolve_field(args.get("name", ""))
+                    except FabricError as exc:
+                        result = {"field_id": None, "error": str(exc)}
                     resolved.append({"name": args.get("name"), **result})
                 elif name in THEMES:
-                    rows = self.run_theme(name, args.get("field_id"))
-                    chosen = (name, args.get("field_id"), rows)
-                    result = rows
+                    try:
+                        raw = args.get("field_id")
+                        field_id = int(raw) if raw not in (None, "") else None
+                    except (TypeError, ValueError):
+                        result = {"error": f"field_id must be an integer, got {raw!r}"}
+                    else:
+                        try:
+                            result = self.run_theme(name, field_id)
+                            chosen = (name, field_id, result)
+                        except FabricError as exc:  # the governed query failed: refuse, don't guess
+                            chosen = (name, field_id, None)
+                            result = {"error": str(exc)}
                 else:
                     result = {"error": f"unknown tool {name}"}
                 items.append({"type": "function_call_output", "call_id": call["call_id"], "output": json.dumps(result, default=str)})
@@ -189,7 +206,9 @@ class ProductionAgent:
 
     def _submission(self, chosen, resolved: list[dict], narrative: str) -> dict[str, Any]:
         unresolved = [r for r in resolved if r.get("field_id") is None]
-        if chosen is None or (unresolved and chosen[1] is None):
+        # A named field that didn't resolve: ask rather than answer for the whole fleet (field_id 0 or
+        # missing both mean "fleet").
+        if chosen is None or (unresolved and not chosen[1]):
             return {
                 "question_id": THEMES[chosen[0]]["question_id"] if chosen else "unresolved",
                 "answer": narrative or "Could not determine which governed analysis answers this question.",
@@ -199,6 +218,13 @@ class ProductionAgent:
             }
         tool, field_id, result = chosen
         t = THEMES[tool]
+        if result is None:
+            return {
+                "question_id": t["question_id"],
+                "answer": narrative or f"The governed {tool} query failed, so no answer is given.",
+                "key_values": {t["set_key"]: []}, "behavior": "refused-data-quality",
+                "provenance": {"metrics": t["metrics"], "dimensions": [], "filters": [], "entities": []},
+            }
         key_values = {t["set_key"]: self._typed(result[t["set_key"]], t["id_key"], t["value_keys"], t["int_keys"])}
         for set_key, _, id_key in t.get("extra_sets", []):
             key_values[set_key] = self._typed(result[set_key], id_key, t["value_keys"], t["int_keys"])

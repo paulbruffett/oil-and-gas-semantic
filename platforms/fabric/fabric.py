@@ -20,6 +20,11 @@ workspace = os.environ["FABRIC_WORKSPACE_ID"]
 credential = DefaultAzureCredential()
 
 
+class FabricError(SystemExit):
+    """An HTTP or MCP error from Fabric. It subclasses SystemExit, so a script still stops with the
+    message; the agent catches it and turns it into a refusal instead of exiting."""
+
+
 def request(method: str, url: str, body: dict | None = None, scope: str = FABRIC_SCOPE) -> dict:
     """Send a JSON request and return the parsed JSON body ({} when empty); exit on an HTTP error."""
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method)
@@ -31,7 +36,7 @@ def request(method: str, url: str, body: dict | None = None, scope: str = FABRIC
             raw = resp.read().decode("utf-8-sig")
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
-        sys.exit(f"{method} {url} -> {e.code}: {e.read().decode()}")
+        raise FabricError(f"{method} {url} -> {e.code}: {e.read().decode()}") from e
 
 
 def item_id(item_type: str, name: str) -> str:
@@ -141,7 +146,7 @@ class MCP:
     def rpc(self, method: str, params: dict) -> dict:
         result = request("POST", self.url, {"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         if "error" in result:
-            sys.exit(f"MCP {method} -> {result['error']}")
+            raise FabricError(f"MCP {method} -> {result['error']}")
         return result
 
     def tools(self) -> list[dict]:
