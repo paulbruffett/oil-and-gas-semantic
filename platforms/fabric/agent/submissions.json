@@ -1,0 +1,440 @@
+{
+  "surveillance-below-expected-oil": {
+    "question_id": "surveillance-below-expected-oil",
+    "answer": "These 12 wells were below expected oil production this week, by the following amounts:\n\n- NO 15/9-F-12 \u2014 **32,191 bbl**\n- NO 15/9-F-11 \u2014 **31,639 bbl**\n- NO 15/9-F-10 \u2014 **23,038 bbl**\n- NO 15/9-F-2 \u2014 **22,123 bbl**\n- NO 15/9-F-7 \u2014 **21,686 bbl**\n- NO 15/9-F-13 \u2014 **21,438 bbl**\n- NO 15/9-F-6 \u2014 **8,460 bbl**\n- NO 15/9-F-1 \u2014 **8,307 bbl**\n- NO 15/9-F-17 \u2014 **7,904 bbl**\n- NO 15/9-F-8 \u2014 **5,579 bbl**\n- NO 15/9-F-9 \u2014 **3,697 bbl**\n- NO 15/9-F-5 \u2014 **3,016 bbl**",
+    "key_values": {
+      "flagged": [
+        {
+          "well_id": 8,
+          "expected_oil_bbl": 10512.899000000001,
+          "actual_oil_bbl": 4934.21,
+          "shortfall_bbl": 5578.689000000001,
+          "efficiency": 0.4693481788420111
+        },
+        {
+          "well_id": 12,
+          "expected_oil_bbl": 82985.094,
+          "actual_oil_bbl": 50794.130000000005,
+          "shortfall_bbl": 32190.963999999993,
+          "efficiency": 0.6120873948760004
+        },
+        {
+          "well_id": 1,
+          "expected_oil_bbl": 12994.179,
+          "actual_oil_bbl": 4686.85,
+          "shortfall_bbl": 8307.329,
+          "efficiency": 0.3606884282569911
+        },
+        {
+          "well_id": 5,
+          "expected_oil_bbl": 15822.589999999998,
+          "actual_oil_bbl": 12806.619999999999,
+          "shortfall_bbl": 3015.9699999999993,
+          "efficiency": 0.8093883491893552
+        },
+        {
+          "well_id": 9,
+          "expected_oil_bbl": 11134.277,
+          "actual_oil_bbl": 7437.59,
+          "shortfall_bbl": 3696.687,
+          "efficiency": 0.6679903868028432
+        },
+        {
+          "well_id": 13,
+          "expected_oil_bbl": 59986.464,
+          "actual_oil_bbl": 38548.770000000004,
+          "shortfall_bbl": 21437.693999999996,
+          "efficiency": 0.6426244760818042
+        },
+        {
+          "well_id": 2,
+          "expected_oil_bbl": 39240.37699999999,
+          "actual_oil_bbl": 17117.53,
+          "shortfall_bbl": 22122.846999999994,
+          "efficiency": 0.43622236351093163
+        },
+        {
+          "well_id": 17,
+          "expected_oil_bbl": 65977.49500000001,
+          "actual_oil_bbl": 58073.40999999999,
+          "shortfall_bbl": 7904.085000000021,
+          "efficiency": 0.8802002864764717
+        },
+        {
+          "well_id": 6,
+          "expected_oil_bbl": 12421.417,
+          "actual_oil_bbl": 3961.5299999999997,
+          "shortfall_bbl": 8459.886999999999,
+          "efficiency": 0.3189273816344786
+        },
+        {
+          "well_id": 10,
+          "expected_oil_bbl": 66517.182,
+          "actual_oil_bbl": 43479.049999999996,
+          "shortfall_bbl": 23038.132000000005,
+          "efficiency": 0.6536514129537236
+        },
+        {
+          "well_id": 7,
+          "expected_oil_bbl": 68066.376,
+          "actual_oil_bbl": 46380.24,
+          "shortfall_bbl": 21686.136000000006,
+          "efficiency": 0.6813972290812133
+        },
+        {
+          "well_id": 11,
+          "expected_oil_bbl": 108594.018,
+          "actual_oil_bbl": 76954.91,
+          "shortfall_bbl": 31639.107999999993,
+          "efficiency": 0.7086477820537039
+        }
+      ]
+    },
+    "behavior": "answered",
+    "provenance": {
+      "metrics": [
+        "production_efficiency",
+        "expected_oil",
+        "actual_oil",
+        "oil_shortfall"
+      ],
+      "dimensions": [
+        "well_id"
+      ],
+      "filters": [],
+      "entities": [
+        "Well"
+      ]
+    }
+  },
+  "deferment-top-downtime-causes": {
+    "question_id": "deferment-top-downtime-causes",
+    "answer": "Last month\u2019s largest deferral was from **Facility Constraint**: 24,191.5 bbl across 7 events and 96.16 downtime hours. Next were **Weather** (15,093.8 bbl; 4 events, 46.99 hours) and **ESP Failure** (14,823.4 bbl; 4 events, 59.4 hours).",
+    "key_values": {
+      "causes": [
+        {
+          "cause": "Power Outage",
+          "deferred_oil_bbl": 11090.976842083332,
+          "downtime_hours": 50.989999999999995,
+          "n_events": 3
+        },
+        {
+          "cause": "Planned Maintenance",
+          "deferred_oil_bbl": 11051.864598750002,
+          "downtime_hours": 47.44,
+          "n_events": 3
+        },
+        {
+          "cause": "ESP Failure",
+          "deferred_oil_bbl": 14823.352788333334,
+          "downtime_hours": 59.4,
+          "n_events": 4
+        },
+        {
+          "cause": "Weather",
+          "deferred_oil_bbl": 15093.836675416667,
+          "downtime_hours": 46.99,
+          "n_events": 4
+        },
+        {
+          "cause": "Facility Constraint",
+          "deferred_oil_bbl": 24191.471884583338,
+          "downtime_hours": 96.16,
+          "n_events": 7
+        }
+      ]
+    },
+    "behavior": "answered",
+    "provenance": {
+      "metrics": [
+        "downtime_hours",
+        "expected_oil",
+        "deferred_oil"
+      ],
+      "dimensions": [
+        "cause"
+      ],
+      "filters": [],
+      "entities": [
+        "Well"
+      ]
+    }
+  },
+  "decline-12-month-field-oil": {
+    "question_id": "decline-12-month-field-oil",
+    "answer": "The result identifies one well declining faster than forecast: **NO 15/9-F-13**, with an actual annual decline of **59.7%** versus a forecast of **44.5%**\u2014a gap of **15.2 percentage points**. It doesn\u2019t report the overall 12-month oil decline for Field X.",
+    "key_values": {
+      "wells_declining_faster": [
+        {
+          "well_id": 13,
+          "actual_annual_decline": 0.5969947927450554,
+          "forecast_annual_decline": 0.445491612672813,
+          "decline_gap": 0.1515031800722424,
+          "cumulative_oil_bbl": 4922284.280000003
+        }
+      ]
+    },
+    "behavior": "answered",
+    "provenance": {
+      "metrics": [
+        "cumulative_oil",
+        "actual_annual_decline",
+        "forecast_annual_decline"
+      ],
+      "dimensions": [
+        "well_id"
+      ],
+      "filters": [],
+      "entities": [
+        "Well"
+      ]
+    }
+  },
+  "welltest-stale-or-anomalous-allocation": {
+    "question_id": "welltest-stale-or-anomalous-allocation",
+    "answer": "The flagged wells are **F-16, F-5, and F-6** (anomalous allocation); **F-1 and F-11** (stale tests and anomalous allocation); and **F-2, F-14, and F-18** (stale tests). F-1 has the oldest test at **400 days**.",
+    "key_values": {
+      "flagged": [
+        {
+          "well_id": 16,
+          "days_since_last_test": 6,
+          "allocation_factor": 0.18984384,
+          "measured_oil_bbl": 244889.73999999996,
+          "allocation_variance": 1.1925988581616136
+        },
+        {
+          "well_id": 5,
+          "days_since_last_test": 25,
+          "allocation_factor": 0.24064097,
+          "measured_oil_bbl": 67723.87000000001,
+          "allocation_variance": 1.1612383544119658
+        },
+        {
+          "well_id": 6,
+          "days_since_last_test": 3,
+          "allocation_factor": 0.06638876,
+          "measured_oil_bbl": 17759.410000000003,
+          "allocation_variance": 1.2216859883604914
+        },
+        {
+          "well_id": 1,
+          "days_since_last_test": 400,
+          "allocation_factor": 0.09578243,
+          "measured_oil_bbl": 22358.95,
+          "allocation_variance": 1.399999935491966
+        },
+        {
+          "well_id": 11,
+          "days_since_last_test": 77,
+          "allocation_factor": 0.39603205,
+          "measured_oil_bbl": 362187.6,
+          "allocation_variance": 1.1566679955518715
+        },
+        {
+          "well_id": 2,
+          "days_since_last_test": 98,
+          "allocation_factor": 0.25727036,
+          "measured_oil_bbl": 84781.93999999999,
+          "allocation_variance": 0.9916992248823416
+        },
+        {
+          "well_id": 14,
+          "days_since_last_test": 90,
+          "allocation_factor": 0.04328643,
+          "measured_oil_bbl": 66447.91,
+          "allocation_variance": 1.0021642663936126
+        },
+        {
+          "well_id": 18,
+          "days_since_last_test": 118,
+          "allocation_factor": 0.10871385,
+          "measured_oil_bbl": 172009.68999999997,
+          "allocation_variance": 0.9723003285028071
+        }
+      ]
+    },
+    "behavior": "answered",
+    "provenance": {
+      "metrics": [
+        "days_since_last_test",
+        "allocation_factor",
+        "allocation_variance"
+      ],
+      "dimensions": [
+        "well_id"
+      ],
+      "filters": [],
+      "entities": [
+        "Well"
+      ]
+    }
+  },
+  "watchlist-down-watering-out-gor-change": {
+    "question_id": "watchlist-down-watering-out-gor-change",
+    "answer": "**Down for 1 day:** NO 15/9-F-5, F-3, F-9, and F-10. **Watering out** (water cut 97.1\u201398.0%): F-8, F-12, F-1, F-13, F-2, F-6, and F-7; F-9 and F-10 are also flagged as wet, at 83.4% and 98.0% water cut. **GOR change** is flagged for F-8, F-12, F-1, F-13, F-2, F-6, F-7, F-9, and F-10 (reported changes range from 1.02 to 2.68%).",
+    "key_values": {
+      "flagged": [
+        {
+          "well_id": 8,
+          "days_down": 0,
+          "water_cut": 0.9799999963414908,
+          "gor_change_pct": 1.5296564474111785
+        },
+        {
+          "well_id": 12,
+          "days_down": 0,
+          "water_cut": 0.9800000003196311,
+          "gor_change_pct": 1.0230639179741714
+        },
+        {
+          "well_id": 1,
+          "days_down": 0,
+          "water_cut": 0.9794086425116054,
+          "gor_change_pct": 1.3934608569213736
+        },
+        {
+          "well_id": 13,
+          "days_down": 0,
+          "water_cut": 0.9710143226887754,
+          "gor_change_pct": 1.2892347697273032
+        },
+        {
+          "well_id": 2,
+          "days_down": 0,
+          "water_cut": 0.9799999922778685,
+          "gor_change_pct": 2.6806017467589376
+        },
+        {
+          "well_id": 6,
+          "days_down": 0,
+          "water_cut": 0.9800000063124651,
+          "gor_change_pct": 1.6666541069440899
+        },
+        {
+          "well_id": 7,
+          "days_down": 0,
+          "water_cut": 0.980000001172205,
+          "gor_change_pct": 1.9730648551355379
+        },
+        {
+          "well_id": 5,
+          "days_down": 1,
+          "water_cut": 0.2548897888231087,
+          "gor_change_pct": 0.03047821404050577
+        },
+        {
+          "well_id": 3,
+          "days_down": 1,
+          "water_cut": 0.20550699857286334,
+          "gor_change_pct": 0.028483435455908257
+        },
+        {
+          "well_id": 9,
+          "days_down": 1,
+          "water_cut": 0.8338891568497065,
+          "gor_change_pct": 1.2781725495502276
+        },
+        {
+          "well_id": 10,
+          "days_down": 1,
+          "water_cut": 0.9799999996016849,
+          "gor_change_pct": 1.5292746655199076
+        }
+      ]
+    },
+    "behavior": "answered",
+    "provenance": {
+      "metrics": [
+        "water_cut",
+        "gor",
+        "days_down"
+      ],
+      "dimensions": [
+        "well_id"
+      ],
+      "filters": [],
+      "entities": [
+        "Well"
+      ]
+    }
+  },
+  "rollup-oil-gas-water-by-field-operator": {
+    "question_id": "rollup-oil-gas-water-by-field-operator",
+    "answer": "Gullfaks (Wintershall) was the biggest oil mover, up 62,755; Sleipner (AkerBP) led gas, up 92,376, just ahead of Gullfaks at +80,693. Water moved most at Gullfaks/Wintershall, rising 4.47 million, while Sleipner/AkerBP water fell 289,202; Volve/Equinor water rose 651,015.",
+    "key_values": {
+      "by_field": [
+        {
+          "field_id": 1,
+          "oil_curr": 326808.67,
+          "gas_curr": 504713.85000000003,
+          "water_curr": 6156704.350000001,
+          "oil_prior": 322783.32,
+          "oil_delta": 4025.3499999999767,
+          "oil_contribution_pct": 11.180490271950315
+        },
+        {
+          "field_id": 2,
+          "oil_curr": 1057820.46,
+          "gas_curr": 1704361.48,
+          "water_curr": 32554817.53999999,
+          "oil_prior": 1051453.6,
+          "oil_delta": 6366.85999999987,
+          "oil_contribution_pct": 36.189221548192116
+        },
+        {
+          "field_id": 3,
+          "oil_curr": 1538397.16,
+          "gas_curr": 1472761.39,
+          "water_curr": 6340672.709999999,
+          "oil_prior": 1475642.1900000002,
+          "oil_delta": 62754.96999999974,
+          "oil_contribution_pct": 52.63028817985762
+        }
+      ],
+      "by_operator": [
+        {
+          "operator": "Wintershall",
+          "oil_curr": 1538397.16,
+          "gas_curr": 1472761.39,
+          "water_curr": 6340672.709999999,
+          "oil_prior": 1475642.1900000002,
+          "oil_delta": 62754.96999999974,
+          "oil_contribution_pct": 52.63028817985762
+        },
+        {
+          "operator": "AkerBP",
+          "oil_curr": 1057820.46,
+          "gas_curr": 1704361.48,
+          "water_curr": 32554817.53999999,
+          "oil_prior": 1051453.6,
+          "oil_delta": 6366.85999999987,
+          "oil_contribution_pct": 36.189221548192116
+        },
+        {
+          "operator": "Equinor",
+          "oil_curr": 326808.67,
+          "gas_curr": 504713.85000000003,
+          "water_curr": 6156704.350000001,
+          "oil_prior": 322783.32,
+          "oil_delta": 4025.3499999999767,
+          "oil_contribution_pct": 11.180490271950315
+        }
+      ]
+    },
+    "behavior": "answered",
+    "provenance": {
+      "metrics": [
+        "actual_oil",
+        "actual_gas",
+        "actual_water"
+      ],
+      "dimensions": [
+        "field_id"
+      ],
+      "filters": [],
+      "entities": [
+        "Well"
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
-# Databricks vs Snowflake for governed AI-over-BI — a platform comparison
+# Databricks vs Snowflake vs Microsoft Fabric for governed AI-over-BI — a platform comparison
 
-A summary comparison of **Databricks** and **Snowflake** for the workload this repo demonstrates: a
+A summary comparison of **Databricks**, **Snowflake** and **Microsoft Fabric** for the workload this repo demonstrates: a
 **governed semantic layer** (OSI KPI definitions) + a **knowledge/LPG layer** + a **natural-language
 agent** ("AI over BI") over OSDU/PDM oil-&-gas production data.
 
@@ -8,7 +8,8 @@ It is grounded in a *controlled port*: the Databricks reference build (`platform
 Snowflake (`platforms/snowflake/`) by **substitution at the seams**, holding the data, the OSI/LPG specs, the six
 use-case questions, and the gold answers **constant** (see [`docs/porting.md`](porting.md)). Because only
 the platform changes, the differences below are attributable to the platform, not to how each side was
-built.
+built. The Fabric build (`platforms/fabric/`) was built natively on the same foundation rather than
+ported line by line, so its diff is a new build, not a port's blast radius.
 
 > **How to read this (scope & honesty).**
 > - **Evidence base:** one frozen dataset (`config_hash 12a110eecfe2`), six themes; both platforms
@@ -16,22 +17,23 @@ built.
 >   not correctness.
 > - **⚠ account-specific** marks findings tied to the tested Snowflake account/region (model
 >   availability, Cortex tool-use), not universal platform statements.
-> - **Microsoft Fabric (in progress):** the Fabric column covers what's built so far: the canonical
->   load, the Direct Lake semantic model, the Fabric IQ ontology knowledge layer and the agents ([`platforms/fabric/README.md`](../platforms/fabric/README.md)).
->   Governance cells come with a later slice.
+> - **Microsoft Fabric:** built in full ([`platforms/fabric/README.md`](../platforms/fabric/README.md)). Its
+>   custom agent reproduces the same gold (6/6). Fabric governance is described from this build's actual
+>   setup (one Admin user) plus documented features; no least-privilege role was built or tested.
 > - This is a **port**, not two independent from-scratch builds — it measures **translatability and
 >   feature fit**, not peak effort achievable on either platform.
 
 ## TL;DR positioning
 
-| Capability area | Who fits this workload better | Why |
-|---|---|---|
-| **Semantic layer** | ~Even (Snowflake edge on metric modeling) | Snowflake Semantic Views model entities+relationships+referenced metrics (closer to a neutral spec); Databricks Metric Views accept richer inline SQL sources |
-| **Governed functions as agent tools** | **Snowflake** | SQL UDFs run with *owner's* rights → tools become a security boundary |
-| **In-platform LLM / agent** | **Databricks** (on the tested account) | Databricks FM endpoints support native tool-calling; Cortex `COMPLETE` did not expose it here |
-| **Data load** | ~Even | Databricks does infer+load in one step; Snowflake splits it but is equally simple |
-| **Governance / RBAC** | **Snowflake** | Owner's-rights functions + role-native LLM access give tighter least-privilege |
-| **Reproducibility / tooling** | ~Even (Snowflake edge) | `snow sql -f` runs `.sql` files natively; no wrapper needed |
+| Capability area | Who fits this workload better | Why | Fabric |
+|---|---|---|---|
+| **Semantic layer** | **Fabric** on KPI expressiveness; Snowflake on metric modeling | Snowflake Semantic Views model entities+relationships+referenced metrics (closer to a neutral spec); Databricks Metric Views accept richer inline SQL sources | DAX expresses **all eight** KPIs the other two pushed into SQL functions; costs materialized typed tables (Direct Lake) and a DAX-only query surface |
+| **Knowledge layer** | **Fabric** on native fit; the others on determinism | tables + SQL functions (Snowflake adds a node/edge graph) | Fabric IQ ontology (preview): entities, relationships, synonyms, rules over MCP; undocumented deploy requirements, no GQL graph from the API, model-driven queries |
+| **Governed functions as agent tools** | **Snowflake** | SQL UDFs run with *owner's* rights → tools become a security boundary | governed DAX runs as the caller; no owner's-rights boundary |
+| **In-platform LLM / agent** | **Databricks** (on the tested account) | Databricks FM endpoints support native tool-calling; Cortex `COMPLETE` did not expose it here | no in-workspace model endpoint (custom agent uses Foundry, native tool calling via the Responses API); Fabric data agent 4–5/6 exact per run |
+| **Data load** | ~Even | Databricks does infer+load in one step; Snowflake splits it but is equally simple | one-step `OPENROWSET` CTAS, but staging needs a Lakehouse and OneLake paths need GUIDs |
+| **Governance / RBAC** | **Snowflake** | Owner's-rights functions + role-native LLM access give tighter least-privilege | workspace roles + Warehouse/semantic-model security exist; one Entra identity end to end; least privilege not tested here |
+| **Reproducibility / tooling** | ~Even (Snowflake edge) | `snow sql -f` runs `.sql` files natively; no wrapper needed | everything deploys from code over REST (TMDL, JSON), but SQL needs a TDS runner and three token audiences are involved |
 
 **One-paragraph read.** Both platforms express this governed-metric + governed-tool + agent architecture
 cleanly and return identical answers. **Snowflake's model is arguably the better *fit*** for a governed
@@ -149,8 +151,8 @@ the data agent the ontology's business terms, which its definition can't referen
 |---|---|---|---|---|
 | **Canonical load** | STAGE + Parquet FILE FORMAT + `INFER_SCHEMA` + `COPY INTO MATCH_BY_COLUMN_NAME` (2 steps) | Volume + `read_files` CTAS (infer+load, 1 step) | Lakehouse `Files/` staging + `OPENROWSET(BULK …)` CTAS (1 step); OneLake paths must use GUIDs in T-SQL | ~even; Databricks slightly terser |
 | **Storage** | `CREATE DATABASE` (no location) | `CREATE CATALOG` (+ `MANAGED LOCATION`) | Warehouse + staging Lakehouse are workspace items created over REST, not SQL | Snowflake removes a coupling |
-| **RBAC** | roles + `ON ALL`/`ON FUTURE` grants; owner's-rights functions | UC grants to groups/principals | _later slice_ | **Snowflake** for least-privilege depth |
-| **LLM governance** | grant `SNOWFLAKE.CORTEX_USER` database role | endpoint permissions | _later slice_ | Snowflake integrates the model into RBAC |
+| **RBAC** | roles + `ON ALL`/`ON FUTURE` grants; owner's-rights functions | UC grants to groups/principals | workspace roles + item sharing; Warehouse `GRANT`/RLS/CLS; semantic-model RLS/OLS. This build: one Admin user, nothing least-privilege tested | **Snowflake** for least-privilege depth |
+| **LLM governance** | grant `SNOWFLAKE.CORTEX_USER` database role | endpoint permissions | Azure RBAC on the Foundry resource ("Cognitive Services OpenAI User"), outside the workspace; data agent governed by item permissions + paid capacity | Snowflake integrates the model into RBAC |
 | **Run `.sql` files** | `snow sql -f file.sql` (native) | CLI has no verb; needs Statement Execution API / wrapper | no REST SQL API; a small TDS runner (`mssql-python`, no ODBC install) | **Snowflake** |
 | **Auth** | key-pair (JWT) via connection config | OAuth / SDK | Entra (`az login`) everywhere; two token audiences (Fabric, Power BI) | ~even |
 
@@ -168,14 +170,23 @@ the data agent the ontology's business terms, which its definition can't referen
 - **Lean Databricks** when the priority is the **agent/ML runtime and metric-source flexibility**: native
   foundation-model tool-calling and serving out of the box, an auto-generated LLM tool schema over
   functions, and Metric Views whose source can be arbitrary SQL.
-- **Either** meets the correctness bar for this workload — both reproduced the same governed answers
-  exactly, so the choice is about *fit and operations*, not *whether it works*.
+- **Lean Fabric** when the priority is **semantic richness inside the Microsoft estate**: DAX expresses
+  every KPI here as a governed measure, the IQ ontology is a native knowledge layer that Fabric's agents
+  consume, and everything deploys from code under one Entra identity. Expect preview features,
+  undocumented deployment requirements, a model endpoint outside the workspace, and a paid capacity for
+  the data agent.
+- **Any of the three** meets the correctness bar for this workload. All three reproduced the same
+  governed answers exactly with a governed-tool agent, so the choice is about *fit and operations*, not
+  *whether it works*. A free-form NL agent (Fabric's data agent here) got the values right but not
+  always the rows.
 
 ## Evidence & reproducibility
 
 - **Correctness parity:** all six themes reproduce the frozen gold (`config_hash 12a110eecfe2`) exactly
   on both platforms — see [`platforms/snowflake/README.md`](../platforms/snowflake/README.md) and [`platforms/snowflake/agent/README.md`](../platforms/snowflake/agent/README.md)
-  (gold-validation tables) and their Databricks counterparts.
+  (gold-validation tables) and their Databricks counterparts. On Fabric, the custom agent's submissions
+  are committed ([`platforms/fabric/agent/submissions.json`](../platforms/fabric/agent/submissions.json))
+  and re-grade 6/6 offline with `grade_submissions.py`.
 - **Blast radius:** the full Databricks→Snowflake port is 11 files, ~1465 lines, 100% within
   `platforms/snowflake/`, zero edits to shared collateral — the per-locus and total diff are recorded in
   [`docs/porting.md`](porting.md) ("The comparison deliverable").
