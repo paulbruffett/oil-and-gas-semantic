@@ -24,58 +24,25 @@ data/frozen).
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 import pyarrow.parquet as pq
 import yaml
-from azure.identity import DefaultAzureCredential
 
-from oag_semantic.lpg import VOCABULARY_PATH, load_lpg
+sys.path.insert(0, str(Path(__file__).parent))
+from fabric import Ontology, item_id  # noqa: E402
 
-FABRIC = "https://api.fabric.microsoft.com/v1"
-workspace = os.environ["FABRIC_WORKSPACE_ID"]
-ontology_name = os.environ.get("FABRIC_ONTOLOGY", "oag_reference_ontology")
+from oag_semantic.lpg import VOCABULARY_PATH, load_lpg  # noqa: E402
+
 dataset_dir = Path(os.environ.get("OAG_DATASET_DIR", "data/frozen"))
-credential = DefaultAzureCredential()
+ontology = Ontology(item_id("Ontology", os.environ.get("FABRIC_ONTOLOGY", "oag_reference_ontology")))
 
 
-def post(url: str, body: dict | None = None, method: str = "POST") -> dict:
-    token = credential.get_token("https://api.fabric.microsoft.com/.default").token
-    req = urllib.request.Request(url, data=json.dumps(body).encode() if body else None, method=method)
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Accept", "application/json, text/event-stream")
-    try:
-        with urllib.request.urlopen(req, timeout=600) as resp:
-            return json.loads(resp.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        sys.exit(f"{method} {url} -> {e.code}: {e.read().decode()}")
-
-
-items = post(f"{FABRIC}/workspaces/{workspace}/items", method="GET")["value"]
-ontology = next((i for i in items if i["type"] == "Ontology" and i["displayName"] == ontology_name), None)
-if ontology is None:
-    sys.exit(f"ontology {ontology_name!r} not found in the workspace; run `deploy.py ontology` first")
-mcp_url = f"{FABRIC}/mcp/dataPlane/workspaces/{workspace}/items/{ontology['id']}/ontologyEndpoint"
-post(mcp_url, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-               "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "oag-verify", "version": "1"}}})
-
-
-def ask(request: str) -> list[dict]:
-    """Call ask_ontology and return the first markdown table in its answer as rows of strings."""
-    result = post(mcp_url, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                            "params": {"name": "ask_ontology", "arguments": {"request": request}}})
-    text = "\n".join(c.get("text", "") for c in result.get("result", {}).get("content", []))
+def ask(question: str) -> list[dict]:
+    text, rows = ontology.ask(question)
     if os.environ.get("OAG_DEBUG"):
         print(text)
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("|")]
-    if len(lines) < 2:
-        return []
-    cells = lambda ln: [c.strip().strip("`*") for c in ln.strip("|").split("|")]  # noqa: E731
-    header = [h.lower() for h in cells(lines[0])]
-    return [dict(zip(header, cells(ln))) for ln in lines[2:]]
+    return rows
 
 
 lpg = load_lpg(dataset_dir)
