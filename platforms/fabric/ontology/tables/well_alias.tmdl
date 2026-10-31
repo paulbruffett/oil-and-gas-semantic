@@ -1,0 +1,33 @@
+table well_alias
+	lineageTag: 3a52129e-f7c0-58e7-95bf-f5c42592b8ec
+
+	column alias
+		lineageTag: d25b2d43-82f5-5728-a196-8422838e7a86
+		dataType: string
+		sourceColumn: alias
+
+	column well_id
+		lineageTag: 2e7fe411-b893-518b-b95f-7ed65d4303b4
+		dataType: int64
+		sourceColumn: well_id
+
+	column source
+		lineageTag: b8608282-9b67-563b-a796-5489e8096bdd
+		dataType: string
+		sourceColumn: source
+
+	partition well_alias = entity
+		mode: directLake
+		source
+			entityName: well_alias
+			schemaName: knowledge
+			expressionSource: DatabaseQuery
+
+		annotation ONT_WorkspaceId = $(FABRIC_WORKSPACE_ID)
+		annotation ONT_ItemId = $(FABRIC_WAREHOUSE_ID)
+		annotation ONT_ItemKind = Warehouse
+		annotation ONT_ItemName = oag_reference
+		annotation ONT_WorkspaceName = oag-reference
+		annotation ONT_SqlEndpoint = $(FABRIC_SQL_ENDPOINT)
+		annotation ONT_SqlDatabase = oag_reference
+		annotation ONT_PinnedAtUtc = 2026-10-31T00:00:00Z

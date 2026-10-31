@@ -1,14 +1,16 @@
-"""Deploy the TMDL semantic model in semantic-model/ to the Fabric workspace, then refresh it.
+"""Deploy a TMDL item definition to the Fabric workspace: the semantic model or the ontology.
 
-Creates the semantic model on first run and updates its definition afterwards (Fabric REST API), then
-runs a refresh so Direct Lake frames the current Warehouse tables. `$(NAME)` placeholders in the TMDL are
+Creates the item on first run and updates its definition afterwards (Fabric REST API). For the semantic
+model it then runs a refresh so Direct Lake frames the current Warehouse tables. `$(NAME)` placeholders in the TMDL are
 filled from environment variables, so the Warehouse endpoint and id stay out of the repo. Auth is your
 `az login` (DefaultAzureCredential); nothing is stored.
 
-    python deploy.py
+    python deploy.py                 # semantic-model/ -> oag_reference_model
+    python deploy.py ontology        # ontology/       -> oag_reference_ontology
 
 Env: FABRIC_WORKSPACE_ID, FABRIC_SQL_ENDPOINT, FABRIC_WAREHOUSE_ID; FABRIC_SEMANTIC_MODEL (default
-oag_reference_model).
+oag_reference_model) and FABRIC_ONTOLOGY (default oag_reference_ontology), the names the verify scripts
+also read.
 """
 
 import base64
@@ -26,8 +28,18 @@ from azure.identity import DefaultAzureCredential
 FABRIC = "https://api.fabric.microsoft.com/v1"
 POWERBI = "https://api.powerbi.com/v1.0/myorg"
 workspace = os.environ["FABRIC_WORKSPACE_ID"]
-name = os.environ.get("FABRIC_SEMANTIC_MODEL", "oag_reference_model")
-root = Path(__file__).parent / "semantic-model"
+# kind -> (source folder, item display name, REST collection, platform file, refresh after deploy)
+ITEMS = {
+    "semantic-model": ("semantic-model", os.environ.get("FABRIC_SEMANTIC_MODEL", "oag_reference_model"),
+                       "semanticModels", "definition.pbism", True),
+    "ontology": ("ontology", os.environ.get("FABRIC_ONTOLOGY", "oag_reference_ontology"),
+                 "ontologies", ".platform", False),
+}
+kind = sys.argv[1] if len(sys.argv) > 1 else "semantic-model"
+if kind not in ITEMS:
+    sys.exit(f"unknown item {kind!r}; use one of: {', '.join(ITEMS)}")
+folder, name, collection, platform_file, refresh = ITEMS[kind]
+root = Path(__file__).parent / folder
 credential = DefaultAzureCredential()
 
 
@@ -69,7 +81,7 @@ def substitute(text: str) -> str:
 
 
 def parts() -> list[dict]:
-    files = [root / "definition.pbism", *sorted((root / "definition").rglob("*.tmdl"))]
+    files = [root / platform_file, *sorted(root.rglob("*.tmdl"))]
     return [
         {
             "path": f.relative_to(root).as_posix(),
@@ -81,28 +93,30 @@ def parts() -> list[dict]:
 
 
 def main() -> None:
-    _, _, listing = call("GET", f"{FABRIC}/workspaces/{workspace}/semanticModels")
+    _, _, listing = call("GET", f"{FABRIC}/workspaces/{workspace}/{collection}")
     existing = next((m for m in listing["value"] if m["displayName"] == name), None)
     definition = {"parts": parts()}
     if existing:
         model_id = existing["id"]
         status, headers, _ = call(
-            "POST", f"{FABRIC}/workspaces/{workspace}/semanticModels/{model_id}/updateDefinition", {"definition": definition}
+            "POST", f"{FABRIC}/workspaces/{workspace}/{collection}/{model_id}/updateDefinition", {"definition": definition}
         )
         if status == 202:
             wait(headers)
         print(f"updated {name} ({model_id})")
     else:
         status, headers, body = call(
-            "POST", f"{FABRIC}/workspaces/{workspace}/semanticModels", {"displayName": name, "definition": definition}
+            "POST", f"{FABRIC}/workspaces/{workspace}/{collection}", {"displayName": name, "definition": definition}
         )
         if status == 202:
             wait(headers)
-        _, _, listing = call("GET", f"{FABRIC}/workspaces/{workspace}/semanticModels")
+        _, _, listing = call("GET", f"{FABRIC}/workspaces/{workspace}/{collection}")
         model_id = next((m["id"] for m in listing["value"] if m["displayName"] == name), None)
         if model_id is None:
-            sys.exit(f"created {name}, but it isn't listed yet; re-run deploy.py to update and refresh it")
+            sys.exit(f"created {name}, but it isn't listed yet; re-run deploy.py to update it")
         print(f"created {name} ({model_id})")
+    if not refresh:
+        return
 
     # Refresh (Direct Lake framing) and wait for it. Note the newest refresh before starting, so the
     # poll can't mistake an earlier completed refresh for this one.

@@ -16,9 +16,9 @@ built.
 >   not correctness.
 > - **⚠ account-specific** marks findings tied to the tested Snowflake account/region (model
 >   availability, Cortex tool-use), not universal platform statements.
-> - **Microsoft Fabric (in progress):** the Fabric column covers what's built so far, the canonical
->   load and the Direct Lake semantic model ([`platforms/fabric/README.md`](../platforms/fabric/README.md)).
->   Agent, knowledge-layer and governance cells come with later slices.
+> - **Microsoft Fabric (in progress):** the Fabric column covers what's built so far: the canonical
+>   load, the Direct Lake semantic model and the Fabric IQ ontology knowledge layer ([`platforms/fabric/README.md`](../platforms/fabric/README.md)).
+>   Agent and governance cells come with later slices.
 > - This is a **port**, not two independent from-scratch builds — it measures **translatability and
 >   feature fit**, not peak effort achievable on either platform.
 
@@ -71,6 +71,26 @@ cost is on the way in. Direct Lake reads tables as they are, so the cast-and-res
 did inline and Snowflake did in views becomes 10 materialized tables to rebuild after each load. Direct
 Lake also gives every dimension a blank member, which measures that default to 0 must guard against. And
 the model speaks only DAX, so a SQL-first agent can't query it directly.
+
+## Knowledge layer — tables + functions vs Fabric IQ ontology
+
+| | Snowflake | Databricks | Fabric |
+|---|---|---|---|
+| Form | vocabulary tables + SQL UDFs; `KG_NODE`/`KG_EDGE` graph walked by recursive-CTE UDTFs | vocabulary tables + UC SQL functions | **Fabric IQ ontology (preview)**: entities, relationships, synonyms, rules, bound in Direct Lake to Warehouse tables (ADR 0037) |
+| Authoring | SQL DDL | SQL DDL | TMDL over the REST definition API |
+| Entity resolution | `RESOLVE_FIELD`, `KG_RESOLVE` | `resolve_field` | alias entities (`FieldAlias`, `WellAlias`) linked to `Field`/`Well` |
+| Hierarchy navigation | `WELLS_IN_FIELD`, `KG_TRAVERSE` | `wells_in_field` | entity relationships (`Well In Field`, `Facility In Field`, …) |
+| Agent access | UDFs as Cortex Agent tools | UC functions as tools | ontology **MCP endpoint** (`ask_ontology` takes natural language) |
+| Determinism | deterministic SQL | deterministic SQL | model-driven answers (verified by asking for complete tables) |
+
+**Fabric.** The ontology is the most "semantic" of the three knowledge layers: typed entities,
+relationships, synonyms and natural-language rules in one governed item that Fabric's agents consume
+directly. The other two builds hand-roll that with tables and functions. It reproduces the reference
+LPG's resolution and rollup exactly. But it's preview, and code-first deployment has undocumented
+requirements: stable lineage tags, `ONT_*` partition annotations from a bug report, and quoted
+synonyms. Its GQL graph doesn't materialize from the API (no API for the portal's graph opt-in was
+found), and access is through a model-driven MCP tool rather than a deterministic function. The
+determinism gap matters most for an agent that must return exact governed answers.
 
 ## 2. Governed functions as agent tools — SQL UDFs vs UC functions
 

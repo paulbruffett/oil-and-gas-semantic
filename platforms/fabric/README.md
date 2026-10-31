@@ -2,15 +2,15 @@
 
 The Fabric reference build (DESIGN.md §7, ADR 0035): the reference dataset (`configs/reference.yaml`,
 `config_hash 12a110eecfe2`) loaded into a Fabric **Warehouse** as the canonical OSDU tables, and the
-OSI semantic model as a **Direct Lake** Fabric semantic model with DAX measures; later slices add the
-knowledge layer, an agent, and the gold check. It follows `platforms/databricks/` and `platforms/snowflake/` and does
+OSI semantic model as a **Direct Lake** Fabric semantic model with DAX measures, and the knowledge layer
+as a **Fabric IQ ontology** (preview); later slices add an agent and the gold check. It follows `platforms/databricks/` and `platforms/snowflake/` and does
 not edit the foundation.
 
 | Slice | Status |
 |---|---|
 | 1. Canonical load (Warehouse) | done: 9 tables, row counts and value checksums match the Parquet |
 | 2. Semantic model (DAX) | done: Direct Lake model; every OSI metric plus all eight compile-assembled KPIs are DAX measures; all six use cases match gold from measures alone |
-| 3. Knowledge layer | not started |
+| 3. Knowledge layer (Fabric IQ ontology) | done: entities, relationships, aliases and business terms; resolution, rollups and terms match the reference LPG over the ontology's MCP endpoint |
 | 4. Agent (custom + Fabric Data Agent) | not started |
 | 5. Gold check | not started |
 
@@ -41,8 +41,11 @@ workspace oag-reference            Fabric workspace on an F-SKU or trial capacit
     │   ├── well · field · facility                                          dims (18 · 3 · 6)
     │   ├── calendar                                                         date table with month + day index (456)
     │   └── params                                                           frozen windows + thresholds (1 row)
-    └── knowledge                  SCHEMA     (slice 3)
-└── oag_reference_model            SEMANTIC MODEL  Direct Lake over the semantic schema; TMDL in semantic-model/
+    └── knowledge                  SCHEMA     tables the ontology binds to beside semantic.well/field/facility
+        └── operator · field_alias · well_alias · business_term             (3 · 6 · 36 · 5)
+├── oag_reference_model            SEMANTIC MODEL  Direct Lake over the semantic schema; TMDL in semantic-model/
+└── oag_reference_ontology         ONTOLOGY (preview)  entities + relationships + rule; TMDL in ontology/
+    └── …_graph_<id> · …_eh_<id>   GRAPH MODEL + EVENTHOUSE + KQL DATABASE, created and deleted with the ontology
 ```
 
 ## Platform mapping
@@ -130,6 +133,71 @@ from DAX query parameters.
   are involved (`api.fabric.microsoft.com` and `analysis.windows.net/powerbi/api`). One parse quirk:
   `relationships.tmdl` rejects `///` descriptions.
 
+## Knowledge layer: Fabric IQ ontology (slice 3, ADR 0037)
+
+`ontology/` is the TMDL source of `oag_reference_ontology`, Fabric's native knowledge layer. It covers
+what `knowledge/vocabulary.yaml` + `oag_semantic.lpg` do in the reference build and what the knowledge
+functions and graph do on Databricks/Snowflake. The DAX semantic model stays the metrics layer.
+
+| Ontology object | Bound to | Reference counterpart |
+|---|---|---|
+| entity `Well` (key `well_id`; uwi, well_name, field_id, facility_id, operator) | `semantic.well` | LPG `WellNode`; Snowflake `well:` nodes |
+| entity `Field` (key `field_id`; field_name) | `semantic.field` | LPG `FieldNode` |
+| entity `Facility` (key `facility_id`) | `semantic.facility` | Snowflake `facility:` nodes |
+| entity `Operator` (key `operator`) | `knowledge.operator` | Snowflake `operator:` nodes |
+| entity `FieldAlias` (key `alias`) + `Alias Of Field` | `knowledge.field_alias` | `field_synonyms` + `resolve_field` |
+| entity `WellAlias` (key `alias`) + `Alias Of Well` | `knowledge.well_alias` | Snowflake `KG_RESOLVE` (name, UWI) |
+| entity `BusinessTerm` (key `phrase`) | `knowledge.business_term` | vocabulary `terms` + `resolve_term` |
+| `Well In Field`, `Well At Facility`, `Facility In Field`, `Well/Facility Operated By` | table relationships | `IN_FIELD`, `AT_FACILITY`, `OPERATED_BY` edges |
+| rule `BelowExpected` | Well, BusinessTerm | the `below_expected` term |
+
+There's no wellbore entity: the dataset has no wellbore data, so adding one would mean inventing it.
+
+**Querying it.** The ontology's MCP endpoint
+(`https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/<workspace id>/items/<ontology id>/ontologyEndpoint`,
+Entra token for `api.fabric.microsoft.com`) exposes `ask_ontology` (natural-language questions, or
+grounded SQL/DAX/KQL), `list_ontology_entities` and `list_ontology_rules`. It works on the trial
+capacity. `verify_knowledge.py` asks it for complete tables and compares them with the reference:
+
+| Check | Result |
+|---|---|
+| every field alias (names + vocabulary synonyms) → field, vs `lpg.resolve_field` | match (6/6) |
+| every well alias (UWI + well name) → well | match (36/36) |
+| `'NO 15/9-F-1'` → well 1 in field 1 | match |
+| well → field rollup for every field, vs `lpg.wells_in_field` | match (18 wells) |
+| facility → field | match (6/6) |
+| business terms → metric/comparison/threshold, vs `lpg.resolve_term` | match (5/5) |
+| every well named in a gold answer sits in its gold `field_id` | match (16 wells) |
+
+### Findings
+
+- **Code-first works, with three undocumented requirements.** The ontology definition is TMDL and
+  deploys over the same REST definition API as the semantic model. But:
+  1. *Lineage tags must be present and stable.* With none, the first create works but every later
+     `updateDefinition` fails ("refers to an object which cannot be found"). With tags that differ from
+     the first create, it fails with "No element with lineage tag … in DataSources". So every object here
+     carries a fixed tag derived from its name. Changing a tag means deleting and recreating the ontology.
+  2. *`ONT_*` partition annotations* (workspace, item id/kind/name, SQL endpoint/database) are needed for
+     graph eligibility. They aren't in the ontology-definition reference; they come from an open bug
+     report ([microsoft/skills-for-fabric#107](https://github.com/microsoft/skills-for-fabric/issues/107)).
+  3. *Multi-word synonyms must be quoted* (`synonym 'well synonym'`); unquoted, they fail as "invalid
+     indentation".
+- **An ontology brings three extra items.** Creating one also creates a graph model, an Eventhouse and a
+  KQL database. Deleting the ontology deletes them too.
+- **The GQL graph doesn't materialize from the API.** Even with the annotations, the graph model's
+  schema stays empty, `RefreshGraph` jobs are cancelled within seconds, and `executeQuery` returns
+  `GraphNotQueryable`. Microsoft's overview says graph loading is opt-in, and the portal has a "Manage
+  graph" page; I didn't find an API for it. I also couldn't confirm whether a Warehouse is a supported
+  graph source (the bug report used a Lakehouse). Nothing here depends on GQL: `ask_ontology` answers
+  from the bound tables.
+- **The MCP interface is model-driven.** `ask_ontology` takes natural language, so verification asks
+  for whole tables naming the entity, property and relationship to use, then compares parsed rows. Two
+  full runs returned identical results, but it isn't a deterministic API the way a SQL function is.
+- **Preview.** The ontology, its MCP server and graph models are all labelled preview. The MCP docs list
+  a paid F2+ capacity as a prerequisite, but MCP worked on the FTL64 trial.
+- **For slice 4 (reported, not yet checked):** the Assistants API behind Fabric data agents was
+  reportedly retired on 26 Aug 2026, so programmatic agent calls should use MCP endpoints.
+
 ## Reproduce
 
 Prereqs: Azure CLI signed in (`az login`) as a user with a Fabric license; a workspace on an F-SKU or
@@ -169,6 +237,16 @@ $RUN verify_semantic.py                     # one DAX query per use case vs data
 ```
 
 `verify_semantic.py` should print `MATCH` for all six use cases and for the time-intelligence rollup.
+
+```bash
+# 4. Knowledge tables, then deploy the ontology and check it vs the reference LPG + gold (over MCP)
+$RUN run_sql.py sql/04_knowledge_tables.sql # ends with row counts: 3, 6, 36, 5
+$RUN deploy.py ontology                     # creates or updates oag_reference_ontology
+(cd ../.. && uv run --with azure-identity python platforms/fabric/verify_knowledge.py)   # several minutes: one ask_ontology call per check
+```
+
+`verify_knowledge.py` should print `MATCH` for all seven checks. Don't edit the `lineageTag` lines in
+`ontology/`: the service keys state on them (see Findings above).
 
 `02_load_canonical.sql` closes with a row-count check (`8208, 8208, 21, 18, 3, 6, 282, 251, 18`) that
 fails the run if any count differs.

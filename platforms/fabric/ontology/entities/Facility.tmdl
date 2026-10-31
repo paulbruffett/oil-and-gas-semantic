@@ -1,0 +1,36 @@
+/// A battery/facility that wells flow to; belongs to a field.
+entity Facility
+	lineageTag: 883558b5-6832-56c4-8858-d4eed007eb13
+	backingTable: facility
+	keyProperty: facility_id
+	synonym battery
+
+	property facility_id
+		lineageTag: 014afed8-8a1f-5609-9bb8-e8b14a474a78
+		dataType: int64
+		backingConfiguration
+			valueColumn: facility.facility_id
+
+	property facility_name
+		lineageTag: 98dbc5bd-edd3-560a-a175-238a90280699
+		dataType: string
+		backingConfiguration
+			valueColumn: facility.facility_name
+
+	property facility_type
+		lineageTag: 9e99548c-6ef7-5b78-86b0-45b658a37c88
+		dataType: string
+		backingConfiguration
+			valueColumn: facility.facility_type
+
+	property field_id
+		lineageTag: 581b7796-626d-5147-b54c-252fe3ed43bd
+		dataType: int64
+		backingConfiguration
+			valueColumn: facility.field_id
+
+	property facility_operator
+		lineageTag: 9d342890-e84f-5aaf-abb0-721b9cc23fb1
+		dataType: string
+		backingConfiguration
+			valueColumn: facility.facility_operator

@@ -1,0 +1,18 @@
+/// A producing field (asset) that wells and facilities roll up to.
+entity Field
+	lineageTag: e0b06aa3-18ed-5ea1-9a7b-63d7a03408b4
+	backingTable: field
+	keyProperty: field_id
+	synonym asset
+
+	property field_id
+		lineageTag: 5608db38-61a5-5ba5-9b6f-661f1f6e003f
+		dataType: int64
+		backingConfiguration
+			valueColumn: field.field_id
+
+	property field_name
+		lineageTag: fc5504d5-49da-59cb-ac18-7472f2a74e5b
+		dataType: string
+		backingConfiguration
+			valueColumn: field.field_name

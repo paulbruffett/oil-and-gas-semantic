@@ -1,0 +1,48 @@
+table business_term
+	lineageTag: 83fdf35d-0d70-59b7-960a-8dfa9dc5e30e
+
+	column phrase
+		lineageTag: 7f9d1078-6dd6-5d2a-b629-b3250830d517
+		dataType: string
+		sourceColumn: phrase
+
+	column term
+		lineageTag: 6536da7f-cbfb-52aa-b037-b77b9af1ebf2
+		dataType: string
+		sourceColumn: term
+
+	column metric
+		lineageTag: f813ae40-6f5c-5c11-be29-9f63e3a03625
+		dataType: string
+		sourceColumn: metric
+
+	column comparison
+		lineageTag: 2eba4a07-4d14-5db3-b0c4-0860fa1fc95b
+		dataType: string
+		sourceColumn: comparison
+
+	column threshold_ref
+		lineageTag: 7a982cdc-f67b-55b1-83ea-543c561a6df0
+		dataType: string
+		sourceColumn: threshold_ref
+
+	column description
+		lineageTag: 774403a2-df97-5fea-94dd-12d9e786c996
+		dataType: string
+		sourceColumn: description
+
+	partition business_term = entity
+		mode: directLake
+		source
+			entityName: business_term
+			schemaName: knowledge
+			expressionSource: DatabaseQuery
+
+		annotation ONT_WorkspaceId = $(FABRIC_WORKSPACE_ID)
+		annotation ONT_ItemId = $(FABRIC_WAREHOUSE_ID)
+		annotation ONT_ItemKind = Warehouse
+		annotation ONT_ItemName = oag_reference
+		annotation ONT_WorkspaceName = oag-reference
+		annotation ONT_SqlEndpoint = $(FABRIC_SQL_ENDPOINT)
+		annotation ONT_SqlDatabase = oag_reference
+		annotation ONT_PinnedAtUtc = 2026-10-31T00:00:00Z

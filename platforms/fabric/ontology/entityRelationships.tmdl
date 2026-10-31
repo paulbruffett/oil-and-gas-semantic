@@ -1,0 +1,60 @@
+/// A well rolls up to the field it produces from (reference LPG IN_FIELD).
+entityRelationship 'Well In Field'
+	lineageTag: 0f62694e-fd91-58ae-b59d-b2c29f76377f
+	fromEntity: Well
+	toEntity: Field
+
+	backingConfiguration
+		relationship: well_field
+
+/// A well flows to a facility.
+entityRelationship 'Well At Facility'
+	lineageTag: 61666b5f-1eed-5328-84ed-3335ad75253e
+	fromEntity: Well
+	toEntity: Facility
+
+	backingConfiguration
+		relationship: well_facility
+
+/// A facility belongs to a field.
+entityRelationship 'Facility In Field'
+	lineageTag: d2375475-924a-5acc-8afb-2623ca200665
+	fromEntity: Facility
+	toEntity: Field
+
+	backingConfiguration
+		relationship: facility_field
+
+entityRelationship 'Well Operated By'
+	lineageTag: 087bc6d7-78f1-51d5-95c7-106df3cd2b13
+	fromEntity: Well
+	toEntity: Operator
+
+	backingConfiguration
+		relationship: well_operator
+
+entityRelationship 'Facility Operated By'
+	lineageTag: 59c4d9e7-69da-5208-94d7-bc154d8e0d6e
+	fromEntity: Facility
+	toEntity: Operator
+
+	backingConfiguration
+		relationship: facility_operator
+
+/// Entity resolution: an alias names a field.
+entityRelationship 'Alias Of Field'
+	lineageTag: 9c184740-16cd-58d9-add9-30d0ff095696
+	fromEntity: FieldAlias
+	toEntity: Field
+
+	backingConfiguration
+		relationship: field_alias_field
+
+/// Entity resolution: an alias names a well.
+entityRelationship 'Alias Of Well'
+	lineageTag: a23f2f10-926e-5e2f-b526-d08a204fb164
+	fromEntity: WellAlias
+	toEntity: Well
+
+	backingConfiguration
+		relationship: well_alias_well

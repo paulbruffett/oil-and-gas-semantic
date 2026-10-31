@@ -1,0 +1,26 @@
+/// A name that resolves to a well: its UWI or its well name (lower case).
+entity WellAlias
+	lineageTag: b0f9cb0d-2b58-5b53-981c-16cb6ac8f046
+	backingTable: well_alias
+	keyProperty: alias
+	synonym 'well synonym'
+
+	/// Normalized alias (lower case, single spaces).
+	property alias
+		lineageTag: 02045537-b870-50d8-a500-1f4879bd50a3
+		dataType: string
+		backingConfiguration
+			valueColumn: well_alias.alias
+
+	property well_id
+		lineageTag: fc932bbd-efdf-5c42-8c86-49a6cb5ca3a3
+		dataType: int64
+		backingConfiguration
+			valueColumn: well_alias.well_id
+
+	/// uwi or name
+	property source
+		lineageTag: cadfb711-4783-5cb4-9a66-55beab982cdb
+		dataType: string
+		backingConfiguration
+			valueColumn: well_alias.source

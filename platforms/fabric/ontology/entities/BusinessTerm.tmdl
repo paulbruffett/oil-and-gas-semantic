@@ -1,0 +1,45 @@
+/// A business phrase and the governed semantic-model metric and comparison it denotes.
+entity BusinessTerm
+	lineageTag: da113480-e726-5646-b58d-c4c8ae82e0b9
+	backingTable: business_term
+	keyProperty: phrase
+	synonym 'vocabulary term'
+
+	/// Normalized phrase, e.g. below expected.
+	property phrase
+		lineageTag: ac66fd33-c1dd-5b95-b5de-576c510ed6a5
+		dataType: string
+		backingConfiguration
+			valueColumn: business_term.phrase
+
+	property term
+		lineageTag: 0ecc03aa-1e9d-5bb0-8467-f50bfd085ec0
+		dataType: string
+		backingConfiguration
+			valueColumn: business_term.term
+
+	/// OSI metric name, e.g. production_efficiency.
+	property metric
+		lineageTag: b428171f-92b7-590f-bef6-aec4cded07d1
+		dataType: string
+		backingConfiguration
+			valueColumn: business_term.metric
+
+	property comparison
+		lineageTag: 9cc59613-d55e-5bc7-a437-8abcb03e3c5f
+		dataType: string
+		backingConfiguration
+			valueColumn: business_term.comparison
+
+	/// Dataset parameter holding the threshold.
+	property threshold_ref
+		lineageTag: eff46d30-73e7-55b2-bc39-eee194da1f66
+		dataType: string
+		backingConfiguration
+			valueColumn: business_term.threshold_ref
+
+	property description
+		lineageTag: 15ec561a-afbf-5055-8f4f-47d909c500d8
+		dataType: string
+		backingConfiguration
+			valueColumn: business_term.description

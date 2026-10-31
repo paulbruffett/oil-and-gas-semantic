@@ -1,0 +1,27 @@
+relationship well_field
+	fromColumn: well.field_id
+	toColumn: field.field_id
+
+relationship well_facility
+	fromColumn: well.facility_id
+	toColumn: facility.facility_id
+
+relationship facility_field
+	fromColumn: facility.field_id
+	toColumn: field.field_id
+
+relationship well_operator
+	fromColumn: well.operator
+	toColumn: operator.operator
+
+relationship facility_operator
+	fromColumn: facility.facility_operator
+	toColumn: operator.operator
+
+relationship field_alias_field
+	fromColumn: field_alias.field_id
+	toColumn: field.field_id
+
+relationship well_alias_well
+	fromColumn: well_alias.well_id
+	toColumn: well.well_id

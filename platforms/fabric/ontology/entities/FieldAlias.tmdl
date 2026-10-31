@@ -1,0 +1,26 @@
+/// A name that resolves to a field: its canonical name (lower case) or a vocabulary synonym.
+entity FieldAlias
+	lineageTag: 2ddcd2a6-de7e-541c-acc8-61764fe498ef
+	backingTable: field_alias
+	keyProperty: alias
+	synonym 'field synonym'
+
+	/// Normalized alias (lower case, single spaces).
+	property alias
+		lineageTag: b37e3fbc-314f-577a-b49b-4bd99d4300ac
+		dataType: string
+		backingConfiguration
+			valueColumn: field_alias.alias
+
+	property field_id
+		lineageTag: 9609fd36-ce0c-519f-b20c-16156dd89387
+		dataType: int64
+		backingConfiguration
+			valueColumn: field_alias.field_id
+
+	/// name or synonym
+	property source
+		lineageTag: 14023ccd-d23b-5898-89a2-ac81d6b71148
+		dataType: string
+		backingConfiguration
+			valueColumn: field_alias.source

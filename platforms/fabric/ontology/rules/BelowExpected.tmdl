@@ -1,0 +1,7 @@
+rule BelowExpected
+	lineageTag: 51ea84c9-b275-52d0-b7f0-e331178232e2
+	statement: A well is below expected when its production efficiency (actual oil / expected oil, the semantic model's Production Efficiency measure) over the surveillance window is below the surveillance flag threshold (0.9). Below expected, under-performing, underperforming, below forecast and below plan all mean this.
+
+	ruleReferencedEntity Well
+
+	ruleReferencedEntity BusinessTerm
