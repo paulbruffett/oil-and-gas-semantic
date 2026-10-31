@@ -74,7 +74,18 @@ CREATE TABLE canonical.rpen_allocation_factor AS
 SELECT * FROM OPENROWSET(BULK 'https://onelake.dfs.fabric.microsoft.com/$(FABRIC_WORKSPACE_ID)/$(FABRIC_LAKEHOUSE_ID)/Files/canonical/rpen_allocation_factor.parquet') AS r;
 GO
 
--- Sanity check: expect 8208, 8208, 21, 18, 3, 6, 282, 251, 18.
+-- Sanity check: expect 8208, 8208, 21, 18, 3, 6, 282, 251, 18. Fails the run if any count differs.
+IF (SELECT COUNT(*) FROM canonical.well_vol_daily) <> 8208
+   OR (SELECT COUNT(*) FROM canonical.product_volume_summary) <> 8208
+   OR (SELECT COUNT(*) FROM canonical.reporting_entity) <> 21
+   OR (SELECT COUNT(*) FROM canonical.well) <> 18
+   OR (SELECT COUNT(*) FROM canonical.field) <> 3
+   OR (SELECT COUNT(*) FROM canonical.facility) <> 6
+   OR (SELECT COUNT(*) FROM canonical.down_time_event) <> 282
+   OR (SELECT COUNT(*) FROM canonical.well_test) <> 251
+   OR (SELECT COUNT(*) FROM canonical.rpen_allocation_factor) <> 18
+  THROW 50000, 'Row counts do not match the reference dataset (config_hash 12a110eecfe2).', 1;
+GO
 SELECT
   (SELECT COUNT(*) FROM canonical.well_vol_daily) AS well_vol_daily,
   (SELECT COUNT(*) FROM canonical.product_volume_summary) AS product_volume_summary,

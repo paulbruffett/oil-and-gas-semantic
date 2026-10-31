@@ -76,6 +76,11 @@ CREATE USER IF NOT EXISTS OAG_ANALYST_SVC
   DEFAULT_WAREHOUSE = COMPUTE_WH
   RSA_PUBLIC_KEY = '<RSA_PUBLIC_KEY_ANALYST_SVC>';
 
+-- IF NOT EXISTS skips an existing user, so set the keys explicitly too: re-running with new public
+-- keys then rotates them instead of silently keeping the old ones.
+ALTER USER OAG_AGENT_SVC   SET RSA_PUBLIC_KEY = '<RSA_PUBLIC_KEY_AGENT_SVC>';
+ALTER USER OAG_ANALYST_SVC SET RSA_PUBLIC_KEY = '<RSA_PUBLIC_KEY_ANALYST_SVC>';
+
 -- 3. Role assignment (SECURITYADMIN manages role grants) -------------------------------------------
 -- One role per principal. DEFAULT_ROLE only sets the session's initial role; the GRANT is what
 -- makes it usable, and no second role is granted, so neither user can widen itself.

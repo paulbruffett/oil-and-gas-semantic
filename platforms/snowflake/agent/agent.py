@@ -21,15 +21,15 @@ from __future__ import annotations
 
 import json
 import os
-import tomllib
 from typing import Any
 
 import snowflake.connector
 
+from sfconfig import connection
+
 LLM_MODEL = os.environ.get("OAG_AGENT_LLM", "claude-sonnet-4-5")
 CONNECTION = os.environ.get("OAG_SNOWFLAKE_CONNECTION", "proton")
 CATALOG, KSCHEMA = "OAG_FABLE", "KNOWLEDGE"
-_CONFIG = os.path.expanduser("~/Library/Application Support/snowflake/config.toml")
 
 
 def _fn(name: str) -> str:
@@ -123,8 +123,7 @@ class ProductionAgent:
     """Deterministic-answer, Cortex-routed agent across all six use-case themes (Snowflake)."""
 
     def __init__(self, connection_name: str = CONNECTION, model: str = LLM_MODEL) -> None:
-        with open(_CONFIG, "rb") as f:
-            params = dict(tomllib.load(f)["connections"][connection_name])
+        params = connection(connection_name)
         params.pop("database", None)
         params.pop("schema", None)
         self._con = snowflake.connector.connect(**params)
