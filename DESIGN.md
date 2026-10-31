@@ -159,6 +159,9 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
    calls → answer + provenance. Orchestration left open.
 6. **Governance / metadata** (cross-cutting) — catalog, lineage, security.
 
+**Platform reference builds** live in `platforms/<stack>/` (Databricks, Snowflake; Fabric next) on the
+shared foundation at the repo root; each must reproduce the gold answers (ADR 0035).
+
 **Key seams.**
 - **The data seam** (layer 1 → everything): deterministic generator output is the single substrate; gold
   answers are computed here. This is the highest engineering-test seam.
@@ -416,6 +419,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0032 — Breakthrough scenario knob: config-gated water/gas-breakthrough minority on a dedicated rng stream, with a pinned anchor well guaranteeing non-empty watering-out/GOR-change gold on any seed (extends 0009/0024, feeds #44/#35)](docs/adr/0032-breakthrough-scenario-knob.md)
 - [0033 — Breakthrough members suffer post-onset oil impairment and the "declining faster than forecast" flag gains a config-gated materiality band, so the decline flag detects a modeled phenomenon, not downtime-timing noise (refines 0018 §4, extends 0032, closes #35)](docs/adr/0033-breakthrough-oil-impairment-decline-band.md)
 - [0034 — configs/contest.yaml is the frozen fork-tag dataset config: 15-month window, breakthrough on, decline band; watchlist non-emptiness anchored by construction, decline empirically swept (applies 0032/0033, closes #44)](docs/adr/0034-frozen-contest-config.md)
+- [0035 — Platform reference builds live in this repo under `platforms/<stack>/`, on one shared foundation (amends 0012/0014)](docs/adr/0035-platform-reference-builds-in-repo.md)
 
 ---
 
