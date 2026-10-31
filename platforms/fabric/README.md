@@ -12,16 +12,15 @@ not edit the foundation.
 | 1. Canonical load (Warehouse) | done: 9 tables, row counts and value checksums match the Parquet |
 | 2. Semantic model (DAX) | done: Direct Lake model; every OSI metric plus all eight compile-assembled KPIs are DAX measures; all six use cases match gold from measures alone |
 | 3. Knowledge layer (Fabric IQ ontology) | done: entities, relationships, aliases and business terms; resolution, rollups and terms match the reference LPG over the ontology's MCP endpoint |
-| 4. Agent (custom + Fabric data agent) | custom agent done: **6/6 gold** ([`agent/`](agent/README.md)); data agent deployed, evaluation blocked until the workspace is on a paid F2+ capacity |
+| 4. Agent (custom + Fabric data agent) | custom agent: **6/6 gold** ([`agent/`](agent/README.md)); Fabric data agent: 5/6 use cases exact in each of two runs, all values right, row-selection mistakes vary by run |
 | 5. Gold check | not started |
 
-> **⚠ Capacity: the trial ends around 2026-11-08.** This build runs on an FTL64 trial capacity. Before
-> it ends, create a pay-as-you-go **F2** capacity in **West US 3** (the same region as the trial and the
-> Foundry resource) and reassign the `oag-reference` workspace to it (workspace settings → License info).
-> Otherwise the Warehouse and the other items become unreadable and are later deleted.
-> F2 lists at $0.18 per capacity unit per hour: about $0.36/hour, or about $263/month if left running.
-> Pause it when idle to stop compute billing. F2 should be enough for this dataset, but confirm the
-> Fabric Data Agent is supported on F2 before relying on it.
+> **⚠ Capacity: the workspace is on a pay-as-you-go F2 capacity, and it's normally paused.** While the
+> capacity is paused, every item in the workspace (Warehouse, semantic model, ontology, data agent) is
+> unavailable. Resume it before running any step below, and pause it again afterwards
+> (`az resource invoke-action --action resume|suspend` on the `Microsoft.Fabric/capacities` resource,
+> or the Azure portal). F2 lists at $0.18 per capacity unit per hour, about $0.36/hour while running.
+> The Fabric data agent's MCP endpoint needs a paid capacity like this; the trial (FTL64) is rejected.
 
 ## Layout
 

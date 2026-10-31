@@ -43,7 +43,7 @@ def number(v):
         return None
 
 
-total_rows = total_right = 0
+n_exact = n_cases = 0
 for theme in catalog["themes"]:
     for q in theme["questions"]:
         g = q["grading"]
@@ -59,11 +59,11 @@ for theme in catalog["themes"]:
                  if number(got[k].get(v)) is None
                  or not math.isclose(number(got[k].get(v)), float(gold[k][v]), rel_tol=1e-6, abs_tol=1e-9)]
         right_rows = sum(1 for k in found if not any(w.startswith(f"{k}.") for w in wrong))
-        total_rows += len(gold)
-        total_right += right_rows if not extra else 0
         status = "MATCH" if not missed and not extra and not wrong else "DIFF"
+        n_cases += 1
+        n_exact += status == "MATCH"
         print(f"{status:5} {q['id']}: {right_rows}/{len(gold)} rows fully right"
               + (f"; missed {missed}" if missed else "") + (f"; extra {extra}" if extra else "")
               + (f"; wrong values {wrong[:8]}{' …' if len(wrong) > 8 else ''}" if wrong else ""))
 
-print(f"\ndata agent: {total_right}/{total_rows} gold rows fully right across the six use cases")
+print(f"\ndata agent: {n_exact}/{n_cases} use cases exact (right rows, no extras, every value within 1e-6)")

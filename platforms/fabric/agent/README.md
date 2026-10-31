@@ -9,7 +9,7 @@ Two agents answer the six use-case questions (`spec/questions/catalog.yaml`):
 | Metrics | governed DAX queries (`fabric.THEME_QUERIES`) against the semantic model | writes its own DAX against the semantic model |
 | Entities | `resolve_field` → ontology MCP `ask_ontology` (FieldAlias → 'Alias Of Field') | semantic model only (see below) |
 | Called over | Python | MCP: `/v1/mcp/workspaces/<ws>/dataagents/<id>/agent` |
-| Result | **6/6 gold**, plus a field-scoped question and the by-operator rollup | **not evaluated yet**: the MCP endpoint rejects the trial capacity |
+| Result | **6/6 gold**, plus a field-scoped question and the by-operator rollup | **5/6 use cases exact in each of two runs** (a different one wrong each time); every returned value matched gold |
 
 ## Custom agent
 
@@ -58,10 +58,26 @@ published from code (`deploy.py data-agent`). `eval_data_agent.py` asks it each 
 requests a table of the graded columns, and compares it with gold: ids found, missed or added, and
 values right or wrong.
 
+Results (F2 capacity, two runs, 2026-10-31):
+
+| Use case | Run 1 | Run 2 |
+|---|---|---|
+| 1 Surveillance | all 12 flagged wells, values right, **plus 5 wells that aren't below expected** (4, 14, 15, 16, 18) | exact |
+| 2 Deferment | exact | all 5 causes right, **plus a zero row for a cause with no events last month** ("Well Integrity") |
+| 3 Decline | exact | exact |
+| 4 Well test | exact | exact |
+| 5 Watchlist | exact | exact |
+| 6 Rollups | exact | exact |
+
+Every value it returned matched gold at 1e-6. Its mistakes were all in row selection, and they changed
+between runs. In run 1 it listed every well with any shortfall instead of applying the 90% materiality
+band that defines "below expected". That band is exactly what the ontology's `BusinessTerm` and
+`BelowExpected` rule encode, and this data agent can't see the ontology (below). The custom agent can't
+make these mistakes, because the flag filter is part of its governed DAX.
+
 Findings:
 - **The data agent's MCP endpoint needs a paid capacity.** It returns `FTL64 SKU Not Supported` on the
-  trial capacity, while the ontology's MCP endpoint works there. The evaluation runs once the workspace
-  is on F2 or higher (planned before the trial ends; see the capacity note in `../README.md`).
+  trial capacity, while the ontology's MCP endpoint works there. The evaluation above ran on F2.
 - **No ontology source in the documented definition.** The data-agent definition's source types include
   `semantic_model` and `graph` (GQL) but not `ontology`. The graph route needs the ontology's GQL graph,
   which doesn't materialize from the API (slice 3), so this agent uses the semantic model only.

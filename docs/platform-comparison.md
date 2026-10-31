@@ -18,7 +18,7 @@ built.
 >   availability, Cortex tool-use), not universal platform statements.
 > - **Microsoft Fabric (in progress):** the Fabric column covers what's built so far: the canonical
 >   load, the Direct Lake semantic model, the Fabric IQ ontology knowledge layer and the agents ([`platforms/fabric/README.md`](../platforms/fabric/README.md)).
->   Governance cells come with a later slice; the Fabric data agent's evaluation waits for a paid capacity.
+>   Governance cells come with a later slice.
 > - This is a **port**, not two independent from-scratch builds — it measures **translatability and
 >   feature fit**, not peak effort achievable on either platform.
 
@@ -118,8 +118,8 @@ The agent routes a question to a governed tool using a platform-hosted model.
 | Delivery | `SNOWFLAKE.CORTEX.COMPLETE(model, prompt)` — **LLM as a SQL function**, no endpoint to provision | **serving endpoint** + OpenAI-compatible client | **no in-workspace model endpoint**: the custom agent calls a Foundry deployment (gpt-6-luna) outside Fabric |
 | Native tool-calling | **⚠ not exposed via `COMPLETE` on the tested account** (`tools` param rejected) | **yes** — standard tool-calling loop | **yes, via the Responses API** (gpt-6-luna rejects tools on Chat Completions while reasoning) |
 | Access control | **database role** (`SNOWFLAKE.CORTEX_USER`) — LLM is a governed, grantable resource | endpoint permissions / on-behalf-of auth | Azure RBAC on the Foundry resource ("Cognitive Services OpenAI User"), same Entra identity as Fabric |
-| NL→data analogue | **Cortex Analyst** (text-to-SQL over a semantic model) | Genie | **Fabric data agent** (NL → DAX over the semantic model), called over MCP; needs a paid F2+ capacity |
-| Result on the six use cases | 6/6 gold | 6/6 gold | custom agent **6/6 gold**; data agent not yet evaluated (trial capacity rejected) |
+| NL→data analogue | **Cortex Analyst** (text-to-SQL over a semantic model) | Genie | **Fabric data agent** (NL → DAX over the semantic model), called over MCP; needs a paid F2+ capacity; **5/6 use cases exact per run**, all values right |
+| Result on the six use cases | 6/6 gold | 6/6 gold | custom agent **6/6 gold**; data agent 5/6 exact in each of two runs (a different miss each run) |
 
 **Positioning.** Cortex is operationally lighter (no endpoint to stand up; RBAC-native access to the
 model) and its Analyst/Search products are strong NL→data analogues. But on the tested account **no
@@ -136,8 +136,12 @@ semantic model computes, and code assembles the graded set, so it reproduces gol
 fields through the ontology's MCP endpoint. What's different is where the model lives. Fabric itself
 offers no model endpoint to call, so the agent uses Azure AI Foundry. That's governed by the same Entra
 identity, but it's a second Azure resource, not a workspace object. Fabric's own NL agent, the data
-agent, is deployable and publishable from code, and is called over MCP. But its MCP endpoint refuses
-trial capacity, so its comparison against gold waits for an F2 capacity.
+agent, is deployable and publishable from code, and is called over MCP (paid F2+ capacity only). It
+got 5 of 6 use cases exactly right in each of two runs. Every value it returned matched gold, but it
+picked the wrong rows once per run, and a different use case each time. In one run it ignored the 90%
+"below expected" band; in the other it added a zero row for a cause with no events. Measures alone
+don't stop an NL agent filtering wrongly. That's the case for the governed-tool pattern, and for giving
+the data agent the ontology's business terms, which its definition can't reference today.
 
 ## 4. Data load, governance, tooling (supporting)
 
