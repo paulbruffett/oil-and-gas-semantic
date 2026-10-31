@@ -14,6 +14,14 @@ not edit the foundation.
 | 4. Agent (custom + Fabric Data Agent) | not started |
 | 5. Gold check | not started |
 
+> **⚠ Capacity: the trial ends around 2026-11-08.** This build runs on an FTL64 trial capacity. Before
+> it ends, create a pay-as-you-go **F2** capacity in **West US 3** (the same region as the trial and the
+> Foundry resource) and reassign the `oag-reference` workspace to it (workspace settings → License info).
+> Otherwise the Warehouse and the other items become unreadable and are later deleted.
+> F2 lists at $0.18 per capacity unit per hour: about $0.36/hour, or about $263/month if left running.
+> Pause it when idle to stop compute billing. F2 should be enough for this dataset, but confirm the
+> Fabric Data Agent is supported on F2 before relying on it.
+
 ## Layout
 
 ```
