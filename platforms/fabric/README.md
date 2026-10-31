@@ -1,15 +1,15 @@
 # Microsoft Fabric reference build
 
 The Fabric reference build (DESIGN.md §7, ADR 0035): the reference dataset (`configs/reference.yaml`,
-`config_hash 12a110eecfe2`) loaded into a Fabric **Warehouse** as the canonical OSDU tables, then (in
-later slices) the OSI semantic model as a Fabric semantic model with DAX measures, the knowledge layer,
-an agent, and the gold check. It follows `platforms/databricks/` and `platforms/snowflake/` and does
+`config_hash 12a110eecfe2`) loaded into a Fabric **Warehouse** as the canonical OSDU tables, and the
+OSI semantic model as a **Direct Lake** Fabric semantic model with DAX measures; later slices add the
+knowledge layer, an agent, and the gold check. It follows `platforms/databricks/` and `platforms/snowflake/` and does
 not edit the foundation.
 
 | Slice | Status |
 |---|---|
 | 1. Canonical load (Warehouse) | done: 9 tables, row counts and value checksums match the Parquet |
-| 2. Semantic model (DAX) | not started |
+| 2. Semantic model (DAX) | done: Direct Lake model; every OSI metric plus all eight compile-assembled KPIs are DAX measures; all six use cases match gold from measures alone |
 | 3. Knowledge layer | not started |
 | 4. Agent (custom + Fabric Data Agent) | not started |
 | 5. Gold check | not started |
@@ -36,8 +36,13 @@ workspace oag-reference            Fabric workspace on an F-SKU or trial capacit
     │   ├── down_time_event         downtime fact (282)
     │   ├── well_test               well-test fact (251)
     │   └── rpen_allocation_factor  allocation fact (18)
-    ├── semantic                   SCHEMA     (slice 2)
+    ├── semantic                   SCHEMA     typed tables the semantic model reads (DATE columns, well_id resolved)
+    │   ├── well_volume · forecast_oil · downtime · well_test · allocation   facts (8208 · 8208 · 282 · 251 · 18)
+    │   ├── well · field · facility                                          dims (18 · 3 · 6)
+    │   ├── calendar                                                         date table with month + day index (456)
+    │   └── params                                                           frozen windows + thresholds (1 row)
     └── knowledge                  SCHEMA     (slice 3)
+└── oag_reference_model            SEMANTIC MODEL  Direct Lake over the semantic schema; TMDL in semantic-model/
 ```
 
 ## Platform mapping
@@ -61,6 +66,69 @@ Load findings:
   columns stay ISO-8601 strings, as on Databricks and Snowflake; the semantic layer casts them.
 - **Auth passes through.** Your Entra identity reads OneLake from the Warehouse; no credential object
   or external stage was needed.
+
+## Semantic layer: OSI → Direct Lake semantic model (slice 2)
+
+`semantic-model/` is the TMDL source of the `oag_reference_model` semantic model, the Fabric counterpart
+of Databricks Metric Views (`platforms/databricks/sql/03_metric_views.sql`) and Snowflake Semantic Views
+(`platforms/snowflake/sql/03_semantic_views.sql`). It reads the `semantic` schema tables
+(`sql/03_semantic_tables.sql`) in Direct Lake mode. `deploy.py` pushes it over the Fabric REST API and
+refreshes it; `verify_semantic.py` checks it against gold with DAX queries.
+
+Model shape: a star. Facts `well_volume`, `forecast_oil`, `downtime`, `well_test` and `allocation` relate
+to `well`; the dated facts relate to `calendar` (marked as the date table); `well` relates to `field` and
+`facility`. There's no `facility → field` relationship, because a second path from `well` to `field`
+would be ambiguous. `params` is unrelated: measures read windows and thresholds from it with
+`MAX(params[…])`, so no date is hard-coded in DAX.
+
+| OSI construct | Databricks Metric View | Snowflake Semantic View | Fabric semantic model |
+|---|---|---|---|
+| model source | inline `source:` SQL | table or view (3 backing views) | physical table only (Direct Lake); 10 typed tables |
+| simple metric | measure | metric | measure (`SUM` / `COUNTROWS` / `AVERAGE`) |
+| ratio / derived metric | flat `SUM(a)/SUM(b)` | references base metrics | references base measures (`DIVIDE([Actual Oil], [Expected Oil])`) |
+| entity / join | `joins:` | `RELATIONSHIPS` | relationships (`relationships.tmdl`) |
+| time dimension | date column | date column | marked date table + time intelligence (`DATEADD`) |
+| query surface | `MEASURE(m)` in SQL | `SEMANTIC_VIEW(…)` in SQL | DAX (`SUMMARIZECOLUMNS` / `ADDCOLUMNS`) over XMLA or the `executeQueries` REST API; SQL can't query the model |
+
+### KPI expressiveness
+
+The question DESIGN.md §7 leaves open: Metric Views and Semantic Views could not express the
+compile-assembled KPIs, so both builds compute them in SQL table functions. **DAX expresses all of them
+as measures**, and each reproduces gold (`verify_semantic.py`):
+
+| KPI | Databricks / Snowflake | Fabric measure | DAX construct |
+|---|---|---|---|
+| deferred volume | SQL table function | `Deferred Oil` | `SUMX` over downtime events × per-event `CALCULATE` lookup of forecast on (reporting entity, date) |
+| decline vs forecast | SQL table function | `Actual / Forecast Annual Decline`, `Decline Gap` | `CALCULATE` per month bucket, `AVERAGEX` of day index, `POWER` |
+| days since last test | SQL table function | `Days Since Last Test` | `DATEDIFF(MAX(test_date), as-of)` |
+| allocation variance | SQL table function | `Allocation Variance` | field measured oil via `REMOVEFILTERS(well)` + field filter, × factor, ÷ measured |
+| GOR change | SQL table function | `GOR Change %` | `[GOR]` evaluated over two `DATESBETWEEN` windows |
+| period-over-period Δ | SQL table function | `Rollup Oil Delta`, `Oil Delta vs Prior Month` | governed windows, or native `DATEADD(calendar[date], -1, MONTH)` |
+| contribution % | SQL table function | `Rollup Oil Contribution %`, `Oil Contribution %` | `DIVIDE` by the same measure under `REMOVEFILTERS` of the grouping tables |
+| days down | SQL table function | `Days Down` | filtered `COUNTROWS` (`hours_on = 0`) |
+
+Caveats: "native" means the KPI is a measure; what stays in the query is the use case's *selection*
+(which rows are flagged, the top-cumulative field, ordering, the `reasons` list). `Field Measured Oil`
+(allocation) is defined at single-well grain (`SELECTEDVALUE`). Windows come from the `params` table, not
+from DAX query parameters.
+
+### Findings
+
+- **Direct Lake needs physical typed tables.** It reads Delta tables as-is: no casts, filters or joins on
+  the way in (a view falls back to DirectQuery), and a Direct Lake model can't add calculated columns or
+  calculated tables (both per Microsoft's Direct Lake documentation; not tested in this build). The canonical dates are ISO strings and forecast/allocation reach a well only
+  through `reporting_entity`, so `03_semantic_tables.sql` materializes typed copies. This is the same
+  need Snowflake met with backing views, and Databricks with inline `source:` SQL, but here it's a copy
+  that must be rebuilt after each load.
+- **Every dimension gets a blank member.** `VALUES(field[field_id])` returns 4 rows for 3 fields, and the
+  calendar returns 457 for 456 days, even though every key matches (checked in SQL). No data attaches to
+  it. A measure that turns blank into 0 makes the blank member show up as a row, so those measures are
+  guarded with `Has Volumes`. A query with `ADDCOLUMNS(VALUES(…))` still lists it; `SUMMARIZECOLUMNS`
+  drops it.
+- **TMDL over REST works end to end**, with no Power BI Desktop or Tabular Editor: create or
+  `updateDefinition` (Fabric API), then refresh and run DAX through the Power BI API. Two token audiences
+  are involved (`api.fabric.microsoft.com` and `analysis.windows.net/powerbi/api`). One parse quirk:
+  `relationships.tmdl` rejects `///` descriptions.
 
 ## Reproduce
 
@@ -92,7 +160,15 @@ RUN="uv run --no-project --with-requirements requirements.txt python"
 $RUN stage.py ../../data/frozen/canonical
 $RUN run_sql.py sql/01_schemas.sql
 $RUN run_sql.py sql/02_load_canonical.sql   # ends with a row-count check
+
+# 3. Typed tables for the semantic model, then deploy + refresh the Direct Lake model and check it vs gold
+export FABRIC_WAREHOUSE_ID=$(az rest --resource https://api.fabric.microsoft.com -u "https://api.fabric.microsoft.com/v1/workspaces/$FABRIC_WORKSPACE_ID/warehouses" --query "value[?displayName=='oag_reference'].id" -o tsv)
+$RUN run_sql.py sql/03_semantic_tables.sql  # ends with row counts
+$RUN deploy.py                              # creates or updates oag_reference_model, then refreshes it
+$RUN verify_semantic.py                     # one DAX query per use case vs data/frozen/gold; exits 1 on a difference
 ```
+
+`verify_semantic.py` should print `MATCH` for all six use cases and for the time-intelligence rollup.
 
 `02_load_canonical.sql` closes with a row-count check (`8208, 8208, 21, 18, 3, 6, 282, 251, 18`) that
 fails the run if any count differs.

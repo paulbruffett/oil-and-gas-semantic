@@ -1,0 +1,40 @@
+/// OSI well -- master well entity; rolls up to field and facility.
+table well
+
+	column well_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: well_id
+
+	column uwi
+		dataType: string
+		summarizeBy: none
+		sourceColumn: uwi
+
+	column well_name
+		dataType: string
+		summarizeBy: none
+		sourceColumn: well_name
+
+	column operator
+		dataType: string
+		summarizeBy: none
+		sourceColumn: operator
+
+	column field_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: field_id
+
+	column facility_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: facility_id
+
+	partition well = entity
+		mode: directLake
+		source
+			entityName: well
+			schemaName: semantic
+			expressionSource: DatabaseQuery

@@ -1,0 +1,20 @@
+/// OSI field -- the producing asset wells roll up to.
+table field
+
+	column field_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: field_id
+
+	column field_name
+		dataType: string
+		summarizeBy: none
+		sourceColumn: field_name
+
+	partition field = entity
+		mode: directLake
+		source
+			entityName: field
+			schemaName: semantic
+			expressionSource: DatabaseQuery

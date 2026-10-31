@@ -1,0 +1,59 @@
+/// OSI well_test -- periodic well tests (rates + date).
+table well_test
+
+	/// OSI well_tests_recorded (simple).
+	measure 'Well Tests Recorded' = COUNTROWS(well_test)
+		displayFolder: OSI metrics
+
+	/// OSI test_oil_rate measure (average).
+	measure 'Test Oil Rate' = AVERAGE(well_test[oil_rate])
+		displayFolder: OSI metrics
+
+	/// Most recent test date, over all tests regardless of the date filter.
+	measure 'Last Test Date' = CALCULATE(MAX(well_test[test_date]), REMOVEFILTERS(calendar))
+		formatString: yyyy-mm-dd
+		displayFolder: 4 Well test
+
+	/// Days since last test as of the governed as-of date. Compile-assembled on the other platforms.
+	measure 'Days Since Last Test' =
+			VAR lt = [Last Test Date]
+			RETURN IF(NOT ISBLANK(lt), DATEDIFF(lt, MAX(params[welltest_as_of]), DAY))
+		displayFolder: 4 Well test
+
+	measure 'Is Stale' =
+			IF(NOT ISBLANK([Days Since Last Test]) && [Days Since Last Test] > MAX(params[welltest_stale_threshold_days]), 1, 0)
+		displayFolder: 4 Well test
+
+	column well_test_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: well_test_id
+
+	column well_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: well_id
+
+	column test_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: test_date
+
+	column test_type
+		dataType: string
+		summarizeBy: none
+		sourceColumn: test_type
+
+	column oil_rate
+		dataType: double
+		summarizeBy: none
+		sourceColumn: oil_rate
+
+	partition well_test = entity
+		mode: directLake
+		source
+			entityName: well_test
+			schemaName: semantic
+			expressionSource: DatabaseQuery

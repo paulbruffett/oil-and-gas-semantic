@@ -1,0 +1,162 @@
+/// Frozen dataset parameters (one row): the windows and thresholds the theme measures read, so no
+/// window is hard-coded in DAX. Not related to any other table.
+table params
+
+	column config_hash
+		dataType: string
+		summarizeBy: none
+		sourceColumn: config_hash
+
+	column start_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: start_date
+
+	column end_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: end_date
+
+	column surveillance_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: surveillance_start
+
+	column surveillance_end
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: surveillance_end
+
+	column surveillance_flag_threshold
+		dataType: double
+		summarizeBy: none
+		sourceColumn: surveillance_flag_threshold
+
+	column deferment_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: deferment_start
+
+	column deferment_end
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: deferment_end
+
+	column decline_first_month
+		dataType: string
+		summarizeBy: none
+		sourceColumn: decline_first_month
+
+	column decline_last_month
+		dataType: string
+		summarizeBy: none
+		sourceColumn: decline_last_month
+
+	column decline_faster_gap_threshold
+		dataType: double
+		summarizeBy: none
+		sourceColumn: decline_faster_gap_threshold
+
+	column welltest_as_of
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: welltest_as_of
+
+	column alloc_period_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: alloc_period_start
+
+	column alloc_period_end
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: alloc_period_end
+
+	column welltest_stale_threshold_days
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: welltest_stale_threshold_days
+
+	column allocation_anomaly_threshold
+		dataType: double
+		summarizeBy: none
+		sourceColumn: allocation_anomaly_threshold
+
+	column watchlist_curr_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: watchlist_curr_start
+
+	column watchlist_curr_end
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: watchlist_curr_end
+
+	column watchlist_base_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: watchlist_base_start
+
+	column watchlist_base_end
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: watchlist_base_end
+
+	column watchlist_watercut_threshold
+		dataType: double
+		summarizeBy: none
+		sourceColumn: watchlist_watercut_threshold
+
+	column watchlist_gor_change_threshold
+		dataType: double
+		summarizeBy: none
+		sourceColumn: watchlist_gor_change_threshold
+
+	column watchlist_days_down_threshold
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: watchlist_days_down_threshold
+
+	column rollup_curr_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: rollup_curr_start
+
+	column rollup_curr_end
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: rollup_curr_end
+
+	column rollup_prior_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: rollup_prior_start
+
+	column rollup_prior_end
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: rollup_prior_end
+
+	partition params = entity
+		mode: directLake
+		source
+			entityName: params
+			schemaName: semantic
+			expressionSource: DatabaseQuery

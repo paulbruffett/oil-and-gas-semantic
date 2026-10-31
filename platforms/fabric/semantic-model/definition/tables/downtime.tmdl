@@ -1,0 +1,77 @@
+/// OSI down_time_event -- downtime events (cause + duration).
+table downtime
+
+	/// OSI downtime_hours (simple).
+	measure 'Downtime Hours' = SUM(downtime[duration_hours])
+		displayFolder: OSI metrics
+
+	measure 'Downtime Events' = COUNTROWS(downtime)
+		displayFolder: OSI metrics
+
+	/// Deferred oil: for each downtime event, forecast oil for its reporting entity on its date x the
+	/// event's downtime fraction (DURATION_HOURS / 24), summed. A row-level product across two facts,
+	/// compile-assembled on the other platforms; an iterator (SUMX) with a per-row lookup here.
+	measure 'Deferred Oil' =
+			SUMX(
+				downtime,
+				VAR re = downtime[reporting_entity_id]
+				VAR d = downtime[event_date]
+				RETURN
+					downtime[duration_hours] / 24
+						* CALCULATE(SUM(forecast_oil[volume]), forecast_oil[reporting_entity_id] = re, forecast_oil[forecast_date] = d)
+			)
+		formatString: #,0.00
+		displayFolder: OSI metrics
+
+	/// Theme 2: deferred oil, downtime hours and event count over the deferment window.
+	measure 'Deferment Deferred Oil' =
+			COALESCE(CALCULATE([Deferred Oil], DATESBETWEEN(calendar[date], MAX(params[deferment_start]), MAX(params[deferment_end]))), 0)
+		formatString: #,0.00
+		displayFolder: 2 Deferment
+
+	measure 'Deferment Downtime Hours' =
+			CALCULATE([Downtime Hours], DATESBETWEEN(calendar[date], MAX(params[deferment_start]), MAX(params[deferment_end])))
+		displayFolder: 2 Deferment
+
+	measure 'Deferment Events' =
+			CALCULATE([Downtime Events], DATESBETWEEN(calendar[date], MAX(params[deferment_start]), MAX(params[deferment_end])))
+		displayFolder: 2 Deferment
+
+	column down_time_event_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: down_time_event_id
+
+	column reporting_entity_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: reporting_entity_id
+
+	column well_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: well_id
+
+	column event_category
+		dataType: string
+		summarizeBy: none
+		sourceColumn: event_category
+
+	column event_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: event_date
+
+	column duration_hours
+		dataType: double
+		summarizeBy: none
+		sourceColumn: duration_hours
+
+	partition downtime = entity
+		mode: directLake
+		source
+			entityName: downtime
+			schemaName: semantic
+			expressionSource: DatabaseQuery

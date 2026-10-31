@@ -1,0 +1,27 @@
+/// Date table (marked), with the month bucket and day index the annualized-decline KPI uses.
+table calendar
+	dataCategory: Time
+
+	column date
+		dataType: dateTime
+		isKey
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: date
+
+	column month
+		dataType: string
+		summarizeBy: none
+		sourceColumn: month
+
+	column day_index
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: day_index
+
+	partition calendar = entity
+		mode: directLake
+		source
+			entityName: calendar
+			schemaName: semantic
+			expressionSource: DatabaseQuery

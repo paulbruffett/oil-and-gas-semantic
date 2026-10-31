@@ -1,0 +1,43 @@
+relationship well_volume_well
+	fromColumn: well_volume.well_id
+	toColumn: well.well_id
+
+relationship well_volume_calendar
+	fromColumn: well_volume.volume_date
+	toColumn: calendar.date
+
+relationship forecast_oil_well
+	fromColumn: forecast_oil.well_id
+	toColumn: well.well_id
+
+relationship forecast_oil_calendar
+	fromColumn: forecast_oil.forecast_date
+	toColumn: calendar.date
+
+relationship downtime_well
+	fromColumn: downtime.well_id
+	toColumn: well.well_id
+
+relationship downtime_calendar
+	fromColumn: downtime.event_date
+	toColumn: calendar.date
+
+relationship well_test_well
+	fromColumn: well_test.well_id
+	toColumn: well.well_id
+
+relationship well_test_calendar
+	fromColumn: well_test.test_date
+	toColumn: calendar.date
+
+relationship allocation_well
+	fromColumn: allocation.well_id
+	toColumn: well.well_id
+
+relationship well_field
+	fromColumn: well.field_id
+	toColumn: field.field_id
+
+relationship well_facility
+	fromColumn: well.facility_id
+	toColumn: facility.facility_id

@@ -1,0 +1,63 @@
+/// OSI product_volume_summary -- forecast (expected) oil, already filtered to PRODUCT='Oil' and
+/// QUANTITY_METHOD='Forecast', and resolved to a well through Well-kind reporting entities.
+table forecast_oil
+
+	/// OSI expected_oil (simple).
+	measure 'Expected Oil' = SUM(forecast_oil[volume])
+		formatString: #,0.00
+		displayFolder: OSI metrics
+
+	/// Theme 1: expected oil over the surveillance window.
+	measure 'Surveillance Expected Oil' =
+			CALCULATE([Expected Oil], DATESBETWEEN(calendar[date], MAX(params[surveillance_start]), MAX(params[surveillance_end])))
+		formatString: #,0.00
+		displayFolder: 1 Surveillance
+
+	/// Theme 3: annualized decline of the forecast mean daily rate (same formula as Actual Annual Decline).
+	measure 'Forecast Annual Decline' =
+			VAR fm = MAX(params[decline_first_month])
+			VAR lm = MAX(params[decline_last_month])
+			VAR s0 = CALCULATE(SUM(forecast_oil[volume]), REMOVEFILTERS(calendar), calendar[month] = fm)
+			VAR n0 = CALCULATE(COUNTROWS(forecast_oil), REMOVEFILTERS(calendar), calendar[month] = fm)
+			VAR i0 = CALCULATE(AVERAGEX(forecast_oil, RELATED(calendar[day_index])), REMOVEFILTERS(calendar), calendar[month] = fm)
+			VAR s1 = CALCULATE(SUM(forecast_oil[volume]), REMOVEFILTERS(calendar), calendar[month] = lm)
+			VAR n1 = CALCULATE(COUNTROWS(forecast_oil), REMOVEFILTERS(calendar), calendar[month] = lm)
+			VAR i1 = CALCULATE(AVERAGEX(forecast_oil, RELATED(calendar[day_index])), REMOVEFILTERS(calendar), calendar[month] = lm)
+			VAR span = (i1 - i0) / 365.25
+			RETURN
+				IF(n0 > 0 && n1 > 0 && s0 > 0 && span > 0, 1 - POWER((s1 / n1) / (s0 / n0), 1 / span))
+		displayFolder: 3 Decline
+
+	column product_volume_summary_id
+		dataType: int64
+		isKey
+		summarizeBy: none
+		sourceColumn: product_volume_summary_id
+
+	column reporting_entity_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: reporting_entity_id
+
+	column well_id
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: well_id
+
+	column forecast_date
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		summarizeBy: none
+		sourceColumn: forecast_date
+
+	column volume
+		dataType: double
+		summarizeBy: none
+		sourceColumn: volume
+
+	partition forecast_oil = entity
+		mode: directLake
+		source
+			entityName: forecast_oil
+			schemaName: semantic
+			expressionSource: DatabaseQuery
