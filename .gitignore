@@ -18,6 +18,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Jupyter
+.ipynb_checkpoints/
+
 # Build / data artifacts
 dist/
 build/

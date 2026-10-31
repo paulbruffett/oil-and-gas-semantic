@@ -25,14 +25,14 @@ import json
 import os
 import subprocess
 import sys
-import tomllib
 import urllib.request
 from pathlib import Path
+
+from sfconfig import connection
 
 REPO = Path(__file__).resolve().parents[3]
 GOLD_DIR = Path(os.environ.get("OAG_GOLD_DIR", REPO / "data" / "frozen" / "gold"))
 CONNECTION = os.environ.get("OAG_SNOWFLAKE_CONNECTION", "proton")
-_CONFIG = os.path.expanduser("~/Library/Application Support/snowflake/config.toml")
 TOL = 1e-6
 
 AGENT_URL = "https://{host}/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run"
@@ -83,8 +83,7 @@ THEMES = {
 
 
 def _host() -> str:
-    with open(_CONFIG, "rb") as f:
-        account = tomllib.load(f)["connections"][CONNECTION]["account"]
+    account = connection(CONNECTION)["account"]
     return f"{account}.snowflakecomputing.com"
 
 
