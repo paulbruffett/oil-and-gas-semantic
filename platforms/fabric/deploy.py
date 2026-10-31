@@ -10,6 +10,8 @@ filled from environment variables, so the Warehouse endpoint and id stay out of 
     python deploy.py data-agent      # data-agent/     -> oag_reference_data_agent
 
 Env: FABRIC_WORKSPACE_ID, FABRIC_SQL_ENDPOINT, FABRIC_WAREHOUSE_ID; FABRIC_SEMANTIC_MODEL_ID (data agent).
+Item names default to oag_reference_model / oag_reference_ontology / oag_reference_data_agent; override
+with FABRIC_SEMANTIC_MODEL / FABRIC_ONTOLOGY / FABRIC_DATA_AGENT, the names the verify scripts also read.
 """
 
 import base64
@@ -29,11 +31,16 @@ POWERBI = "https://api.powerbi.com/v1.0/myorg"
 workspace = os.environ["FABRIC_WORKSPACE_ID"]
 # kind -> (source folder, item display name, REST collection, definition files, refresh after deploy)
 ITEMS = {
-    "semantic-model": ("semantic-model", "oag_reference_model", "semanticModels", ["definition.pbism", "**/*.tmdl"], True),
-    "ontology": ("ontology", "oag_reference_ontology", "ontologies", [".platform", "**/*.tmdl"], False),
-    "data-agent": ("data-agent", "oag_reference_data_agent", "dataAgents", ["**/*.json"], False),
+    "semantic-model": ("semantic-model", os.environ.get("FABRIC_SEMANTIC_MODEL", "oag_reference_model"),
+                       "semanticModels", ["definition.pbism", "**/*.tmdl"], True),
+    "ontology": ("ontology", os.environ.get("FABRIC_ONTOLOGY", "oag_reference_ontology"),
+                 "ontologies", [".platform", "**/*.tmdl"], False),
+    "data-agent": ("data-agent", os.environ.get("FABRIC_DATA_AGENT", "oag_reference_data_agent"),
+                   "dataAgents", ["**/*.json"], False),
 }
 kind = sys.argv[1] if len(sys.argv) > 1 else "semantic-model"
+if kind not in ITEMS:
+    sys.exit(f"unknown item {kind!r}; use one of: {', '.join(ITEMS)}")
 folder, name, collection, patterns, refresh = ITEMS[kind]
 root = Path(__file__).parent / folder
 credential = DefaultAzureCredential()
@@ -107,23 +114,34 @@ def main() -> None:
         if status == 202:
             wait(headers)
         _, _, listing = call("GET", f"{FABRIC}/workspaces/{workspace}/{collection}")
-        model_id = next(m["id"] for m in listing["value"] if m["displayName"] == name)
+        model_id = next((m["id"] for m in listing["value"] if m["displayName"] == name), None)
+        if model_id is None:
+            sys.exit(f"created {name}, but it isn't listed yet; re-run deploy.py to update it")
         print(f"created {name} ({model_id})")
     if not refresh:
         return
 
-    # Refresh (Direct Lake framing) and wait for it.
+    # Refresh (Direct Lake framing) and wait for it. Note the newest refresh before starting, so the
+    # poll can't mistake an earlier completed refresh for this one.
     pbi = "https://analysis.windows.net/powerbi/api/.default"
+    history = f"{POWERBI}/groups/{workspace}/datasets/{model_id}/refreshes?$top=1"
+
+    def latest() -> dict | None:
+        rows = call("GET", history, scope=pbi)[2].get("value", [])
+        return rows[0] if rows else None
+
+    before = (latest() or {}).get("requestId")
     call("POST", f"{POWERBI}/groups/{workspace}/datasets/{model_id}/refreshes", {"type": "full"}, scope=pbi)
     while True:
         time.sleep(5)
-        _, _, body = call("GET", f"{POWERBI}/groups/{workspace}/datasets/{model_id}/refreshes?$top=1", scope=pbi)
-        latest = body["value"][0]
-        if latest["status"] == "Completed":
+        run = latest()
+        if run is None or run.get("requestId") == before:
+            continue  # this refresh isn't listed yet
+        if run["status"] == "Completed":
             print("refresh completed")
             return
-        if latest["status"] == "Failed":
-            sys.exit(f"refresh failed: {latest.get('serviceExceptionJson')}")
+        if run["status"] in ("Failed", "Cancelled", "Disabled"):
+            sys.exit(f"refresh {run['status'].lower()}: {run.get('serviceExceptionJson')}")
 
 
 if __name__ == "__main__":

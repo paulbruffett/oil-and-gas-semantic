@@ -46,13 +46,31 @@ if s: out.append(s)
 sys.stdout.write("".join(x + nul for x in out))  # NUL-TERMINATE each so read -d gets the last one
 '
 
+# field <json> <name>: print statement_id or state from a Statement Execution API response.
+field() { python3 -c 'import json,sys; d=json.loads(sys.argv[1]); print(d.get("statement_id","") if sys.argv[2]=="id" else d.get("status",{}).get("state",""))' "$1" "$2"; }
+
 n=0
 while IFS= read -r -d '' stmt; do
   [ -z "${stmt//[$'\t\r\n ']/}" ] && continue
   n=$((n+1))
   printf '\n--- statement %d ---\n%s\n' "$n" "$(printf '%s' "$stmt" | head -1)"
-  echo "$stmt" | databricks api post /api/2.0/sql/statements "${profile_args[@]}" --json "$(
-    python3 -c 'import json,sys; print(json.dumps({"warehouse_id": sys.argv[1], "statement": sys.stdin.read(), "wait_timeout": "50s"}))' "$DATABRICKS_WAREHOUSE_ID"
-  )" | python3 -c 'import json,sys; d=json.load(sys.stdin); st=d.get("status",{}); print("  ->", st.get("state"), st.get("error",{}).get("message","") if st.get("state")=="FAILED" else "")'
+  body=$(printf '%s' "$stmt" | python3 -c 'import json,sys; print(json.dumps({"warehouse_id": sys.argv[1], "statement": sys.stdin.read(), "wait_timeout": "50s"}))' "$DATABRICKS_WAREHOUSE_ID")
+  resp=$(databricks api post /api/2.0/sql/statements ${profile_args[@]+"${profile_args[@]}"} --json "$body" </dev/null)
+  id=$(field "$resp" id)
+  # A statement still running after wait_timeout keeps running server-side: poll until it finishes,
+  # so the next statement never starts against half-built objects.
+  state=$(field "$resp" state)
+  while [ "$state" = PENDING ] || [ "$state" = RUNNING ]; do
+    sleep 5
+    resp=$(databricks api get "/api/2.0/sql/statements/$id" ${profile_args[@]+"${profile_args[@]}"} </dev/null)
+    state=$(field "$resp" state)
+  done
+  if [ "$state" != SUCCEEDED ]; then
+    msg=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("status",{}).get("error",{}).get("message",""))' "$resp")
+    echo "  -> $state $msg" >&2
+    echo "Stopped at statement $n of $file" >&2
+    exit 1
+  fi
+  echo "  -> SUCCEEDED"
 done < <(python3 -c "$split_py" "$file")
 echo "Ran $n statement(s) from $file"

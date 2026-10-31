@@ -33,13 +33,13 @@ import json
 import os
 import subprocess
 import sys
-import tomllib
 import urllib.error
 import urllib.request
 
+from sfconfig import connection as sf_connection
+
 ANALYST_CONNECTION = os.environ.get("OAG_ANALYST_CONNECTION", "oag_analyst")
 AGENT_CONNECTION = os.environ.get("OAG_AGENT_CONNECTION", "oag_agent")
-_CONFIG = os.path.expanduser("~/Library/Application Support/snowflake/config.toml")
 
 ANALYST_URL = "https://{host}/api/v2/cortex/analyst/message"
 AGENT_URL = "https://{host}/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/ANALYST_AGENT:run"
@@ -59,8 +59,7 @@ AD_HOC = "Using the well volumes semantic view, what is the total oil volume by 
 
 
 def _host(connection: str) -> str:
-    with open(_CONFIG, "rb") as f:
-        account = tomllib.load(f)["connections"][connection]["account"]
+    account = sf_connection(connection)["account"]
     return f"{account}.snowflakecomputing.com"
 
 

@@ -36,7 +36,10 @@ def request(method: str, url: str, body: dict | None = None, scope: str = FABRIC
 
 def item_id(item_type: str, name: str) -> str:
     items = request("GET", f"{FABRIC}/workspaces/{workspace}/items")["value"]
-    return next(i["id"] for i in items if i["type"] == item_type and i["displayName"] == name)
+    found = next((i["id"] for i in items if i["type"] == item_type and i["displayName"] == name), None)
+    if found is None:
+        sys.exit(f"{item_type} {name!r} not found in the workspace; deploy it first (deploy.py)")
+    return found
 
 
 # --- Semantic model (DAX) -----------------------------------------------------------------------------

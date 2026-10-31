@@ -54,7 +54,7 @@ metrics rather than author SQL.
 | Model shape | **entities + relationships + metrics**; primary keys required | a view with `measures` / `dimensions`; no keys | **star schema**: tables + relationships + DAX measures; marked date table |
 | Source flexibility | logical table must reference a **table/view** | `source:` accepts **arbitrary inline SQL** (UNION / CTE / filter) | **physical Delta tables only**: no transforms on the way in, so typed copies are materialized |
 | Ratio / derived metrics | **reference base metrics** (`efficiency = actual/expected`) | flat re-aggregation (`SUM(a)/SUM(b)`) | reference base measures (`DIVIDE([Actual Oil], [Expected Oil])`) |
-| Compile-assembled KPIs (deferred volume, decline vs forecast, days since test, allocation variance, GOR change, Δ, contribution %) | SQL UDTFs | SQL table functions | **all eight are DAX measures** (iterators, `CALCULATE` windows, time intelligence) |
+| Compile-assembled KPIs (deferred volume, decline vs forecast, days since test, allocation variance, GOR change, Δ, contribution %, days down) | SQL UDTFs | SQL table functions | **all eight are DAX measures** (iterators, `CALCULATE` windows, time intelligence) |
 | Query surface | `SEMANTIC_VIEW(v DIMENSIONS … METRICS … WHERE …)` (row filters inside) | `MEASURE(m)` in ordinary `SELECT … GROUP BY` | **DAX only** (XMLA / `executeQueries` REST); not queryable from SQL |
 
 **Positioning.** Snowflake's is the *more opinionated semantic model*: it wants a real relational shape

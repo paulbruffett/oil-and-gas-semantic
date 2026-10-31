@@ -8,7 +8,8 @@
 --   field_alias     canonical field names + knowledge/vocabulary.yaml field_synonyms -> field_id
 --   well_alias      UWI and well name -> well_id (what the Snowflake KG_RESOLVE matches on)
 --   business_term   knowledge/vocabulary.yaml terms: one row per synonym phrase -> governed metric
--- Aliases are stored normalized (lower case, single spaces), the reference LPG's _norm(). The vocabulary
+-- Aliases are stored lower-cased and trimmed, like the reference LPG's _norm() (which also collapses
+-- inner whitespace; no name in the data has any). The vocabulary
 -- rows copy knowledge/vocabulary.yaml; verify_knowledge.py checks them against the reference LPG.
 
 DROP TABLE IF EXISTS knowledge.operator;
@@ -23,7 +24,7 @@ GO
 CREATE TABLE knowledge.field_alias (alias VARCHAR(100) NOT NULL, field_id INT NOT NULL, source VARCHAR(20) NOT NULL);
 GO
 INSERT INTO knowledge.field_alias (alias, field_id, source)
-SELECT LOWER(field_name), field_id, 'name' FROM semantic.field;
+SELECT LOWER(TRIM(field_name)), field_id, 'name' FROM semantic.field;
 GO
 -- vocabulary.yaml field_synonyms (synonym -> canonical FIELD_NAME), resolved to field_id by name.
 INSERT INTO knowledge.field_alias (alias, field_id, source)
@@ -35,9 +36,9 @@ GO
 DROP TABLE IF EXISTS knowledge.well_alias;
 GO
 CREATE TABLE knowledge.well_alias AS
-SELECT CAST(LOWER(uwi) AS VARCHAR(100)) AS alias, well_id, CAST('uwi' AS VARCHAR(20)) AS source FROM semantic.well
+SELECT CAST(LOWER(TRIM(uwi)) AS VARCHAR(100)) AS alias, well_id, CAST('uwi' AS VARCHAR(20)) AS source FROM semantic.well
 UNION ALL
-SELECT CAST(LOWER(well_name) AS VARCHAR(100)), well_id, CAST('name' AS VARCHAR(20)) FROM semantic.well;
+SELECT CAST(LOWER(TRIM(well_name)) AS VARCHAR(100)), well_id, CAST('name' AS VARCHAR(20)) FROM semantic.well;
 GO
 
 DROP TABLE IF EXISTS knowledge.business_term;

@@ -30,18 +30,53 @@ def test_perfect_answers_score_100_percent_across_themes(dataset_dir, build_orac
     assert report.pass_rate == 1.0
 
 
-def test_question_without_a_grading_spec_is_skipped(
-    dataset_dir, build_oracle_submissions, monkeypatch
-):
-    """A catalog question whose gold_id has no SPECS entry is skipped, never force-graded."""
-    from oag_semantic import grading
+def _catalog_with(question_id: str, **changes):
+    """The default catalog with one question's fields replaced."""
+    from dataclasses import replace
 
-    subs = build_oracle_submissions(dataset_dir)  # built while all specs are present
-    monkeypatch.delitem(grading.SPECS, ROLLUP_QUESTION_ID)
+    from oag_generator.questions import load_catalog
 
-    report = score_submissions(subs, dataset_dir)
+    catalog = load_catalog()
+    themes = tuple(
+        replace(t, questions=tuple(replace(q, **changes) if q.gold_id == question_id else q
+                                   for q in t.questions))
+        for t in catalog.themes
+    )
+    return replace(catalog, themes=themes)
+
+
+def test_question_without_a_grading_spec_is_skipped(dataset_dir, build_oracle_submissions):
+    """A catalog question with no grading block is skipped, never force-graded."""
+    subs = build_oracle_submissions(dataset_dir)
+    report = score_submissions(subs, dataset_dir, catalog=_catalog_with(ROLLUP_QUESTION_ID, grading=None))
     assert "rollup-oil-gas-water-by-field-operator" in report.skipped
     assert all(g.question_id != ROLLUP_QUESTION_ID for g in report.grades)
+
+
+def test_grading_shape_comes_from_the_catalog_being_scored(dataset_dir, build_oracle_submissions):
+    """A catalog passed to score_submissions is the one graded against, not the default catalog."""
+    from oag_generator.questions import GradingShape
+
+    subs = build_oracle_submissions(dataset_dir)
+    sub = subs[SURVEILLANCE_QUESTION_ID]
+    for row in sub["key_values"]["flagged"]:
+        row["efficiency"] = -1.0  # wrong, but only graded if the shape checks efficiency
+    narrower = GradingShape(set_key="flagged", id_key="well_id", value_keys=("shortfall_bbl",))
+    report = score_submissions(subs, dataset_dir, catalog=_catalog_with(SURVEILLANCE_QUESTION_ID, grading=narrower))
+    assert report.pass_rate == 1.0
+    assert score_submissions(subs, dataset_dir).pass_rate < 1.0  # the default shape does check it
+
+
+def test_duplicate_submitted_row_fails():
+    """A row submitted twice fails even when one copy matches gold."""
+    spec = GradingSpec("flagged", "well_id", ("v",))
+    gold = {"flagged": [{"well_id": 1, "v": 1.0}, {"well_id": 2, "v": 2.0}]}
+    sub = {"key_values": {"flagged": [{"well_id": 1, "v": 9.0}, {"well_id": 1, "v": 1.0},
+                                      {"well_id": 2, "v": 2.0}]}}
+    grade = grade_answer(sub, gold, spec)
+    assert not grade.correct
+    assert grade.duplicate_ids == [1]
+    assert "duplicate [1]" in grade.summary()
 
 
 def test_missing_submission_fails(dataset_dir, build_oracle_submissions):

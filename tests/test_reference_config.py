@@ -8,9 +8,11 @@ check passes the dataset end-to-end.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
+import pyarrow.parquet as pq
 import pytest
 
 from oag_generator import generate_dataset
@@ -26,6 +28,27 @@ REFERENCE_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "reference.
 # The hash Databricks and Snowflake were loaded and gold-verified against (ADR 0035). If this
 # changes, every platform build must reload the data and re-verify gold.
 FROZEN_CONFIG_HASH = "12a110eecfe2"
+
+# Fingerprints of the data itself (gold JSON bytes; canonical table contents, independent of the
+# Parquet writer version). config_hash only covers the config, so these catch a generator change that
+# alters the data under an unchanged hash. Update them only together with a platform reload (ADR 0035).
+FROZEN_DATA_FINGERPRINTS = {
+    "gold/decline": "1c767fbbee8b48e1",
+    "gold/deferment": "89f7d9928c5ab44d",
+    "gold/rollups": "2a60b6afcc04b4b3",
+    "gold/surveillance": "7e8f6620918be913",
+    "gold/watchlist": "50d0f931df772788",
+    "gold/welltest": "11293a05db827b6c",
+    "canonical/down_time_event": "2831901ff67e94ff",
+    "canonical/facility": "ea28e4931681f44f",
+    "canonical/field": "758033233c612974",
+    "canonical/product_volume_summary": "4fb37a8265e4c83b",
+    "canonical/reporting_entity": "e9f78d832087f57c",
+    "canonical/rpen_allocation_factor": "00b5e9b58a99cb2c",
+    "canonical/well": "352ae1f3eabb742d",
+    "canonical/well_test": "822c0d87e0c76da2",
+    "canonical/well_vol_daily": "278d37b727c7267b",
+}
 
 
 @pytest.fixture(scope="session")
@@ -75,8 +98,24 @@ def test_reference_dataset_keeps_its_frozen_hash(reference_dataset):
     assert reference_dataset.config_hash == FROZEN_CONFIG_HASH
 
 
+def test_reference_dataset_is_byte_identical(reference_dataset):
+    """The data the platform builds were loaded and verified against is unchanged, not only its config."""
+
+    def digest(data: bytes) -> str:
+        return hashlib.sha256(data).hexdigest()[:16]
+
+    out = reference_dataset.output_dir
+    actual = {f"gold/{k}": digest(Path(p).read_bytes()) for k, p in reference_dataset.gold.items()}
+    for path in (out / "canonical").glob("*.parquet"):
+        table = pq.read_table(path).to_pydict()
+        actual[f"canonical/{path.stem}"] = digest(json.dumps(table, default=str, sort_keys=True).encode())
+    assert actual == FROZEN_DATA_FINGERPRINTS
+
+
 def test_reference_dataset_passes_the_gold_check(reference_dataset, build_oracle_submissions):
-    """Perfect answers built from the frozen dataset's gold score 100% across all six themes."""
+    """Plumbing check: the gold check covers all six questions on the reference dataset and its gold
+    files are well-formed. Answers are built from the gold itself, so this cannot catch a wrong value
+    (the compile-vs-gold tests do that)."""
     from oag_semantic.grading import score_submissions
 
     report = score_submissions(
