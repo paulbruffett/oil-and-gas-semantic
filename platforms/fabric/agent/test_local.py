@@ -64,4 +64,4 @@ print(f"{'PASS' if op_ok else 'FAIL'}  rollup by operator vs gold by_operator ({
 if os.environ.get("OAG_SUBMISSIONS_OUT"):
     Path(os.environ["OAG_SUBMISSIONS_OUT"]).write_text(json.dumps(submissions, indent=2))
 
-sys.exit(0 if report.n_correct == report.n_graded and scoped_ok and op_ok else 1)
+sys.exit(0 if report.passed and scoped_ok and op_ok else 1)

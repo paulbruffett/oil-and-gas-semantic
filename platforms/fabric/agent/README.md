@@ -9,7 +9,7 @@ Two agents answer the six use-case questions (`spec/questions/catalog.yaml`):
 | Metrics | governed DAX queries (`fabric.THEME_QUERIES`) against the semantic model | writes its own DAX against the semantic model |
 | Entities | `resolve_field` → ontology MCP `ask_ontology` (FieldAlias → 'Alias Of Field') | semantic model only (see below) |
 | Called over | Python | MCP: `/v1/mcp/workspaces/<ws>/dataagents/<id>/agent` |
-| Result | **6/6 gold**, plus a field-scoped question and the by-operator rollup | **5/6 use cases exact in each of two runs** (a different one wrong each time); every returned value matched gold |
+| Result | **6/6 gold**, plus a field-scoped question and the by-operator rollup | **4–5 of 6 use cases exact per run** over three runs (a different miss each time); every value it returned for a gold row matched gold |
 
 ## Custom agent
 
@@ -58,18 +58,20 @@ published from code (`deploy.py data-agent`). `eval_data_agent.py` asks it each 
 requests a table of the graded columns, and compares it with gold: ids found, missed or added, and
 values right or wrong.
 
-Results (F2 capacity, two runs, 2026-10-31):
+Results (F2 capacity, 2026-10-31; run 3 is the live re-run of the merged build):
 
-| Use case | Run 1 | Run 2 |
-|---|---|---|
-| 1 Surveillance | all 12 flagged wells, values right, **plus 5 wells that aren't below expected** (4, 14, 15, 16, 18) | exact |
-| 2 Deferment | exact | all 5 causes right, **plus a zero row for a cause with no events last month** ("Well Integrity") |
-| 3 Decline | exact | exact |
-| 4 Well test | exact | exact |
-| 5 Watchlist | exact | exact |
-| 6 Rollups | exact | exact |
+| Use case | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| 1 Surveillance | all 12 flagged wells, values right, **plus 5 wells that aren't below expected** (4, 14, 15, 16, 18) | exact | exact |
+| 2 Deferment | exact | all 5 causes right, **plus a zero row for a cause with no events last month** ("Well Integrity") | same extra "Well Integrity" row |
+| 3 Decline | exact | exact | the right well and values, **plus an extra row with well_id -1** (answer text not captured) |
+| 4 Well test | exact | exact | exact |
+| 5 Watchlist | exact | exact | exact |
+| 6 Rollups | exact | exact | exact |
+| **Exact** | **5/6** | **5/6** | **4/6** |
 
-Every value it returned matched gold at 1e-6. Its mistakes were all in row selection, and they changed
+Every value it returned for a gold row matched gold at 1e-6. Its mistakes were all in row selection
+(extra or missing rows, including rows that aren't in gold at all), and they changed
 between runs. In run 1 it listed every well with any shortfall instead of applying the 90% materiality
 band that defines "below expected". That band is exactly what the ontology's `BusinessTerm` and
 `BelowExpected` rule encode, and this data agent can't see the ontology (below). The custom agent can't

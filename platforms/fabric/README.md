@@ -2,18 +2,18 @@
 
 The Fabric reference build (DESIGN.md §7, ADR 0035): the reference dataset (`configs/reference.yaml`,
 `config_hash 12a110eecfe2`) loaded into a Fabric **Warehouse** as the canonical OSDU tables, and the
-OSI semantic model as a **Direct Lake** Fabric semantic model with DAX measures, and the knowledge layer
-as a **Fabric IQ ontology** (preview), and agents that answer the six use cases: a custom agent graded
-against gold, and a Fabric data agent as the native comparison point. It follows `platforms/databricks/` and `platforms/snowflake/` and does
-not edit the foundation.
+OSI semantic model as a **Direct Lake** Fabric semantic model with DAX measures. The knowledge layer is
+a **Fabric IQ ontology** (preview). Two agents answer the six use cases: a custom agent, graded against
+gold, and a Fabric data agent as the native comparison point. It follows `platforms/databricks/` and
+`platforms/snowflake/` and doesn't edit the foundation. **All six use cases match gold.**
 
 | Slice | Status |
 |---|---|
 | 1. Canonical load (Warehouse) | done: 9 tables, row counts and value checksums match the Parquet |
 | 2. Semantic model (DAX) | done: Direct Lake model; every OSI metric plus all eight compile-assembled KPIs are DAX measures; all six use cases match gold from measures alone |
 | 3. Knowledge layer (Fabric IQ ontology) | done: entities, relationships, aliases and business terms; resolution, rollups and terms match the reference LPG over the ontology's MCP endpoint |
-| 4. Agent (custom + Fabric data agent) | custom agent: **6/6 gold** ([`agent/`](agent/README.md)); Fabric data agent: 5/6 use cases exact in each of two runs, all values right, row-selection mistakes vary by run |
-| 5. Gold check | not started |
+| 4. Agent (custom + Fabric data agent) | custom agent: **6/6 gold** ([`agent/`](agent/README.md)); Fabric data agent: 4–5 of 6 use cases exact per run over three runs, values right on every gold row, row-selection mistakes vary by run |
+| 5. Gold check | done: whole build re-run live from `main`; agent submissions graded 6/6 by `oag_semantic.grading` and committed ([`agent/submissions.json`](agent/submissions.json)) |
 
 > **⚠ Capacity: the workspace is on a pay-as-you-go F2 capacity, and it's normally paused.** While the
 > capacity is paused, every item in the workspace (Warehouse, semantic model, ontology, data agent) is
@@ -199,6 +199,47 @@ capacity. `verify_knowledge.py` asks it for complete tables and compares them wi
 - **For slice 4 (reported, not yet checked):** the Assistants API behind Fabric data agents was
   reportedly retired on 26 Aug 2026, so programmatic agent calls should use MCP endpoints.
 
+## Gold check (slice 5)
+
+The whole build was re-run live from `main` on 2026-10-31, after the code-review fixes merged: SQL 02–04,
+all three deploys, then every check. Results:
+
+| Layer | Check | Result |
+|---|---|---|
+| Canonical load | `02_load_canonical.sql` row counts (fails the run on a mismatch) | 9/9 tables |
+| Semantic model | `verify_semantic.py`: one DAX query per use case vs gold, plus the time-intelligence rollup | 7/7 match |
+| Knowledge layer | `verify_knowledge.py`: ontology (MCP) vs reference LPG and gold | 7/7 match |
+| Custom agent | `agent/test_local.py`: six catalog questions → answer submissions → `oag_semantic.grading.score_submissions` | **6/6 gold**, plus field-scoped and by-operator checks |
+| Fabric data agent | `agent/eval_data_agent.py`: six catalog questions over MCP vs gold | 4/6 exact on this run (5/6 on each of the two earlier runs); values right on every gold row, plus extra rows |
+
+The custom agent's six submissions from the final run are committed as
+[`agent/submissions.json`](agent/submissions.json). `agent/grade_submissions.py` re-grades them with the
+foundation's gold check, with no Fabric or Foundry access needed:
+
+```bash
+uv run python platforms/fabric/agent/grade_submissions.py   # from the repo root; prints 6/6
+```
+
+The gold check grades `by_field` only for the rollup question (the catalog's grading block). The
+question also asks "by operator", which the agent answers (`by_operator` in its submission) and
+`test_local.py` checks against gold separately; whether the catalog should grade it too is open.
+
+## Governance
+
+What this build has, and what Fabric offers but this build doesn't exercise. Nothing here was tested
+with a second, lower-privileged identity, unlike Snowflake's role-isolation test.
+
+| Area | This build (checked) | Available in Fabric, not built here |
+|---|---|---|
+| Workspace access | one user, workspace **Admin** (`roleAssignments`); every item is reached with that Entra identity | workspace roles (Admin, Member, Contributor, Viewer) and per-item sharing |
+| Warehouse | user's identity over TDS; `OPENROWSET` reads OneLake with the same identity, no credential objects | T-SQL `GRANT`/`DENY`, row-level and column-level security, dynamic data masking |
+| Semantic model | Direct Lake with the caller's identity; DAX via `executeQueries` | RLS/OLS roles in TMDL; Build permission controls who can run arbitrary DAX |
+| Agent tools | the governed DAX runs as the caller, so whoever can run the agent can run any DAX on the model. There's no owner's-rights boundary like Snowflake's UDFs | RLS limits rows, not which queries run |
+| Ontology / MCP | caller's Entra token; the MCP docs say service principals don't work yet | item permissions on the ontology |
+| Model (LLM) | Azure RBAC on the Foundry resource: the user holds "Cognitive Services OpenAI User"; no keys | managed identities, Foundry project roles |
+| Data agent | caller's token over MCP; paid capacity required | item sharing; tenant settings for data agents and Copilot |
+| Secrets | none in the repo; endpoints and IDs come from the environment | Key Vault for anything that needs a secret |
+
 ## Reproduce
 
 Prereqs: Azure CLI signed in (`az login`) as a user with a Fabric license; a workspace on an F-SKU or
@@ -259,7 +300,8 @@ $RUN deploy.py data-agent                   # creates or updates and publishes o
 ```
 
 `test_local.py` should print `gold check: 6/6 (100%)` plus two `PASS` lines (field-scoped question,
-by-operator rollup). Don't edit the `lineageTag` lines in
+by-operator rollup). Set `OAG_SUBMISSIONS_OUT=platforms/fabric/agent/submissions.json` to save the
+submissions for `grade_submissions.py`. Don't edit the `lineageTag` lines in
 `ontology/`: the service keys state on them (see Findings above).
 
 `02_load_canonical.sql` closes with a row-count check (`8208, 8208, 21, 18, 3, 6, 282, 251, 18`) that

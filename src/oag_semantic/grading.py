@@ -110,6 +110,11 @@ class ScoreReport:
         return sum(1 for g in self.grades if g.correct)
 
     @property
+    def passed(self) -> bool:
+        """True only when something was graded, nothing was skipped, and every graded answer is correct."""
+        return self.n_graded > 0 and not self.skipped and self.n_correct == self.n_graded
+
+    @property
     def pass_rate(self) -> float:
         """Fraction of graded questions answered correctly (0.0 when nothing was graded)."""
         return self.n_correct / self.n_graded if self.n_graded else 0.0

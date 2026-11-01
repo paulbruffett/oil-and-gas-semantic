@@ -274,7 +274,7 @@ use cases. Rules (ADR 0035):
 |---|---|---|---|
 | Databricks | built, all six use cases match gold | Unity Catalog Metric Views | Mosaic AI agent over UC functions |
 | Snowflake | built (ported from Databricks, [`docs/porting.md`](docs/porting.md)), all six match gold | Semantic Views + Cortex Analyst | Cortex Agent over UDFs + knowledge graph |
-| Microsoft Fabric | in progress (load + Direct Lake semantic model, all six use cases match gold from DAX measures; Fabric IQ ontology knowledge layer, ADR 0037) | Fabric semantic model (Direct Lake, DAX) | custom agent (gpt-6-luna on Foundry, DAX tools + ontology MCP), 6/6 gold; Fabric data agent over MCP, 5/6 exact per run |
+| Microsoft Fabric | built, all six use cases match gold (DAX measures alone, and the custom agent 6/6); Fabric IQ ontology knowledge layer, ADR 0037 | Fabric semantic model (Direct Lake, DAX) | custom agent (gpt-6-luna on Foundry, DAX tools + ontology MCP), 6/6 gold; Fabric data agent over MCP, 4–5/6 exact per run |
 
 **Comparison.** Findings go in [`docs/platform-comparison.md`](docs/platform-comparison.md), across:
 semantic-layer expressiveness (which KPIs are native vs need a workaround), knowledge layer, agent / NL
