@@ -4,8 +4,9 @@ Fabric counterpart of Snowflake's role-isolation test (platforms/snowflake/sql/1
 agent/test_analyst_rest.py). Two identities run the same checks:
 
   analyst  your own `az login` (workspace Admin)
-  agent    a service principal with certificate auth, granted only what the README lists (item-level
-           Read + Build on the semantic model; no workspace role, no Warehouse access)
+  agent    a service principal with certificate auth, through the Entra group oag-reference-agent:
+           Read + Build on the semantic model, workspace Viewer, and a T-SQL DENY on the Warehouse
+           schemas (the full list and why each was needed: README, Governance)
 
 Checks, each printed ALLOWED or DENIED with the reason:
   dax:<theme>       the agent's six governed DAX queries (fabric.THEME_QUERIES) via executeQueries
