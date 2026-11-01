@@ -121,7 +121,7 @@ The agent routes a question to a governed tool using a platform-hosted model.
 | Delivery | `SNOWFLAKE.CORTEX.COMPLETE(model, prompt)` — **LLM as a SQL function**, no endpoint to provision | **serving endpoint** + OpenAI-compatible client | **no in-workspace model endpoint**: the custom agent calls a Foundry deployment (gpt-6-luna) outside Fabric |
 | Native tool-calling | **⚠ not exposed via `COMPLETE` on the tested account** (`tools` param rejected) | **yes** — standard tool-calling loop | **yes, via the Responses API** (gpt-6-luna rejects tools on Chat Completions while reasoning) |
 | Access control | **database role** (`SNOWFLAKE.CORTEX_USER`) — LLM is a governed, grantable resource | endpoint permissions / on-behalf-of auth | Azure RBAC on the Foundry resource ("Cognitive Services OpenAI User"), same Entra identity as Fabric |
-| NL→data analogue | **Cortex Analyst** (text-to-SQL over a semantic model) | Genie | **Fabric data agent** (NL → DAX over the semantic model), called over MCP; needs a paid F2+ capacity; **5/6 use cases exact per run**, all values right |
+| NL→data analogue | **Cortex Analyst** (text-to-SQL over a semantic model) | Genie | **Fabric data agent** (NL → DAX over the semantic model), called over MCP; needs a paid F2+ capacity; **4–5 of 6 use cases exact per run** over three runs, values right on every gold row |
 | Result on the six use cases | 6/6 gold | 6/6 gold | custom agent **6/6 gold**; data agent 5/6 exact in each of two runs (a different miss each run) |
 
 **Positioning.** Cortex is operationally lighter (no endpoint to stand up; RBAC-native access to the
