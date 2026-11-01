@@ -9,7 +9,7 @@ Two agents answer the six use-case questions (`spec/questions/catalog.yaml`):
 | Metrics | governed DAX queries (`fabric.THEME_QUERIES`) against the semantic model | writes its own DAX against the semantic model |
 | Entities | `resolve_field` → ontology MCP `ask_ontology` (FieldAlias → 'Alias Of Field') | semantic model only (see below) |
 | Called over | Python | MCP: `/v1/mcp/workspaces/<ws>/dataagents/<id>/agent` |
-| Result | **6/6 gold**, plus a field-scoped question and the by-operator rollup | **4–5 of 6 use cases exact per run** over three runs (a different miss each time); every value it returned matched gold |
+| Result | **6/6 gold**, plus a field-scoped question and the by-operator rollup | **4–5 of 6 use cases exact per run** over three runs (a different miss each time); every value it returned for a gold row matched gold |
 
 ## Custom agent
 
@@ -70,7 +70,8 @@ Results (F2 capacity, 2026-10-31; run 3 is the live re-run of the merged build):
 | 6 Rollups | exact | exact | exact |
 | **Exact** | **5/6** | **5/6** | **4/6** |
 
-Every value it returned matched gold at 1e-6. Its mistakes were all in row selection, and they changed
+Every value it returned for a gold row matched gold at 1e-6. Its mistakes were all in row selection
+(extra or missing rows, including rows that aren't in gold at all), and they changed
 between runs. In run 1 it listed every well with any shortfall instead of applying the 90% materiality
 band that defines "below expected". That band is exactly what the ontology's `BusinessTerm` and
 `BelowExpected` rule encode, and this data agent can't see the ontology (below). The custom agent can't

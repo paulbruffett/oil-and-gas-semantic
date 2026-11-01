@@ -23,7 +23,8 @@ from oag_generator.config import (
     load_config,
 )
 
-REFERENCE_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "reference.yaml"
+REPO = Path(__file__).resolve().parents[1]
+REFERENCE_CONFIG = REPO / "configs" / "reference.yaml"
 
 # The hash Databricks and Snowflake were loaded and gold-verified against (ADR 0035). If this
 # changes, every platform build must reload the data and re-verify gold.
@@ -124,3 +125,13 @@ def test_reference_dataset_passes_the_gold_check(reference_dataset, build_oracle
     assert report.n_graded == 6
     assert report.pass_rate == 1.0
     assert report.skipped == []
+
+
+def test_committed_fabric_submissions_still_pass_the_gold_check(reference_dataset):
+    """The Fabric agent's committed answers (platforms/fabric/agent/submissions.json) still grade 6/6
+    against freshly generated reference gold, so the documented result can't silently go stale."""
+    from oag_semantic.grading import score_submissions
+
+    submissions = json.loads((REPO / "platforms" / "fabric" / "agent" / "submissions.json").read_text())
+    report = score_submissions(submissions, reference_dataset.output_dir)
+    assert report.passed, [g.summary() for g in report.grades if not g.correct]

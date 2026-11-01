@@ -12,7 +12,7 @@ built. The Fabric build (`platforms/fabric/`) was built natively on the same fou
 ported line by line, so its diff is a new build, not a port's blast radius.
 
 > **How to read this (scope & honesty).**
-> - **Evidence base:** one frozen dataset (`config_hash 12a110eecfe2`), six themes; both platforms
+> - **Evidence base:** one frozen dataset (`config_hash 12a110eecfe2`), six themes; all three platforms
 >   reproduce the **identical gold answers** (12 / 5 / 1 / 8 / 11 / 3), so this compares *feature fit*,
 >   not correctness.
 > - **⚠ account-specific** marks findings tied to the tested Snowflake account/region (model
@@ -20,7 +20,7 @@ ported line by line, so its diff is a new build, not a port's blast radius.
 > - **Microsoft Fabric:** built in full ([`platforms/fabric/README.md`](../platforms/fabric/README.md)). Its
 >   custom agent reproduces the same gold (6/6). Fabric governance is described from this build's actual
 >   setup (one Admin user) plus documented features; no least-privilege role was built or tested.
-> - This is a **port**, not two independent from-scratch builds — it measures **translatability and
+> - Databricks→Snowflake is a **port**, not two independent from-scratch builds — it measures **translatability and
 >   feature fit**, not peak effort achievable on either platform.
 
 ## TL;DR positioning
@@ -35,7 +35,8 @@ ported line by line, so its diff is a new build, not a port's blast radius.
 | **Governance / RBAC** | **Snowflake** | Owner's-rights functions + role-native LLM access give tighter least-privilege | workspace roles + Warehouse/semantic-model security exist; one Entra identity end to end; least privilege not tested here |
 | **Reproducibility / tooling** | ~Even (Snowflake edge) | `snow sql -f` runs `.sql` files natively; no wrapper needed | everything deploys from code over REST (TMDL, JSON), but SQL needs a TDS runner and three token audiences are involved |
 
-**One-paragraph read.** Both platforms express this governed-metric + governed-tool + agent architecture
+**One-paragraph read (Databricks vs Snowflake; Fabric is summarized in the TL;DR column and "Lean
+Fabric" below).** Both platforms express this governed-metric + governed-tool + agent architecture
 cleanly and return identical answers. **Snowflake's model is arguably the better *fit*** for a governed
 architecture — its Semantic Views are a more opinionated metric model and its owner's-rights functions
 turn the "agent selects governed tools, never writes SQL" contract into an enforced security boundary.
@@ -139,9 +140,10 @@ fields through the ontology's MCP endpoint. What's different is where the model 
 offers no model endpoint to call, so the agent uses Azure AI Foundry. That's governed by the same Entra
 identity, but it's a second Azure resource, not a workspace object. Fabric's own NL agent, the data
 agent, is deployable and publishable from code, and is called over MCP (paid F2+ capacity only). It
-got 5 of 6 use cases exactly right in each of two runs. Every value it returned matched gold, but it
-picked the wrong rows once per run, and a different use case each time. In one run it ignored the 90%
-"below expected" band; in the other it added a zero row for a cause with no events. Measures alone
+got 4 or 5 of 6 use cases exactly right per run over three runs. Every value it returned for a gold
+row matched gold, but it picked the wrong rows in each run, and a different use case each time. In one
+run it ignored the 90% "below expected" band; in others it added a zero row for a cause with no events,
+and a decline row for a well_id of -1 that doesn't exist. Measures alone
 don't stop an NL agent filtering wrongly. That's the case for the governed-tool pattern, and for giving
 the data agent the ontology's business terms, which its definition can't reference today.
 
@@ -154,7 +156,7 @@ the data agent the ontology's business terms, which its definition can't referen
 | **RBAC** | roles + `ON ALL`/`ON FUTURE` grants; owner's-rights functions | UC grants to groups/principals | workspace roles + item sharing; Warehouse `GRANT`/RLS/CLS; semantic-model RLS/OLS. This build: one Admin user, nothing least-privilege tested | **Snowflake** for least-privilege depth |
 | **LLM governance** | grant `SNOWFLAKE.CORTEX_USER` database role | endpoint permissions | Azure RBAC on the Foundry resource ("Cognitive Services OpenAI User"), outside the workspace; data agent governed by item permissions + paid capacity | Snowflake integrates the model into RBAC |
 | **Run `.sql` files** | `snow sql -f file.sql` (native) | CLI has no verb; needs Statement Execution API / wrapper | no REST SQL API; a small TDS runner (`mssql-python`, no ODBC install) | **Snowflake** |
-| **Auth** | key-pair (JWT) via connection config | OAuth / SDK | Entra (`az login`) everywhere; two token audiences (Fabric, Power BI) | ~even |
+| **Auth** | key-pair (JWT) via connection config | OAuth / SDK | Entra (`az login`) everywhere; three token audiences (Fabric, Power BI, and Cognitive Services for the Foundry model) | ~even |
 
 > **RBAC gotcha (Snowflake):** sessions default to **secondary roles = ALL** (the union of every role a
 > user holds). To test a role in true isolation, `USE SECONDARY ROLES NONE` — otherwise a broad role
@@ -183,7 +185,7 @@ the data agent the ontology's business terms, which its definition can't referen
 ## Evidence & reproducibility
 
 - **Correctness parity:** all six themes reproduce the frozen gold (`config_hash 12a110eecfe2`) exactly
-  on both platforms — see [`platforms/snowflake/README.md`](../platforms/snowflake/README.md) and [`platforms/snowflake/agent/README.md`](../platforms/snowflake/agent/README.md)
+  on all three platforms — see [`platforms/snowflake/README.md`](../platforms/snowflake/README.md) and [`platforms/snowflake/agent/README.md`](../platforms/snowflake/agent/README.md)
   (gold-validation tables) and their Databricks counterparts. On Fabric, the custom agent's submissions
   are committed ([`platforms/fabric/agent/submissions.json`](../platforms/fabric/agent/submissions.json))
   and re-grade 6/6 offline with `grade_submissions.py`.

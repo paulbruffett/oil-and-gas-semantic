@@ -12,7 +12,7 @@ gold, and a Fabric data agent as the native comparison point. It follows `platfo
 | 1. Canonical load (Warehouse) | done: 9 tables, row counts and value checksums match the Parquet |
 | 2. Semantic model (DAX) | done: Direct Lake model; every OSI metric plus all eight compile-assembled KPIs are DAX measures; all six use cases match gold from measures alone |
 | 3. Knowledge layer (Fabric IQ ontology) | done: entities, relationships, aliases and business terms; resolution, rollups and terms match the reference LPG over the ontology's MCP endpoint |
-| 4. Agent (custom + Fabric data agent) | custom agent: **6/6 gold** ([`agent/`](agent/README.md)); Fabric data agent: 4–5 of 6 use cases exact per run over three runs, every value right, row-selection mistakes vary by run |
+| 4. Agent (custom + Fabric data agent) | custom agent: **6/6 gold** ([`agent/`](agent/README.md)); Fabric data agent: 4–5 of 6 use cases exact per run over three runs, values right on every gold row, row-selection mistakes vary by run |
 | 5. Gold check | done: whole build re-run live from `main`; agent submissions graded 6/6 by `oag_semantic.grading` and committed ([`agent/submissions.json`](agent/submissions.json)) |
 
 > **⚠ Capacity: the workspace is on a pay-as-you-go F2 capacity, and it's normally paused.** While the
@@ -210,7 +210,7 @@ all three deploys, then every check. Results:
 | Semantic model | `verify_semantic.py`: one DAX query per use case vs gold, plus the time-intelligence rollup | 7/7 match |
 | Knowledge layer | `verify_knowledge.py`: ontology (MCP) vs reference LPG and gold | 7/7 match |
 | Custom agent | `agent/test_local.py`: six catalog questions → answer submissions → `oag_semantic.grading.score_submissions` | **6/6 gold**, plus field-scoped and by-operator checks |
-| Fabric data agent | `agent/eval_data_agent.py`: six catalog questions over MCP vs gold | 4/6 exact on this run (5/6 on each of the two earlier runs); every value right |
+| Fabric data agent | `agent/eval_data_agent.py`: six catalog questions over MCP vs gold | 4/6 exact on this run (5/6 on each of the two earlier runs); values right on every gold row, plus extra rows |
 
 The custom agent's six submissions from the final run are committed as
 [`agent/submissions.json`](agent/submissions.json). `agent/grade_submissions.py` re-grades them with the

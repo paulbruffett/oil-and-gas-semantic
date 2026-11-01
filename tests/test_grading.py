@@ -235,3 +235,14 @@ def test_perfect_answers_validate_against_the_schema(dataset_dir, build_oracle_s
     assert len(subs) == 6
     for sub in subs.values():
         validator.validate(sub)  # raises on failure
+
+
+def test_report_passes_only_when_everything_was_graded_and_correct(dataset_dir, build_oracle_submissions, tmp_path):
+    """ScoreReport.passed: a run that graded nothing, or skipped questions, is not a pass."""
+    subs = build_oracle_submissions(dataset_dir)
+    assert score_submissions(subs, dataset_dir).passed
+    nothing = score_submissions(subs, tmp_path)  # no gold here: every question is skipped
+    assert nothing.n_graded == 0 and nothing.n_correct == nothing.n_graded
+    assert not nothing.passed
+    del subs[SURVEILLANCE_QUESTION_ID]
+    assert not score_submissions(subs, dataset_dir).passed
