@@ -53,7 +53,7 @@ scoped_ok = got == want and scoped["provenance"]["filters"] == ["field_id = 1"]
 print(f"\n{'PASS' if scoped_ok else 'FAIL'}  field-scoped surveillance ('the Volve' -> field 1): wells {got}, gold {want}")
 print(f"      entities: {scoped['provenance']['entities']}")
 
-# Rollup by operator (an extra set the question asks for; not part of the catalog grading block).
+# Rollup by operator: graded by the gold check above too (ADR 0038); this checks it directly as well.
 rollup_gold = json.loads((dataset_dir / "gold" / "rollups.json").read_text())["by_operator"]
 rollup_got = {r["operator"]: r for r in submissions["rollup-oil-gas-water-by-field-operator"]["key_values"].get("by_operator", [])}
 op_ok = set(rollup_got) == {g["operator"] for g in rollup_gold} and all(

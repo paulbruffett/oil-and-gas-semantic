@@ -346,6 +346,8 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0034 — configs/contest.yaml is the frozen fork-tag dataset config: 15-month window, breakthrough on, decline band; watchlist non-emptiness anchored by construction, decline empirically swept (applies 0032/0033, closes #44)](docs/adr/0034-frozen-contest-config.md) — *amended by 0036*
 - [0035 — Platform reference builds live in this repo under `platforms/<stack>/`, on one shared foundation (amends 0012/0014)](docs/adr/0035-platform-reference-builds-in-repo.md)
 - [0036 — Goal is three-platform reference builds, not an assistant contest; contest machinery removed (supersedes 0012–0016, 0020, 0026–0030; amends 0024, 0025, 0034)](docs/adr/0036-reference-builds-replace-contest.md)
+- [0037 — Fabric knowledge layer is a Fabric IQ ontology (preview), queried over its MCP endpoint](docs/adr/0037-fabric-knowledge-layer-iq-ontology.md)
+- [0038 — The rollup gold check also grades the by-operator set (amends 0025)](docs/adr/0038-rollup-gold-check-grades-by-operator.md)
 
 ---
 

@@ -41,12 +41,20 @@ class GradingSpec:
     set_key: str
     id_key: str
     value_keys: tuple[str, ...]
+    also: tuple[GradingSpec, ...] = ()  # further sets the answer must also match (catalog `also:`)
+
+    def sets(self) -> tuple[GradingSpec, ...]:
+        """Every graded set: this one first, then the `also` sets."""
+        return (self, *self.also)
+
+
+def _spec(g) -> GradingSpec:
+    return GradingSpec(g.set_key, g.id_key, tuple(g.value_keys), tuple(_spec(a) for a in g.also))
 
 
 def spec_for(question) -> GradingSpec | None:
     """The grading spec a catalog question declares, or None if it is not yet gradable."""
-    g = question.grading
-    return None if g is None else GradingSpec(g.set_key, g.id_key, tuple(g.value_keys))
+    return None if question.grading is None else _spec(question.grading)
 
 
 # One spec per question in the default catalog, keyed by gold id.
@@ -167,34 +175,24 @@ def grade_answer(
     question_id = submission.get("question_id", gold.get("question_id", "?"))
     behavior_correct = submission.get("behavior", "answered") == expected_behavior
 
-    # Only rows that are dicts carrying the id key can be matched to gold; anything else is dropped,
-    # so its gold counterpart reports as missing rather than a KeyError aborting the run.
     key_values = submission.get("key_values")
-    sub_set = key_values.get(spec.set_key, []) if isinstance(key_values, dict) else []
-    gold_rows = {
-        r[spec.id_key]: r
-        for r in gold.get(spec.set_key, [])
-        if isinstance(r, dict) and spec.id_key in r
-    }
-    sub_list = [r for r in sub_set if isinstance(r, dict) and spec.id_key in r]
-    sub_rows = {r[spec.id_key]: r for r in sub_list}
-    # A row submitted twice is wrong even if one copy matches gold, so it can't hide behind the dict.
-    counts = Counter(r[spec.id_key] for r in sub_list)
-    duplicates = sorted((i for i, n in counts.items() if n > 1), key=_sort_key)
-    missing = sorted(set(gold_rows) - set(sub_rows), key=_sort_key)
-    extra = sorted(set(sub_rows) - set(gold_rows), key=_sort_key)
-
+    key_values = key_values if isinstance(key_values, dict) else {}
+    missing: list[Any] = []
+    extra: list[Any] = []
+    duplicates: list[Any] = []
     mismatches: list[dict[str, Any]] = []
-    for row_id in sorted(set(gold_rows) & set(sub_rows), key=_sort_key):
-        for key in _values_match(sub_rows[row_id], gold_rows[row_id], spec.value_keys):
-            mismatches.append(
-                {
-                    "id": row_id,
-                    "key": key,
-                    "submitted": sub_rows[row_id].get(key),
-                    "gold": gold_rows[row_id].get(key),
-                }
-            )
+    n_gold_primary = n_sub_primary = 0
+    for i, s in enumerate(spec.sets()):
+        n_gold, n_sub, m, e, d, mm = _grade_set(key_values.get(s.set_key, []), gold.get(s.set_key, []), s)
+        if i == 0:  # the primary set: ids reported bare, and its row counts are the grade's counts
+            n_gold_primary, n_sub_primary = n_gold, n_sub
+        else:  # an `also` set: ids carry the set name, e.g. "by_operator:Equinor"
+            m, e, d = ([f"{s.set_key}:{x}" for x in ids] for ids in (m, e, d))
+            mm = [{**x, "id": f"{s.set_key}:{x['id']}"} for x in mm]
+        missing += m
+        extra += e
+        duplicates += d
+        mismatches += mm
 
     values_correct = not missing and not extra and not duplicates and not mismatches
     return QuestionGrade(
@@ -202,13 +200,34 @@ def grade_answer(
         correct=behavior_correct and values_correct,
         behavior_correct=behavior_correct,
         values_correct=values_correct,
-        n_gold=len(gold_rows),
-        n_submitted=len(sub_rows),
-        missing_ids=list(missing),
-        extra_ids=list(extra),
+        n_gold=n_gold_primary,
+        n_submitted=n_sub_primary,
+        missing_ids=missing,
+        extra_ids=extra,
         duplicate_ids=duplicates,
         value_mismatches=mismatches,
     )
+
+
+def _grade_set(sub_set: Any, gold_set: Any, spec: GradingSpec):
+    """Compare one submitted set with its gold set: (n_gold, n_submitted, missing, extra, duplicates,
+    value mismatches). Only rows that are dicts carrying the id key can be matched; anything else is
+    dropped, so its gold counterpart reports as missing rather than a KeyError aborting the run."""
+    sub_set = sub_set if isinstance(sub_set, list) else []
+    gold_rows = {r[spec.id_key]: r for r in gold_set if isinstance(r, dict) and spec.id_key in r}
+    sub_list = [r for r in sub_set if isinstance(r, dict) and spec.id_key in r]
+    sub_rows = {r[spec.id_key]: r for r in sub_list}
+    # A row submitted twice is wrong even if one copy matches gold, so it can't hide behind the dict.
+    counts = Counter(r[spec.id_key] for r in sub_list)
+    duplicates = sorted((i for i, n in counts.items() if n > 1), key=_sort_key)
+    missing = sorted(set(gold_rows) - set(sub_rows), key=_sort_key)
+    extra = sorted(set(sub_rows) - set(gold_rows), key=_sort_key)
+    mismatches = [
+        {"id": row_id, "key": key, "submitted": sub_rows[row_id].get(key), "gold": gold_rows[row_id].get(key)}
+        for row_id in sorted(set(gold_rows) & set(sub_rows), key=_sort_key)
+        for key in _values_match(sub_rows[row_id], gold_rows[row_id], spec.value_keys)
+    ]
+    return len(gold_rows), len(sub_rows), missing, extra, duplicates, mismatches
 
 
 def grade_surveillance(submission: dict[str, Any], gold: dict[str, Any]) -> QuestionGrade:
@@ -300,12 +319,13 @@ def submission_from_gold(
     Documents the submission<->gold shape in code; it is what the committed worked examples
     (:mod:`oag_semantic.examples`) are built from. An implementation returning exactly this scores 100%.
     """
-    rows = [
-        {k: r.get(k) for k in (spec.id_key, *spec.value_keys)} for r in gold.get(spec.set_key, [])
-    ]
+    key_values = {
+        s.set_key: [{k: r.get(k) for k in (s.id_key, *s.value_keys)} for r in gold.get(s.set_key, [])]
+        for s in spec.sets()
+    }
     return {
         "question_id": question_id,
         "answer": gold.get("answer", ""),
-        "key_values": {spec.set_key: rows},
+        "key_values": key_values,
         "behavior": behavior,
     }

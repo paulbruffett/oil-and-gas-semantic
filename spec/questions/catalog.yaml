@@ -143,5 +143,10 @@ themes:
           set_key: by_field
           id_key: field_id
           value_keys: [oil_curr, gas_curr, water_curr, oil_prior, oil_delta, oil_contribution_pct]
+          # The question also asks "by operator", so that set is graded too (ADR 0038).
+          also:
+            - set_key: by_operator
+              id_key: operator
+              value_keys: [oil_curr, gas_curr, water_curr, oil_prior, oil_delta, oil_contribution_pct]
         text: >-
           Oil/gas/water by field and operator this month vs last -- who are the biggest movers?
