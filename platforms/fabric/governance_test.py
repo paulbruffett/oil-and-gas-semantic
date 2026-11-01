@@ -12,8 +12,13 @@ Checks, each printed ALLOWED or DENIED with the reason:
   dax:<theme>       the agent's six governed DAX queries (fabric.THEME_QUERIES) via executeQueries
   warehouse:<table> a direct TDS SELECT on canonical.well and semantic.well
   onelake           listing the staging Lakehouse's Files over OneLake
-  ontology_mcp      the ontology's MCP endpoint (initialize + list_ontology_entities)
-  data_agent_mcp    the data agent's MCP endpoint (initialize + tools/list)
+  ontology_mcp      the ontology's MCP endpoint (initialize + list_ontology_entities: schema only)
+  ontology_data     a data question through ask_ontology ("how many wells?"; the answer is 18)
+  data_agent_mcp    the data agent's MCP endpoint (initialize + tools/list: no data)
+  data_agent_data   the same data question asked of the data agent
+
+A data check is ALLOWED only if the answer contains the true count (18) as a number; otherwise it's
+DENIED, and the answer text is shown either way.
 
 The service principal's credentials are read from an env file (default ~/.config/oag/fabric-sp.env,
 setting AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_CERTIFICATE_PATH) into a child process only, so
@@ -26,6 +31,7 @@ Env: FABRIC_WORKSPACE_ID, FABRIC_SQL_ENDPOINT, FABRIC_LAKEHOUSE_ID; OAG_SP_ENV (
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -74,6 +80,27 @@ def run_checks() -> list[tuple[str, str, str]]:
     record("onelake", onelake)
     record("ontology_mcp", lambda: f"{len(Ontology(os.environ['FABRIC_ONTOLOGY_ID']).call('list_ontology_entities', {}))} chars of entities")
     record("data_agent_mcp", lambda: f"tools: {[t['name'] for t in data_agent(os.environ['FABRIC_DATA_AGENT_ID']).tools()]}")
+
+    question = "How many wells are there in total? Answer with one markdown table with a single column n."
+
+    def data_check(name, ask):
+        try:
+            text = ask()
+        except BaseException as e:  # FabricError subclasses SystemExit
+            results.append((name, "DENIED", " ".join(str(e).split())[:220]))
+            return
+        found = re.search(r"(?<![\d.])18(?![\d.])", text) is not None
+        results.append((name, "ALLOWED" if found else "DENIED", " ".join(text.split())[:220]))
+
+    data_check("ontology_data", lambda: Ontology(os.environ["FABRIC_ONTOLOGY_ID"]).ask(question)[0])
+
+    def ask_agent():
+        agent = data_agent(os.environ["FABRIC_DATA_AGENT_ID"])
+        tool = agent.tools()[0]
+        arg = next(iter(tool["inputSchema"].get("properties", {})), "userQuestion")
+        return agent.call(tool["name"], {arg: question})
+
+    data_check("data_agent_data", ask_agent)
     return results
 
 

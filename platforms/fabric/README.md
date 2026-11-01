@@ -226,7 +226,7 @@ field and operator", ADR 0038); the committed submissions pass both.
 ## Governance
 
 Tested on 2026-11-01 with `governance_test.py`, the Fabric counterpart of Snowflake's role-isolation
-test. Two identities run the same 11 checks: the **analyst** (your own `az login`, workspace Admin) and
+test. Two identities run the same 13 checks: the **analyst** (your own `az login`, workspace Admin) and
 the **agent**, a service principal with certificate auth. The SP's credentials are read from a local env
 file into a child process only, never into the repo.
 
@@ -242,18 +242,20 @@ file into a child process only, never into the repo.
 | 6 | shareable cloud connection `oag-reference-warehouse-fixed-identity` (credential: WorkspaceIdentity, SSO off), **bound to `oag_reference_model`** | turns off Direct Lake SSO, which `executeQueries` doesn't support for service principals |
 
 Grant 6 changes how the model reads data for everyone: it now reads the Warehouse as the workspace
-identity, not as the caller. `verify_semantic.py` still matches 7/7 for the analyst after the change.
-(Not checked: whether a later `deploy.py` re-deploy of the model keeps the binding.)
+identity, not as the caller (ADR 0039). `verify_semantic.py` still matches 7/7 for the analyst after the
+change. (Not checked: whether a later `deploy.py` re-deploy of the model keeps the binding.)
 
 ### Results (final state, all six grants in place)
 
 | Check | Analyst | Agent SP |
 |---|---|---|
-| six governed DAX queries (`executeQueries`) | ALLOWED | **DENIED** (`PowerBIEntityNotFound`: "cannot query the dataset … not found or you do not have the required permissions") |
+| six governed DAX queries (`executeQueries`) | ALLOWED | **ALLOWED**; `verify_semantic.py` run as the SP matches gold 7/7 |
 | `SELECT` on `canonical.well`, `semantic.well` over TDS | ALLOWED | **DENIED** ("SELECT permission … was denied") |
 | OneLake: list the staging Lakehouse's files | ALLOWED | DENIED (Forbidden) |
-| ontology MCP (`list_ontology_entities`) | ALLOWED | **ALLOWED** |
-| data agent MCP (`tools/list`) | ALLOWED | **ALLOWED** |
+| ontology MCP (`list_ontology_entities`, schema only) | ALLOWED | ALLOWED |
+| ontology data (`ask_ontology`: "how many wells?") | ALLOWED (18) | **DENIED**: "access to the backing warehouse table is denied" |
+| data agent MCP (`tools/list`) | ALLOWED | ALLOWED |
+| data agent data (same question) | ALLOWED (18) | **ALLOWED** (18) |
 
 How the SP's results moved as grants were added:
 
@@ -263,7 +265,8 @@ How the SP's results moved as grants were added:
 | 1–2 (item-level Read + Build only) | denied: "workspace … cannot be found" | denied | denied |
 | 1–3 (+ Viewer) | denied: dataset "not found or no permission" | **allowed** (18 rows) | **allowed** |
 | 1–4 (+ DENY) | denied | denied | allowed |
-| 1–6 (+ fixed-identity connection) | **still denied**, after waiting 10+ minutes | denied | allowed |
+| 1–6 (+ fixed-identity connection), first runs | still denied for 10+ minutes | denied | allowed |
+| 1–6, after a capacity pause and resume | **allowed, 7/7 gold** | denied | schema: allowed; ontology data: denied; data-agent data: allowed |
 
 ### Findings
 
@@ -275,31 +278,35 @@ How the SP's results moved as grants were added:
   table over SQL. T-SQL `DENY` on the schemas takes that back, and it held.
 - **Assigning Viewer quietly replaced the group's Build grant with Read.** The model's permission list
   showed `Group Read` after the role assignment; Read + Build had to be re-granted.
-- **Direct Lake SSO blocks service principals, and turning it off wasn't enough here.** Microsoft's
+- **A fixed-identity connection is Fabric's owner's-rights equivalent, and it works.** Microsoft's
   `executeQueries` docs say service principals aren't supported on models with SSO, which Direct Lake
-  uses by default. Binding the model to a fixed-identity connection turned SSO off (the model reports
-  `isEffectiveIdentityRequired: false`), but the SP was still refused, with Read + Build and Viewer in
-  place. I didn't find the cause. Untested candidates: Build that reaches a service principal through
-  group membership isn't honored, or `executeQueries` doesn't serve service principals on Direct Lake
-  models. A workspace **Contributor** role grants Build directly and would separate the two, but it also
-  allows writing to the workspace.
-- **So there's no owner's-rights equivalent to show yet.** The fixed-identity connection is Fabric's
-  closest analogue to Snowflake's owner's-rights functions, but this test couldn't show it working for a
-  service principal. The governed-tool agent can't run as a narrow identity on Fabric today; it runs as
-  a user.
+  uses by default. Binding the model to a connection that reads as the workspace identity turns SSO off
+  (the model reports `isEffectiveIdentityRequired: false`). After that, the SP ran all six governed DAX
+  queries and matched gold 7/7, while its direct Warehouse and OneLake reads stayed refused (ADR 0039).
+- **The change took a long time to take effect.** For more than 10 minutes after binding and
+  re-granting Build, the SP was still refused. It worked on the next run, after the capacity had been
+  paused and resumed. I can't tell whether the wait or the restart did it.
+- **The boundary is the model, not the governed queries.** Build lets the SP run any DAX on the model,
+  and the data agent, which reads the same model, answered a data question for the SP. Snowflake's
+  boundary is per function: the agent role can call the six UDFs and nothing else.
+- **The ontology still reads as the caller.** `ask_ontology` refused the SP's data question because its
+  read of the Warehouse table was denied. So under this posture the custom agent's `resolve_field`
+  (ontology MCP) can't run as the SP, though the governed DAX can.
 - **The MCP endpoints accept the service principal**, contrary to the ontology MCP docs ("you can't
-  currently use Service Principal"). Both answered as soon as the SP had the Viewer role.
+  currently use Service Principal"). Both answered as soon as the SP had the Viewer role. What they
+  return depends on whose identity reads the data: the ontology's reads were denied, and the data
+  agent's went through the fixed-identity model.
 - **`mssql-python` picks up the SP's env vars.** `ActiveDirectoryDefault` signed in as the SP, not as the
   `az login` user.
 
-Not built: RLS/OLS roles on the semantic model (the SP couldn't query the model, so there was nothing to
-filter), Warehouse row/column security, dynamic data masking, and Key Vault.
+Not built: RLS/OLS roles on the semantic model (with a fixed identity, model RLS is what would scope rows
+per caller), Warehouse row/column security, dynamic data masking, and Key Vault.
 
 | Area | This build |
 |---|---|
 | Workspace access | analyst: Admin. Agent group: Viewer. Workspace identity: Viewer. |
 | Warehouse | analyst reads everything; the agent is denied by schema-level T-SQL `DENY` |
-| Semantic model | Direct Lake through a fixed-identity connection (workspace identity); agent group holds Read + Build but still can't run DAX |
+| Semantic model | Direct Lake through a fixed-identity connection (workspace identity); the agent group holds Read + Build and runs the governed DAX |
 | Model (LLM) | Azure RBAC on the Foundry resource: the user holds "Cognitive Services OpenAI User"; no keys |
 | Secrets | none in the repo; endpoints and IDs come from the environment; the SP's certificate stays in a local env file |
 
