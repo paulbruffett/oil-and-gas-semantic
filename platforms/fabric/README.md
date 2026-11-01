@@ -220,9 +220,8 @@ foundation's gold check, with no Fabric or Foundry access needed:
 uv run python platforms/fabric/agent/grade_submissions.py   # from the repo root; prints 6/6
 ```
 
-The gold check grades `by_field` only for the rollup question (the catalog's grading block). The
-question also asks "by operator", which the agent answers (`by_operator` in its submission) and
-`test_local.py` checks against gold separately; whether the catalog should grade it too is open.
+For the rollup question the gold check grades both `by_field` and `by_operator` (the question asks "by
+field and operator", ADR 0038); the committed submissions pass both.
 
 ## Governance
 

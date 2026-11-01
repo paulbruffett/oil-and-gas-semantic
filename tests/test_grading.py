@@ -205,6 +205,13 @@ def test_specs_are_catalog_derived_and_match_the_pinned_shapes():
             "by_field",
             "field_id",
             ("oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"),
+            also=(
+                GradingSpec(
+                    "by_operator",
+                    "operator",
+                    ("oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"),
+                ),
+            ),
         ),
     }
     assert SPECS == pinned
@@ -246,3 +253,21 @@ def test_report_passes_only_when_everything_was_graded_and_correct(dataset_dir, 
     assert not nothing.passed
     del subs[SURVEILLANCE_QUESTION_ID]
     assert not score_submissions(subs, dataset_dir).passed
+
+
+def test_rollup_also_grades_by_operator(dataset_dir, build_oracle_submissions):
+    """The rollup question asks 'by field and operator', so a wrong or missing operator row fails it
+    (ADR 0038), and the failing ids name the set they came from."""
+    subs = build_oracle_submissions(dataset_dir)
+    rows = subs[ROLLUP_QUESTION_ID]["key_values"]["by_operator"]
+    assert rows, "the oracle submission carries by_operator"
+    rows[0]["gas_curr"] += 1000.0
+    dropped = rows.pop()
+    grade = next(g for g in score_submissions(subs, dataset_dir).grades if g.question_id == ROLLUP_QUESTION_ID)
+    assert not grade.correct
+    assert grade.missing_ids == [f"by_operator:{dropped['operator']}"]
+    assert grade.value_mismatches[0]["id"] == f"by_operator:{rows[0]['operator']}"
+
+    del subs[ROLLUP_QUESTION_ID]["key_values"]["by_operator"]
+    grade = next(g for g in score_submissions(subs, dataset_dir).grades if g.question_id == ROLLUP_QUESTION_ID)
+    assert not grade.correct and all(i.startswith("by_operator:") for i in grade.missing_ids)

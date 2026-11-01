@@ -11,7 +11,8 @@ platform reference build (`platforms/<stack>/`) consumes them directly.
   (the join key to a co-generated gold answer), a `tier` (`straight`), an `expected_behavior`
   (`answered`), and a **`grading` block** (#48 / ADR 0025) — the exact shape the gold check compares:
   `key_values` carries a `set_key` list of rows keyed by `id_key`, compared on `value_keys`
-  (set-equality on ids + per-value relative tolerance). The gold check (`oag_semantic.grading`) derives
+  (set-equality on ids + per-value relative tolerance). A block may list further sets under `also:`
+  that must match too (the rollup question grades `by_operator` beside `by_field`, ADR 0038). The gold check (`oag_semantic.grading`) derives
   its specs from these blocks, so this artifact and the check cannot diverge. `status: implemented`
   means the generator co-emits that theme's gold (all six themes today).
 - **`answer_submission.schema.json`** — JSON Schema (Draft 2020-12) for a single answer submission:

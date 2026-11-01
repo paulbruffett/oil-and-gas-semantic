@@ -45,6 +45,8 @@ class GradingShape:
     set_key: str
     id_key: str
     value_keys: tuple[str, ...]
+    # Further sets the same answer must also match (e.g. the rollup's by_operator beside by_field).
+    also: tuple["GradingShape", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,7 +105,10 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
         if g is None:
             return None
         return GradingShape(
-            set_key=g["set_key"], id_key=g["id_key"], value_keys=tuple(g["value_keys"])
+            set_key=g["set_key"],
+            id_key=g["id_key"],
+            value_keys=tuple(g["value_keys"]),
+            also=tuple(_grading(a) for a in g.get("also", [])),
         )
 
     def _question(q: dict) -> Question:
