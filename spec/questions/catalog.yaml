@@ -1,6 +1,7 @@
 # Use-case question catalog -- the base's agent-layer contract (ADR 0005, DESIGN.md §6.2/§6.4).
 #
-# This is a standalone, versioned base artifact: the six use-case themes, each with the question an
+# This is a standalone, versioned base artifact: the six use-case themes (plus the data-quality
+# scenario theme, ADR 0039), each with the question an
 # implementation must answer, keyed to the deterministic gold-answer id the generator emits. Every
 # platform reference build (platforms/<stack>/) answers these; this file depends on no use-case code.
 #
@@ -150,3 +151,28 @@ themes:
               value_keys: [oil_curr, gas_curr, water_curr, oil_prior, oil_delta, oil_contribution_pct]
         text: >-
           Oil/gas/water by field and operator this month vs last -- who are the biggest movers?
+
+  # Scenario theme (ADR 0039): not one of the six use cases. Its gold exists only on a dataset
+  # generated with the data-quality knob on, so on the reference dataset it is not applicable.
+  - id: data-quality
+    number: 7
+    hero: false
+    title: Data quality
+    status: scenario           # gold co-generated only when `data_quality` counts are > 0
+    kpis: [duplicate rows, late corrections, flatlines, unit errors]
+    osdu_entities: [Reported Volume]
+    questions:
+      - id: data-quality-findings
+        gold_id: data-quality-findings
+        gold_artifact: gold/data_quality.json
+        tier: straight
+        expected_behavior: answered
+        scenario: data_quality
+        example_config: configs/data-quality.yaml
+        grading:
+          set_key: findings
+          id_key: finding_id   # "<well_id>:<volume_date>:<defect>"
+          value_keys: [n_days, rows_removed, oil_volume_kept]
+        text: >-
+          Which daily well-volume records have data-quality problems (duplicates, late
+          corrections, stuck sensors, unit errors), and what does the cleaning policy do with each?

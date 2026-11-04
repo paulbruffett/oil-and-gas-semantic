@@ -61,6 +61,11 @@ class Question:
     text: str
     # None = not yet gradable (a planned theme hasn't landed); the gold check skips it.
     grading: GradingShape | None = None
+    # A scenario question (ADR 0039) names the config block that must be on for its gold to exist;
+    # on a dataset with that scenario off the question is not applicable (neither graded nor skipped).
+    scenario: str | None = None
+    # The dataset config its worked example documents (repo-relative); None = the shipped defaults.
+    example_config: str | None = None
 
 
 @dataclass(frozen=True)
@@ -71,7 +76,9 @@ class Theme:
     number: int
     title: str
     hero: bool
-    status: str  # "implemented" (gold co-generated) | "planned" (shell-half issue pending)
+    # "implemented" (gold co-generated) | "scenario" (gold only with a scenario knob on, ADR 0039)
+    # | "planned" (not built yet)
+    status: str
     kpis: tuple[str, ...]
     osdu_entities: tuple[str, ...]
     questions: tuple[Question, ...]
@@ -120,6 +127,8 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
             expected_behavior=q["expected_behavior"],
             text=q["text"],
             grading=_grading(q.get("grading")),
+            scenario=q.get("scenario"),
+            example_config=q.get("example_config"),
         )
 
     try:
@@ -185,3 +194,5 @@ WELLTEST_QUESTION_ID = question_id(4)
 WATCHLIST_QUESTION_ID = question_id(5)
 # The asset-rollups question (theme 6); imported by the gold + rollup compile (issue #8).
 ROLLUP_QUESTION_ID = question_id(6)
+# The data-quality findings question (scenario theme 7, ADR 0039); gold exists only with the knob on.
+DATA_QUALITY_QUESTION_ID = question_id(7)

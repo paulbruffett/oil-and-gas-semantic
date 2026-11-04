@@ -33,6 +33,7 @@ from oag_generator import (
     surveillance_window,
     watchlist_windows,
 )
+from oag_generator.data_quality import CLEAN_WELL_VOL_DAILY_SQL
 from oag_generator.gold import (
     _annualized_decline,
     assemble_rollup,
@@ -42,6 +43,24 @@ from oag_generator.gold import (
 from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 
 _AGG_SQL = {"sum": "SUM", "min": "MIN", "max": "MAX", "count": "COUNT", "average": "AVG"}
+
+
+def _register(con: duckdb.DuckDBPyConnection, table: str, paths: dict[str, Path]) -> None:
+    """Register a canonical table under the name its OSI semantic model binds.
+
+    WELL_VOL_DAILY is the exception (ADR 0039): the raw Parquet is registered as
+    ``well_vol_daily_raw`` and the governed ``well_vol_daily`` holds the cleaned rows (one row per
+    well-day, Corrected over Measured), so every measure reads the same rows the gold does. On a
+    dataset without data-quality defects that is every raw row, unchanged.
+    """
+    if table != schema.WELL_VOL_DAILY.key:
+        con.register(table, pq.read_table(paths[table]))
+        return
+    raw = f"{table}_raw"
+    con.register(raw, pq.read_table(paths[table]))
+    con.execute(CLEAN_WELL_VOL_DAILY_SQL.format(
+        table=table, raw=raw, corrected=schema.QUANTITY_CORRECTED
+    ))
 
 
 @dataclass(frozen=True)
@@ -96,7 +115,7 @@ def compute_surveillance(
     con = duckdb.connect()
     try:
         for model in (wvd_model, pvs_model, re_model, well_model):
-            con.register(model.table, pq.read_table(paths[model.table]))
+            _register(con, model.table, paths)
 
         # Forecast oil, joined forecast->well only through Well-kind reporting entities -- the same
         # constraints gold.py applies (QUANTITY_METHOD='Forecast', PRODUCT='Oil', KIND='Well'), so
@@ -225,7 +244,7 @@ def compute_deferment(
     con = duckdb.connect()
     try:
         for model in (dte_model, pvs_model, wvd_model):
-            con.register(model.table, pq.read_table(paths[model.table]))
+            _register(con, model.table, paths)
 
         # Deferred oil by cause: forecast oil per (reporting entity, date) x the event's downtime
         # fraction. LEFT JOIN so an event with no matching forecast still counts its hours/n_events
@@ -366,7 +385,7 @@ def compute_decline(
     con = duckdb.connect()
     try:
         for model in (wvd_model, pvs_model, re_model, well_model, field_model):
-            con.register(model.table, pq.read_table(paths[model.table]))
+            _register(con, model.table, paths)
 
         # WELL master (uwi + field per well) -- the small dimension table. Per-well cumulative is
         # derived from the monthly buckets below instead of a second GROUP BY over the hot
@@ -593,7 +612,7 @@ def compute_welltest(
     con = duckdb.connect()
     try:
         for model in (wt_model, wvd_model, paf_model, well_model, re_model):
-            con.register(model.table, pq.read_table(paths[model.table]))
+            _register(con, model.table, paths)
 
         # WELL master (uwi + field per well) -- the small dimension table.
         well_rows = con.execute(
@@ -784,7 +803,7 @@ def compute_rollup(dataset_dir: str | Path, layer: SemanticLayer | None = None) 
     con = duckdb.connect()
     try:
         for model in (wvd_model, well_model, field_model, facility_model):
-            con.register(model.table, pq.read_table(paths[model.table]))
+            _register(con, model.table, paths)
 
         # Per-well-attribute grain (field/operator/facility) with current + prior conditional sums of
         # each product; rolled up into the three groupings in Python, matching gold's per-row pass.
@@ -923,7 +942,7 @@ def compute_watchlist(dataset_dir: str | Path, layer: SemanticLayer | None = Non
     con = duckdb.connect()
     try:
         for model in (wvd_model, well_model):
-            con.register(model.table, pq.read_table(paths[model.table]))
+            _register(con, model.table, paths)
 
         # Per-well current-window oil/water/gas + fully-down-day count (HOURS_ON = 0), plus
         # baseline-window oil/gas -- the six inputs gold aggregates, computed here with conditional

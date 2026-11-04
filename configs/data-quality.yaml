@@ -1,0 +1,21 @@
+# Data-quality scenario config (ADR 0039): the reference config (configs/reference.yaml) with the
+# data-quality knob on. Every other value matches reference.yaml, so the clean truth underneath is the
+# reference dataset; only WELL_VOL_DAILY gains defects, and the KPI gold is computed on the cleaned
+# rows. This is NOT the reference dataset: its config_hash differs and no platform build loads it.
+# It is the substrate the data-quality-findings worked example documents.
+seed: 42
+start_date: "2024-01-01"
+end_date: "2025-03-31"
+n_fields: 3
+wells_per_field: 6
+operators: ["Equinor", "AkerBP", "Wintershall"]
+breakthrough:
+  fraction: 0.35
+decline:
+  faster_gap_threshold: 0.05
+data_quality:
+  duplicate_count: 3     # plus the pinned anchor duplicate on end_date
+  correction_count: 3
+  flatline_count: 2
+  flatline_days: 5
+  unit_error_count: 2

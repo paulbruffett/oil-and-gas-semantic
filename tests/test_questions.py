@@ -35,9 +35,13 @@ def schema():
 
 
 def test_catalog_covers_the_six_themes(catalog):
-    numbers = sorted(t.number for t in catalog.themes)
-    assert numbers == [1, 2, 3, 4, 5, 6]
+    use_cases = sorted(t.number for t in catalog.themes if t.status != "scenario")
+    assert use_cases == [1, 2, 3, 4, 5, 6]
     assert sum(1 for t in catalog.themes if t.hero) == 1  # exactly one hero (theme 1)
+    # Plus the data-quality scenario theme (ADR 0039): gold only with its knob on.
+    (scenario,) = [t for t in catalog.themes if t.status == "scenario"]
+    assert scenario.number == 7
+    assert all(q.scenario == "data_quality" and q.example_config for q in scenario.questions)
 
 
 def test_every_question_is_keyed_to_a_gold_id_and_a_known_behavior(catalog):

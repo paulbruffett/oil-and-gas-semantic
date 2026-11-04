@@ -251,14 +251,18 @@ def score_submissions(
     ``submissions`` maps question_id -> answer-submission dict. Gold is loaded per question from the
     dataset's ``gold/`` artifact named in the catalog. A question with no grading spec or no gold on
     disk is skipped; a question with gold but **no submission** grades incorrect, as does a
-    submission the published schema rejects.
+    submission the published schema rejects. A scenario question (ADR 0039) on a dataset generated
+    with its scenario off is not applicable: neither graded nor skipped.
     """
     catalog = catalog or load_catalog()
     dataset_dir = Path(dataset_dir)
     grades: list[QuestionGrade] = []
     skipped: list[str] = []
+    scenarios_on = _scenarios_on(dataset_dir)
 
     for q in catalog.questions():
+        if q.scenario is not None and q.scenario not in scenarios_on:
+            continue
         spec = spec_for(q)  # from the catalog being scored, not the default one
         gold_path = dataset_dir / q.gold_artifact
         if spec is None or not gold_path.exists():
@@ -276,6 +280,15 @@ def score_submissions(
         grades.append(grade_answer(submissions[q.id], gold, spec, q.expected_behavior))
 
     return ScoreReport(grades=grades, skipped=skipped)
+
+
+def _scenarios_on(dataset_dir: Path) -> set[str]:
+    """The scenario config blocks a dataset was generated with. A scenario block appears in
+    ``dataset.json``'s config only when it is on (ADR 0039); no manifest means none are on."""
+    manifest = dataset_dir / "dataset.json"
+    if not manifest.exists():
+        return set()
+    return set(json.loads(manifest.read_text()).get("config", {}))
 
 
 def _structural_failure(question_id: str, n_gold: int, note: str) -> QuestionGrade:
