@@ -348,6 +348,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0036 — Goal is three-platform reference builds, not an assistant contest; contest machinery removed (supersedes 0012–0016, 0020, 0026–0030; amends 0024, 0025, 0034)](docs/adr/0036-reference-builds-replace-contest.md)
 - [0037 — Fabric knowledge layer is a Fabric IQ ontology (preview), queried over its MCP endpoint](docs/adr/0037-fabric-knowledge-layer-iq-ontology.md)
 - [0038 — The rollup gold check also grades the by-operator set (amends 0025)](docs/adr/0038-rollup-gold-check-grades-by-operator.md)
+- [0039 — Fabric semantic model reads the Warehouse through a fixed identity, so a narrow agent can query it](docs/adr/0039-fabric-fixed-identity-semantic-model.md)
 
 ---
 
