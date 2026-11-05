@@ -226,9 +226,19 @@ field and operator", ADR 0038); the committed submissions pass both.
 ## Governance
 
 Tested on 2026-11-01 with `governance_test.py`, the Fabric counterpart of Snowflake's role-isolation
-test. Two identities run the same 13 checks: the **analyst** (your own `az login`, workspace Admin) and
+test. Two identities run the same checks: the **analyst** (your own `az login`, workspace Admin) and
 the **agent**, a service principal with certificate auth. The SP's credentials are read from a local env
-file into a child process only, never into the repo.
+file into a child process only, never into the repo, and that process first confirms its token is the
+SP's, so a fallback to your `az login` can't pass as the agent.
+
+Each check reports ALLOWED, DENIED (an authorization refusal), ERROR (any other failure, such as a
+timeout) or, for the data questions, WRONG (data came back but not the right count). The Warehouse
+checks cover one table in every schema. The script exits 1 unless the boundary below holds: the analyst
+allowed everywhere, the agent allowed on the six governed DAX queries and denied on every Warehouse
+table and OneLake. The ontology and data-agent checks are reported, not asserted.
+
+Grants 1–3, 5 and 6 below were made by hand (portal and REST) and aren't scripted yet; only grant 4 is
+in code (`sql/05_governance.sql`).
 
 ### Grants made for the test
 
@@ -237,7 +247,7 @@ file into a child process only, never into the repo.
 | 1 | Entra security group `oag-reference-agent`; its only member is the agent SP | the Power BI permissions API accepts users and groups, not service principals |
 | 2 | the group: **Read + Build** (`ReadExplore`) on `oag_reference_model` | the documented requirement for `executeQueries` |
 | 3 | the group: **Viewer** on the `oag-reference` workspace | Power BI's REST API serves a service principal only in a workspace where it has a role |
-| 4 | `DENY SELECT` on Warehouse schemas `canonical`, `semantic`, `knowledge` for the group (`sql/05_governance.sql`) | Viewer alone lets the SP read every Warehouse table over SQL |
+| 4 | `DENY SELECT` on Warehouse schemas `canonical`, `semantic`, `knowledge` (and `dbo`, added after the test run) for the group (`sql/05_governance.sql`) | Viewer alone lets the SP read every Warehouse table over SQL |
 | 5 | a **workspace identity** for `oag-reference`, with the **Viewer** role | the fixed identity the model reads the Warehouse as |
 | 6 | shareable cloud connection `oag-reference-warehouse-fixed-identity` (credential: WorkspaceIdentity, SSO off), **bound to `oag_reference_model`** | turns off Direct Lake SSO, which `executeQueries` doesn't support for service principals |
 

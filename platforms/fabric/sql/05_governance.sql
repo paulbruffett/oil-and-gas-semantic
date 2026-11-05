@@ -6,12 +6,17 @@
 -- role, so the group holds the workspace Viewer role. Viewer can also read every Warehouse table over
 -- SQL; these DENYs take that back, schema by schema, so the agent can reach the data only through the
 -- semantic model. Run as a workspace Admin.
+--
+-- The DENY is per schema, so a schema added later is readable by the agent until it gets a DENY here too.
+-- governance_test.py checks one table in every schema, so a missing DENY fails the test.
 
 DENY SELECT ON SCHEMA::canonical TO [oag-reference-agent];
 GO
 DENY SELECT ON SCHEMA::semantic TO [oag-reference-agent];
 GO
 DENY SELECT ON SCHEMA::knowledge TO [oag-reference-agent];
+GO
+DENY SELECT ON SCHEMA::dbo TO [oag-reference-agent];
 GO
 SELECT pr.name AS principal, pe.permission_name, pe.state_desc, s.name AS [schema]
 FROM sys.database_permissions pe
