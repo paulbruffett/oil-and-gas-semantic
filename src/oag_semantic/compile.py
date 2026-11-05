@@ -48,7 +48,7 @@ _AGG_SQL = {"sum": "SUM", "min": "MIN", "max": "MAX", "count": "COUNT", "average
 def _register(con: duckdb.DuckDBPyConnection, table: str, paths: dict[str, Path]) -> None:
     """Register a canonical table under the name its OSI semantic model binds.
 
-    WELL_VOL_DAILY is the exception (ADR 0039): the raw Parquet is registered as
+    WELL_VOL_DAILY is the exception (ADR 0040): the raw Parquet is registered as
     ``well_vol_daily_raw`` and the governed ``well_vol_daily`` holds the cleaned rows (one row per
     well-day, Corrected over Measured), so every measure reads the same rows the gold does. On a
     dataset without data-quality defects that is every raw row, unchanged.

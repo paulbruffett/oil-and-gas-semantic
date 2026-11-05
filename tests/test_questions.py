@@ -38,7 +38,7 @@ def test_catalog_covers_the_six_themes(catalog):
     use_cases = sorted(t.number for t in catalog.themes if t.status != "scenario")
     assert use_cases == [1, 2, 3, 4, 5, 6]
     assert sum(1 for t in catalog.themes if t.hero) == 1  # exactly one hero (theme 1)
-    # Plus the data-quality scenario theme (ADR 0039): gold only with its knob on.
+    # Plus the data-quality scenario theme (ADR 0040): gold only with its knob on.
     (scenario,) = [t for t in catalog.themes if t.status == "scenario"]
     assert scenario.number == 7
     assert all(q.scenario == "data_quality" and q.example_config for q in scenario.questions)
@@ -233,3 +233,19 @@ def test_behavior_defaults_to_answered_and_round_trips(schema):
     d = clarify.to_dict()
     assert d["behavior"] == "clarification-requested"
     jsonschema.validate(d, schema)
+
+
+def test_scenario_must_be_a_block_dropped_when_off(tmp_path):
+    """Only a block left out of the config when off can gate a question (ADR 0040): the gold check
+    reads 'block present in dataset.json' as 'scenario on', which isn't true of always-present blocks."""
+    import pytest
+    import yaml
+
+    from oag_generator.questions import CATALOG_PATH, load_catalog
+
+    raw = yaml.safe_load(CATALOG_PATH.read_text())
+    raw["themes"][-1]["questions"][0]["scenario"] = "breakthrough"
+    bad = tmp_path / "catalog.yaml"
+    bad.write_text(yaml.safe_dump(raw))
+    with pytest.raises(RuntimeError, match="breakthrough"):
+        load_catalog(bad)

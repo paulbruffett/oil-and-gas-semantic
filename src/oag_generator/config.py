@@ -165,7 +165,7 @@ DEFAULT_BREAKTHROUGH = {
     "anchor_well_id": 2,             # pinned-member well (structural WELL_ID; distinct from the trap)
 }
 
-# Data-quality scenario knob (ADR 0039). Injects a small, counted number of realistic defects into
+# Data-quality scenario knob (ADR 0040). Injects a small, counted number of realistic defects into
 # WELL_VOL_DAILY so answering needs judgment, not just arithmetic: duplicate well-day rows, late
 # corrections (a 'Corrected' row superseding the 'Measured' one), stuck-sensor flatlines and oil
 # reported in m3 instead of bbl. Every count 0 = scenario off: the block is then left out of the
@@ -185,6 +185,11 @@ DEFAULT_DATA_QUALITY = {
 }
 
 DATA_QUALITY_COUNT_KEYS = ("duplicate_count", "correction_count", "flatline_count", "unit_error_count")
+
+# Scenario blocks: config blocks left out of the canonical config (and so of dataset.json) when off, so
+# a block's presence in a dataset's config means its scenario is on. Only these can gate a catalog
+# question (`scenario:`); always-present blocks such as `breakthrough` can't (ADR 0040).
+SCENARIO_BLOCKS = ("data_quality",)
 
 DEFAULT_OPERATORS = ["Equinor", "AkerBP", "Wintershall"]
 
@@ -363,7 +368,7 @@ class Config:
         # Decline materiality band (ADR 0033): non-negative; 0.0 = ADR 0018's raw comparison.
         if self.decline["faster_gap_threshold"] < 0.0:
             raise ValueError("decline.faster_gap_threshold must be >= 0")
-        # Data-quality knob (ADR 0039): non-negative integer counts; a sane correction-bias band (a
+        # Data-quality knob (ADR 0040): non-negative integer counts; a sane correction-bias band (a
         # zero bias would make the superseded row identical to the correction); a flatline of at
         # least two days (one day can't be "stuck"); a real anchor well when the knob is on.
         dq = self.data_quality
@@ -398,13 +403,13 @@ class Config:
 
     @property
     def data_quality_enabled(self) -> bool:
-        """True when the data-quality knob injects anything (any defect count > 0, ADR 0039)."""
+        """True when the data-quality knob injects anything (any defect count > 0, ADR 0040)."""
         return any(self.data_quality[key] > 0 for key in DATA_QUALITY_COUNT_KEYS)
 
     def to_canonical_dict(self) -> dict[str, Any]:
         """Deterministic, hashable view of the resolved config.
 
-        The data-quality block appears only when the knob is on (ADR 0039). Off, it changes no output,
+        The data-quality block appears only when the knob is on (ADR 0040). Off, it changes no output,
         so leaving it out keeps every existing dataset's config_hash (the reference dataset's
         12a110eecfe2 among them) and its dataset.json unchanged.
         """

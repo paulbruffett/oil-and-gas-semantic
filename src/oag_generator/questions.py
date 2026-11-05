@@ -18,6 +18,8 @@ from pathlib import Path
 
 import yaml
 
+from oag_generator.config import SCENARIO_BLOCKS
+
 
 def _spec_file(name: str) -> Path:
     """Locate a versioned spec artifact.
@@ -61,7 +63,7 @@ class Question:
     text: str
     # None = not yet gradable (a planned theme hasn't landed); the gold check skips it.
     grading: GradingShape | None = None
-    # A scenario question (ADR 0039) names the config block that must be on for its gold to exist;
+    # A scenario question (ADR 0040) names the config block that must be on for its gold to exist;
     # on a dataset with that scenario off the question is not applicable (neither graded nor skipped).
     scenario: str | None = None
     # The dataset config its worked example documents (repo-relative); None = the shipped defaults.
@@ -76,7 +78,7 @@ class Theme:
     number: int
     title: str
     hero: bool
-    # "implemented" (gold co-generated) | "scenario" (gold only with a scenario knob on, ADR 0039)
+    # "implemented" (gold co-generated) | "scenario" (gold only with a scenario knob on, ADR 0040)
     # | "planned" (not built yet)
     status: str
     kpis: tuple[str, ...]
@@ -119,6 +121,11 @@ def load_catalog(path: str | Path = CATALOG_PATH) -> QuestionCatalog:
         )
 
     def _question(q: dict) -> Question:
+        if q.get("scenario") not in (None, *SCENARIO_BLOCKS):
+            raise RuntimeError(
+                f"question catalog {path}: {q['id']!r} has scenario {q['scenario']!r}; "
+                f"only {SCENARIO_BLOCKS} are dropped from the config when off, so only they can gate a question"
+            )
         return Question(
             id=q["id"],
             gold_id=q["gold_id"],
@@ -194,5 +201,5 @@ WELLTEST_QUESTION_ID = question_id(4)
 WATCHLIST_QUESTION_ID = question_id(5)
 # The asset-rollups question (theme 6); imported by the gold + rollup compile (issue #8).
 ROLLUP_QUESTION_ID = question_id(6)
-# The data-quality findings question (scenario theme 7, ADR 0039); gold exists only with the knob on.
+# The data-quality findings question (scenario theme 7, ADR 0040); gold exists only with the knob on.
 DATA_QUALITY_QUESTION_ID = question_id(7)

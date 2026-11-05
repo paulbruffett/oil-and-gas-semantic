@@ -21,7 +21,7 @@ from oag_semantic.grading import SPECS, submission_from_gold
 @pytest.fixture(scope="session")
 def example_datasets(tmp_path_factory):
     """One generated dataset per config the examples document: the *shipped defaults* (key None)
-    and each scenario question's ``example_config`` (ADR 0039)."""
+    and each scenario question's ``example_config`` (ADR 0040)."""
     from oag_generator import generate_dataset
 
     out = {}

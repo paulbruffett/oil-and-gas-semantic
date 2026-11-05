@@ -489,7 +489,7 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
     gold_dir.mkdir(parents=True, exist_ok=True)
 
     cols = _build_tables(cfg)
-    # Data-quality knob (ADR 0039): defects go into the *written* WELL_VOL_DAILY after every table is
+    # Data-quality knob (ADR 0040): defects go into the *written* WELL_VOL_DAILY after every table is
     # built (its own rng stream, so nothing else moves); every KPI gold is computed on the cleaned
     # rows. With the knob off there is nothing to inject and cleaning returns the table unchanged.
     wvd_key = schema.WELL_VOL_DAILY.key

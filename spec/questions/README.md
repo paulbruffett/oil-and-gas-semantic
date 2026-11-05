@@ -15,7 +15,7 @@ platform reference build (`platforms/<stack>/`) consumes them directly.
   that must match too (the rollup question grades `by_operator` beside `by_field`, ADR 0038). The gold check (`oag_semantic.grading`) derives
   its specs from these blocks, so this artifact and the check cannot diverge. `status: implemented`
   means the generator co-emits that theme's gold (all six themes today). `status: scenario` (theme 7,
-  data quality, ADR 0039) means gold exists only on a dataset generated with that scenario knob on;
+  data quality, ADR 0040) means gold exists only on a dataset generated with that scenario knob on;
   its question names the knob under `scenario:` and its example's dataset under `example_config:`.
 - **`answer_submission.schema.json`** — JSON Schema (Draft 2020-12) for a single answer submission:
   natural-language `answer` + `key_values` (checked against gold) + optional `provenance` + optional
@@ -33,7 +33,7 @@ platform reference build (`platforms/<stack>/`) consumes them directly.
 Every question with gold is checked: an unanswered one grades *incorrect* (`not submitted`), as does
 one the schema rejects (`schema-invalid`). A question is *skipped* only when it has no `grading` block
 or no gold artifact. A scenario question on a dataset with its scenario off is *not applicable*: it is
-neither graded nor skipped, so the reference dataset still passes 6/6 (ADR 0039).
+neither graded nor skipped, so the reference dataset still passes 6/6 (ADR 0040).
 
 ## No drift between questions and gold
 

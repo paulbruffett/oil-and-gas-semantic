@@ -1,4 +1,4 @@
-"""Data-quality scenario knob: defect injection, cleaning rules and findings gold (ADR 0039).
+"""Data-quality scenario knob: defect injection, cleaning rules and findings gold (ADR 0040).
 
 When the ``data_quality`` config block has any count above zero, the generator injects a small number
 of realistic defects into WELL_VOL_DAILY after every table is built, from a dedicated rng stream, so

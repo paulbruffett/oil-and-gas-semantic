@@ -1,4 +1,4 @@
-# Data-quality scenario config (ADR 0039): the reference config (configs/reference.yaml) with the
+# Data-quality scenario config (ADR 0040): the reference config (configs/reference.yaml) with the
 # data-quality knob on. Every other value matches reference.yaml, so the clean truth underneath is the
 # reference dataset; only WELL_VOL_DAILY gains defects, and the KPI gold is computed on the cleaned
 # rows. This is NOT the reference dataset: its config_hash differs and no platform build loads it.

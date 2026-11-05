@@ -58,6 +58,8 @@ def close(answer, gold) -> bool:
 n_exact = n_cases = 0
 for theme in catalog["themes"]:
     for q in theme["questions"]:
+        if q.get("scenario") and not (dataset_dir / q["gold_artifact"]).exists():
+            continue  # a scenario question (ADR 0040) with its knob off on this dataset: not applicable
         g = q["grading"]
         gold = {str(r[g["id_key"]]): r for r in json.loads((dataset_dir / q["gold_artifact"]).read_text())[g["set_key"]]}
         cols = [g["id_key"], *g["value_keys"]]

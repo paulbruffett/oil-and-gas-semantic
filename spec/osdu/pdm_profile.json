@@ -53,7 +53,7 @@
         {"name": "VOLUME_METHOD", "type": "string"}
       ],
       "reference_values": {"VOLUME_METHOD": ["Measured", "Corrected"]},
-      "_note": "'Corrected' rows appear only with the data-quality scenario knob on (ADR 0039): a late restatement that supersedes the 'Measured' row for the same well-day."
+      "_note": "'Corrected' rows appear only with the data-quality scenario knob on (ADR 0040): a late restatement that supersedes the 'Measured' row for the same well-day."
     },
     "product_volume_summary": {
       "osdu_table": "PRODUCT_VOLUME_SUMMARY",

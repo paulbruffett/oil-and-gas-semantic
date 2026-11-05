@@ -3,7 +3,7 @@
 The checked ``key_values`` shape is declared in the catalog's ``grading`` blocks; these examples make
 it concrete -- ``spec/questions/examples/<question_id>.json`` is exactly what a perfect
 implementation would submit for the **default-config** dataset (or, for a scenario question, the
-dataset its catalog ``example_config`` names, ADR 0039). Every platform build reads the same
+dataset its catalog ``example_config`` names, ADR 0040). Every platform build reads the same
 machine-checkable shape. The generator is byte-stable, so the examples are deterministic and
 ``tests/test_question_examples.py`` pins them to freshly generated gold.
 
@@ -33,7 +33,7 @@ def write_examples(
 
     ``example_config`` names the config ``dataset_dir`` was generated from, as the catalog spells it
     (None = the shipped defaults); only questions whose ``example_config`` matches are written, so a
-    scenario dataset (ADR 0039) never overwrites the default-config examples. Returns the written
+    scenario dataset (ADR 0040) never overwrites the default-config examples. Returns the written
     paths. Uses the same catalog walk + shape contract as the gold check
     (:func:`oag_semantic.grading.submission_from_gold`), so an example can never disagree with it.
     """

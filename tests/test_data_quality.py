@@ -1,4 +1,4 @@
-"""Engineering tests for the data-quality scenario knob (ADR 0039).
+"""Engineering tests for the data-quality scenario knob (ADR 0040).
 
 Driven through the public seams: ``generate_dataset`` output (Parquet + gold + dataset.json), the
 reference compile, and the gold check. Off, the knob must leave every dataset byte-identical; on, the
@@ -93,7 +93,7 @@ def dq_dataset(tmp_path_factory) -> Path:
 
 def test_knob_off_is_byte_identical(tmp_path, small_config):
     """An all-zero data_quality block, even with non-default parameters, writes exactly the files the
-    config without the block writes, under the same config_hash (ADR 0039)."""
+    config without the block writes, under the same config_hash (ADR 0040)."""
     off = {**small_config, "data_quality": {"flatline_days": 9, "anchor_well_id": 99}}
     a = generate_dataset(small_config, tmp_path / "a")
     b = generate_dataset(off, tmp_path / "b")
