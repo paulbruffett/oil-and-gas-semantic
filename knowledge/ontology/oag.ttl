@@ -1,0 +1,68 @@
+# OAG ontology (TBox) -- the RDF/OWL track of the knowledge layer (ADR 0041).
+#
+# Classes and properties here are the formal meaning the agent reasons with. Instances (the ABox) are
+# not written by hand: mapping.r2rml.ttl maps them from the canonical tables, and oag_semantic.ontology
+# adds the SKOS labels from knowledge/vocabulary.yaml. Reasoning is OWL 2 RL.
+#
+# The namespace is a placeholder (example.org); see ADR 0041.
+
+@prefix oag:  <https://example.org/oag/ontology#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<https://example.org/oag/ontology> a owl:Ontology ;
+    rdfs:label "Oil and gas semantic reference ontology" .
+
+# --- Classes ---------------------------------------------------------------------------------------
+
+oag:Asset a owl:Class ;
+    rdfs:label "Asset" ;
+    skos:definition "Anything in the production hierarchy that volumes roll up through." .
+
+oag:Well a owl:Class ;
+    rdfs:subClassOf oag:Asset ;
+    rdfs:label "Well" ;
+    skos:definition "A single producing entity; geolocated." .
+
+oag:Field a owl:Class ;
+    rdfs:subClassOf oag:Asset ;
+    rdfs:label "Field" ;
+    skos:definition "A producing asset grouping wells and reservoirs." .
+
+# A business term (e.g. "below expected") is a SKOS concept whose definition is data: the governed
+# metric it denotes, a comparison and a threshold. The agent evaluates it through the semantic layer.
+oag:BusinessTerm a owl:Class ;
+    rdfs:subClassOf skos:Concept ;
+    rdfs:label "Business term" .
+
+# --- Relationships ---------------------------------------------------------------------------------
+
+oag:partOf a owl:ObjectProperty, owl:TransitiveProperty ;
+    rdfs:label "part of" ;
+    rdfs:domain oag:Asset ;
+    rdfs:range oag:Asset ;
+    skos:definition "Roll-up in the production hierarchy; transitive." .
+
+oag:hasPart a owl:ObjectProperty ;
+    owl:inverseOf oag:partOf ;
+    rdfs:label "has part" .
+
+oag:inField a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:subPropertyOf oag:partOf ;
+    rdfs:label "in field" ;
+    rdfs:domain oag:Well ;
+    rdfs:range oag:Field .
+
+# --- Attributes ------------------------------------------------------------------------------------
+
+oag:wellId a owl:DatatypeProperty ; rdfs:domain oag:Well ; rdfs:range xsd:integer .
+oag:fieldId a owl:DatatypeProperty ; rdfs:domain oag:Field ; rdfs:range xsd:integer .
+oag:uwi a owl:DatatypeProperty ; rdfs:domain oag:Well ; rdfs:range xsd:string ;
+    rdfs:label "unique well identifier" .
+
+oag:metric a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string ;
+    skos:definition "Name of the governed metric (semantic layer) the term denotes." .
+oag:comparison a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string .
+oag:thresholdRef a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string .

@@ -13,3 +13,17 @@ Public capability (exercised by `tests/test_lpg.py`):
 - resolve a Field name (incl. synonyms, case-insensitive) → `FIELD_ID`
 - traverse the `well → field` rollup in both directions
 - resolve a business phrase → the concept/metric it denotes
+
+## RDF/OWL track (`ontology/`, ADR 0041)
+
+The same knowledge, built on W3C standards so it can be compared with the platforms' ontology tools:
+
+- `ontology/oag.ttl` — the OWL ontology: classes (Asset, Well, Field, BusinessTerm) and properties
+  (`partOf`, transitive; `hasPart`, its inverse; `inField`, a kind of `partOf`).
+- `ontology/mapping.r2rml.ttl` — R2RML from the canonical tables to instances.
+- `vocabulary.yaml` stays the single source of synonyms and terms; `oag_semantic.ontology` adds them as
+  SKOS labels and concepts.
+
+`oag_semantic.ontology.load_ontology(dataset_dir)` runs the mapping in-process (morph-kgc over DuckDB
+views of the Parquet), applies OWL 2 RL reasoning (owlrl) and answers with SPARQL. `tests/test_ontology.py`
+holds every answer equal to the LPG's, and checks the hierarchy comes from reasoning, not the mapping.
