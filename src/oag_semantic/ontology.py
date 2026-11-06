@@ -44,12 +44,15 @@ def map_canonical(dataset_dir: str | Path) -> Graph:
         con = duckdb.connect(str(db))
         try:
             for table, path in canonical_table_paths(dataset_dir).items():
-                con.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{path}')")
+                quoted = str(path).replace("'", "''")
+                con.execute(f'CREATE VIEW "{table}" AS SELECT * FROM read_parquet(\'{quoted}\')')
         finally:
             con.close()
+        # morph-kgc reads this with ExtendedInterpolation, so a literal '$' in a path is written '$$'.
+        mapping, db_path = (str(x).replace("$", "$$") for x in (MAPPING_PATH, db))
         config = (
             "[CONFIGURATION]\nlogging_level: WARNING\n"
-            f"[DataSource]\nmappings: {MAPPING_PATH}\ndb_url: duckdb:///{db}\n"
+            f"[DataSource]\nmappings: {mapping}\ndb_url: duckdb:///{db_path}\n"
         )
         return morph_kgc.materialize(config)
 
@@ -57,7 +60,9 @@ def map_canonical(dataset_dir: str | Path) -> Graph:
 def _add_vocabulary(g: Graph, vocabulary_path: Path) -> None:
     """Field synonyms become skos:altLabel on the field; business terms become oag:BusinessTerm concepts."""
     vocab = yaml.safe_load(vocabulary_path.read_text()) or {}
-    fields_by_name = {str(name).lower(): f for f, name in g.subject_objects(SKOS.prefLabel)}
+    fields_by_name = {
+        str(name).lower(): f for f in g.subjects(RDF.type, OAG.Field) for name in g.objects(f, SKOS.prefLabel)
+    }
     for synonym, canonical in (vocab.get("field_synonyms") or {}).items():
         field = fields_by_name.get(str(canonical).lower())
         if field is not None:
@@ -89,11 +94,11 @@ class OntologyGraph:
         return list(self.graph.query(query, initNs=PREFIXES, initBindings=bindings))
 
     def resolve_field(self, name: str) -> int | None:
-        """A field name, synonym or any-case variant -> FIELD_ID."""
+        """A field name, synonym or any-case variant -> FIELD_ID (the lowest id if a label is shared)."""
         rows = self._select(
             """SELECT DISTINCT ?id WHERE {
                  ?f a oag:Field ; oag:fieldId ?id ; skos:prefLabel|skos:altLabel ?label .
-                 FILTER(LCASE(STR(?label)) = ?q) }""",
+                 FILTER(LCASE(STR(?label)) = ?q) } ORDER BY ?id""",
             q=Literal(_norm(name)),
         )
         return int(rows[0][0]) if rows else None
@@ -104,14 +109,14 @@ class OntologyGraph:
             """SELECT ?wid WHERE {
                  ?f oag:fieldId ?fid ; oag:hasPart ?w . ?w a oag:Well ; oag:wellId ?wid }
                ORDER BY ?wid""",
-            fid=Literal(field_id),
+            fid=Literal(int(field_id)),
         )
         return [int(r[0]) for r in rows]
 
     def field_of_well(self, well_id: int) -> int | None:
         rows = self._select(
             """SELECT ?fid WHERE { ?w oag:wellId ?wid ; oag:partOf ?f . ?f a oag:Field ; oag:fieldId ?fid }""",
-            wid=Literal(well_id),
+            wid=Literal(int(well_id)),
         )
         return int(rows[0][0]) if rows else None
 

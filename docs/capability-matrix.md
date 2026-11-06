@@ -32,7 +32,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 |---|---|---|---|---|---|---|---|
 | Canonical system of record | OSDU PDM tables: WELL, FIELD, FACILITY, WELL_VOL_DAILY | every answer is grounded in it | ● generator Parquet | ● same tables, mapped by R2RML | ● Delta via `read_files` | ● `COPY INTO` | ● Warehouse via `OPENROWSET` |
 | Deterministic gold | `gold/surveillance.json` | grades the agent | ● co-generated | ● same gold | ● 6/6 | ● 6/6 | ● 6/6 |
-| Stable identity | `FACILITY` composite key; UWI `NO 15/9-F-1` | cite and join entities | ● keys in the PDM shapes | ● IRIs built from canonical ids | ◐ keys informational | ◐ keys not enforced; Semantic Views require them | ◐ keys `NOT ENFORCED` |
+| Stable identity | `FACILITY` composite key; UWI `NO 15/9-F-1` | cite and join entities | ● keys in the PDM shapes | ● IRIs built from canonical ids | ○ informational keys, not declared here | ◐ keys not enforced; Semantic Views require them | ○ `NOT ENFORCED` keys, not declared here |
 | Data-quality rules | one row per well-day; Corrected over Measured | trust the numbers | ● applied before gold (ADR 0040) | ▷ 4: SHACL shapes | ○ pipeline expectations | ○ data metric functions | ? |
 | Query in place, no copy | daily volumes read where they live | facts at question time | ● DuckDB over Parquet | ▷ 7: Ontop virtual graph | ● tables over Delta | ◐ loaded copy | ◐ typed tables materialized for Direct Lake |
 

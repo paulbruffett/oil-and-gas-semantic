@@ -2,6 +2,8 @@
 #
 # Standard R2RML (W3C), so the same file runs in-process (morph-kgc over DuckDB views of the canonical
 # Parquet) and later in a virtual-graph engine (Ontop) over a database holding the same tables.
+# R2RML table and column names are case-sensitive (delimited identifiers): a database loaded for Ontop
+# must keep the canonical names as they are (lower-case tables, upper-case columns).
 
 @prefix rr:   <http://www.w3.org/ns/r2rml#> .
 @prefix oag:  <https://example.org/oag/ontology#> .
