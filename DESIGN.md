@@ -107,6 +107,11 @@ reference engine, used to author/validate/compile metrics to SQL.
 **Knowledge layer**: a Labeled Property Graph of entities, typed relationships, and business vocabulary
 used by agents for entity resolution and relationship navigation (ADR 0004). _Avoid_: "the ontology"
 unless referring to the optional RDF/OWL track.
+**Ontology (RDF/OWL track)**: the knowledge layer built on W3C standards (ADR 0041): an OWL **TBox**
+(classes, properties, axioms) plus **ABox** instances mapped from the canonical tables by **R2RML**,
+SKOS labels and business terms, SPARQL queries, SHACL shapes. **Master graph**: the reasoned graph of
+entities, hierarchy and vocabulary, copied into the store. **Virtual graph**: facts reached through the
+R2RML mapping at query time, without a copy. _Avoid_: "knowledge graph" for either alone.
 **Agent**: a system that answers an NL business question over the platform. A **semantic baseline** answers
 via deterministic metric selection; an **agentic variant** uses an LLM tool-use loop. The agent design is
 open (ADR 0005).
@@ -149,7 +154,7 @@ Six neutral layers (ADR 0003); each platform/assistant maps them to its own tech
    by MetricFlow; platform mappings (Databricks Metric Views / Snowflake Semantic Views / Fabric
    semantic model) live in each platform build (ADR 0035).
 4. **Knowledge layer — LPG** — entities, typed relationships, hierarchy, and business vocabulary; optional
-   RDF/OWL track for reasoning-tool comparisons.
+   RDF/OWL track for reasoning-tool comparisons (ADR 0041).
 5. **Agent / reasoning layer** — AI-over-BI: NL question → consult semantic + knowledge layers → query/tool
    calls → answer + provenance. Orchestration left open.
 6. **Governance / metadata** (cross-cutting) — catalog, lineage, security.
@@ -233,7 +238,8 @@ shared foundation at the repo root; each must reproduce the gold answers (ADR 00
 - **OSDU/PDM data-model spec** — the entity subset and table shapes.
 - **Semantic layer** — KPI/metric definitions in OSI v1.0 + the MetricFlow/DuckDB reference compile
   (ADR 0011). Platform mappings live in each platform build (ADR 0035).
-- **Knowledge layer** — the LPG (entities, relationships, vocabulary); optional RDF/OWL track.
+- **Knowledge layer** — the LPG (entities, relationships, vocabulary); the RDF/OWL track in
+  `knowledge/ontology/` (ADR 0041).
 - **Use-case / question catalog** — the six themes below, with gold answers, answer shapes and one
   worked example answer per question (`spec/questions/`).
 - **Gold check** — `oag_semantic.grading`: checks any build's answers against gold.
@@ -361,6 +367,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0038 — The rollup gold check also grades the by-operator set (amends 0025)](docs/adr/0038-rollup-gold-check-grades-by-operator.md)
 - [0039 — Fabric semantic model reads the Warehouse through a fixed identity, so a narrow agent can query it](docs/adr/0039-fabric-fixed-identity-semantic-model.md)
 - [0040 — Data-quality scenario knob: injected WELL_VOL_DAILY defects on a dedicated rng stream, off by default and out of config_hash; cleaning rules (one row per well-day, Corrected over Measured; flag, don't fix, flatlines and unit errors) applied before every KPI gold and in the reference compile; findings gold + scenario theme 7 (extends 0024/0032)](docs/adr/0040-data-quality-scenario-knob.md)
+- [0041 — RDF/OWL knowledge track: a reasoned master graph (OWL 2 RL, SKOS, R2RML) with facts left in the warehouse; same files in-process and in GraphDB (activates the optional track in 0004)](docs/adr/0041-rdf-owl-knowledge-track-hybrid-master-graph.md)
 
 ---
 
@@ -370,8 +377,6 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - Commercial/financial concepts — lease operating expense, revenue, working-interest/JIB (non-OSDU; ADR 0001).
 - Midstream/downstream, drilling & completions, deep reservoir simulation.
 - Comparing coding assistants, and any benchmark of LLM answer accuracy across models (ADR 0036).
-- The optional RDF/OWL ontology track (story 16) — **deferred**; the LPG is the knowledge layer. Revisit
-  if a platform's ontology tooling is worth comparing.
 
 **Open questions / flagged items:**
 - Exact OSDU PDM entity subset and table shapes for v1: the **sourcing method** is settled (ADR 0010 —

@@ -1,0 +1,27 @@
+# R2RML mapping from the canonical tables to ontology instances (ADR 0041).
+#
+# Standard R2RML (W3C), so the same file runs in-process (morph-kgc over DuckDB views of the canonical
+# Parquet) and later in a virtual-graph engine (Ontop) over a database holding the same tables.
+# R2RML table and column names are case-sensitive (delimited identifiers): a database loaded for Ontop
+# must keep the canonical names as they are (lower-case tables, upper-case columns).
+
+@prefix rr:   <http://www.w3.org/ns/r2rml#> .
+@prefix oag:  <https://example.org/oag/ontology#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<#Field>
+    rr:logicalTable [ rr:tableName "field" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/id/field/{FIELD_ID}" ; rr:class oag:Field ] ;
+    rr:predicateObjectMap [ rr:predicate oag:fieldId ;
+                            rr:objectMap [ rr:column "FIELD_ID" ; rr:datatype xsd:integer ] ] ;
+    rr:predicateObjectMap [ rr:predicate skos:prefLabel ; rr:objectMap [ rr:column "FIELD_NAME" ] ] .
+
+<#Well>
+    rr:logicalTable [ rr:tableName "well" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/id/well/{WELL_ID}" ; rr:class oag:Well ] ;
+    rr:predicateObjectMap [ rr:predicate oag:wellId ;
+                            rr:objectMap [ rr:column "WELL_ID" ; rr:datatype xsd:integer ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:uwi ; rr:objectMap [ rr:column "UWI" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:inField ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/field/{FIELD_ID}" ] ] .

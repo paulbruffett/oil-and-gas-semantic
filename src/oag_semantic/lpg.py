@@ -73,11 +73,10 @@ class LPG:
         norm = _norm(phrase)
         if norm in self._terms:
             return self._terms[norm]
-        # Substring match so a phrase embedded in a longer question still resolves.
-        for synonym, concept in self._terms.items():
-            if synonym in norm:
-                return concept
-        return None
+        # Substring match so a phrase embedded in a longer question still resolves; the longest
+        # contained synonym wins, as in the platform builds' resolve_term.
+        contained = [s for s in self._terms if s in norm]
+        return self._terms[max(contained, key=len)] if contained else None
 
 
 def _norm(s: str) -> str:

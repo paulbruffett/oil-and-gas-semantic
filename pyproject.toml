@@ -30,6 +30,15 @@ dev = [
     # MetricFlow's manifest schema + validators (ADR 0011): the "validate the OSI
     # manifest is well-formed" gate. Dev-only -- it never runs at answer time.
     "dbt-semantic-interfaces>=0.10,<0.11",
+    {include-group = "ontology"},
+]
+# The RDF/OWL knowledge layer (ADR 0041), kept out of the core install: rdflib + OWL 2 RL reasoning,
+# and morph-kgc to run the R2RML mapping over DuckDB views of the canonical Parquet.
+ontology = [
+    "rdflib>=7.1,<8",
+    "owlrl>=7.1,<8",
+    "morph-kgc>=2.10,<3",
+    "duckdb-engine>=0.17,<0.18",
 ]
 
 [build-system]
