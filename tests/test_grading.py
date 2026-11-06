@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from oag_generator.questions import (
+    DATA_QUALITY_QUESTION_ID,
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
     ROLLUP_QUESTION_ID,
@@ -212,6 +213,9 @@ def test_specs_are_catalog_derived_and_match_the_pinned_shapes():
                     ("oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"),
                 ),
             ),
+        ),
+        DATA_QUALITY_QUESTION_ID: GradingSpec(
+            "findings", "finding_id", ("n_days", "rows_removed", "oil_volume_kept")
         ),
     }
     assert SPECS == pinned

@@ -31,5 +31,12 @@ authored in the OSI v1.0 encoding (MetricFlow's semantic-manifest dialect).
 - *Reference compile* — `oag_semantic.compile` reads the measures/joins from this manifest and
   executes them as SQL over the canonical Parquet via DuckDB, reproducing the gold values.
 
+**`well_vol_daily` is the cleaned record set (ADR 0040).** The model binds the governed
+`well_vol_daily`, not the raw Parquet: one row per well-day, `Corrected` over `Measured`, then the
+lowest `WELL_VOLUME_DAILY_ID` (`oag_generator.data_quality.CLEAN_WELL_VOL_DAILY_SQL`). The compile
+registers the raw file as `well_vol_daily_raw` and builds the cleaned table from it. On the reference
+dataset (data-quality knob off) the two are identical; a platform loading a knob-on dataset applies
+the same rule before its semantic layer.
+
 At instantiation the target platform's own engine (Snowflake / Databricks / Fabric) plays the
 compile+execute role; this manifest is the neutral definition it translates.

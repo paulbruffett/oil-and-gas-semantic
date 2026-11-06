@@ -35,6 +35,8 @@ agent = ProductionAgent()
 submissions = {}
 for theme in catalog["themes"]:
     for q in theme["questions"]:
+        if q.get("scenario") and not (dataset_dir / q["gold_artifact"]).exists():
+            continue  # a scenario question (ADR 0040) with its knob off on this dataset: not applicable
         sub = agent.answer(q["text"])
         submissions[q["id"]] = sub
         print(f"-- {q['id']}: {sub['behavior']}, question_id={sub['question_id']}")

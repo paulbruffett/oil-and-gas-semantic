@@ -165,6 +165,32 @@ DEFAULT_BREAKTHROUGH = {
     "anchor_well_id": 2,             # pinned-member well (structural WELL_ID; distinct from the trap)
 }
 
+# Data-quality scenario knob (ADR 0040). Injects a small, counted number of realistic defects into
+# WELL_VOL_DAILY so answering needs judgment, not just arithmetic: duplicate well-day rows, late
+# corrections (a 'Corrected' row superseding the 'Measured' one), stuck-sensor flatlines and oil
+# reported in m3 instead of bbl. Every count 0 = scenario off: the block is then left out of the
+# canonical config (and so out of config_hash), and the dataset is byte-identical to one generated
+# before the knob existed. When on, the anchor well also gets a duplicate of its end_date row, so
+# the findings gold is non-empty on any seed and the duplicate lands inside every trailing window.
+# Draws come from a dedicated rng stream; the cleaning rules are in oag_generator.data_quality.
+DEFAULT_DATA_QUALITY = {
+    "duplicate_count": 0,         # extra exact copies of a Measured well-day row (dedupe drops them)
+    "correction_count": 0,        # well-days whose Measured row is superseded by a Corrected row
+    "correction_bias_min": 0.10,  # |error| of the superseded Measured row, as a fraction of truth
+    "correction_bias_max": 0.30,
+    "flatline_count": 0,          # stuck-sensor runs: identical volumes over flatline_days on-stream days
+    "flatline_days": 5,
+    "unit_error_count": 0,        # on-stream days whose oil is reported in m3 instead of bbl
+    "anchor_well_id": 3,          # gets the pinned end_date duplicate (structural WELL_ID)
+}
+
+DATA_QUALITY_COUNT_KEYS = ("duplicate_count", "correction_count", "flatline_count", "unit_error_count")
+
+# Scenario blocks: config blocks left out of the canonical config (and so of dataset.json) when off, so
+# a block's presence in a dataset's config means its scenario is on. Only these can gate a catalog
+# question (`scenario:`); always-present blocks such as `breakthrough` can't (ADR 0040).
+SCENARIO_BLOCKS = ("data_quality",)
+
 DEFAULT_OPERATORS = ["Equinor", "AkerBP", "Wintershall"]
 
 
@@ -199,6 +225,7 @@ class Config:
     watchlist: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WATCHLIST))
     adversarial: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_ADVERSARIAL))
     breakthrough: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_BREAKTHROUGH))
+    data_quality: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_DATA_QUALITY))
 
     def __post_init__(self) -> None:
         # Nested calibration dicts: fill any missing keys from defaults so a partial
@@ -213,6 +240,7 @@ class Config:
         self.watchlist = {**DEFAULT_WATCHLIST, **self.watchlist}
         self.adversarial = {**DEFAULT_ADVERSARIAL, **self.adversarial}
         self.breakthrough = {**DEFAULT_BREAKTHROUGH, **self.breakthrough}
+        self.data_quality = {**DEFAULT_DATA_QUALITY, **self.data_quality}
         self._validate()
 
     def _validate(self) -> None:
@@ -340,6 +368,21 @@ class Config:
         # Decline materiality band (ADR 0033): non-negative; 0.0 = ADR 0018's raw comparison.
         if self.decline["faster_gap_threshold"] < 0.0:
             raise ValueError("decline.faster_gap_threshold must be >= 0")
+        # Data-quality knob (ADR 0040): non-negative integer counts; a sane correction-bias band (a
+        # zero bias would make the superseded row identical to the correction); a flatline of at
+        # least two days (one day can't be "stuck"); a real anchor well when the knob is on.
+        dq = self.data_quality
+        for key in DATA_QUALITY_COUNT_KEYS:
+            if dq[key] < 0 or int(dq[key]) != dq[key]:
+                raise ValueError(f"data_quality.{key} must be a non-negative integer")
+        if not 0.0 < dq["correction_bias_min"] <= dq["correction_bias_max"] < 1.0:
+            raise ValueError("data_quality correction bias must satisfy 0 < min <= max < 1")
+        if dq["flatline_days"] < 2 or int(dq["flatline_days"]) != dq["flatline_days"]:
+            raise ValueError("data_quality.flatline_days must be an integer >= 2")
+        if self.data_quality_enabled and not 1 <= dq["anchor_well_id"] <= self.n_wells:
+            raise ValueError(
+                f"data_quality.anchor_well_id must be in [1, {self.n_wells}] (n_wells)"
+            )
         # Calibration ranges are sampled with rng.uniform(min, max); an inverted range
         # silently samples the reversed interval, so reject min > max up front.
         for group, keys in (
@@ -358,9 +401,22 @@ class Config:
     def n_wells(self) -> int:
         return self.n_fields * self.wells_per_field
 
+    @property
+    def data_quality_enabled(self) -> bool:
+        """True when the data-quality knob injects anything (any defect count > 0, ADR 0040)."""
+        return any(self.data_quality[key] > 0 for key in DATA_QUALITY_COUNT_KEYS)
+
     def to_canonical_dict(self) -> dict[str, Any]:
-        """Deterministic, hashable view of the resolved config."""
-        return asdict(self)
+        """Deterministic, hashable view of the resolved config.
+
+        The data-quality block appears only when the knob is on (ADR 0040). Off, it changes no output,
+        so leaving it out keeps every existing dataset's config_hash (the reference dataset's
+        12a110eecfe2 among them) and its dataset.json unchanged.
+        """
+        canonical = asdict(self)
+        if not self.data_quality_enabled:
+            del canonical["data_quality"]
+        return canonical
 
 
 def load_config(source: str | Path | dict[str, Any] | Config) -> Config:

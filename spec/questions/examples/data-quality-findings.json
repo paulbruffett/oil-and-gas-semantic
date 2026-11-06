@@ -1,0 +1,75 @@
+{
+  "question_id": "data-quality-findings",
+  "answer": "11 data-quality findings in WELL_VOL_DAILY (4 duplicate, 3 late correction, 2 flatline, 2 unit error). Cleaning drops 7 row(s) (duplicates and superseded Measured rows); 4 finding(s) are flagged and kept as reported.",
+  "key_values": {
+    "findings": [
+      {
+        "finding_id": "9:2024-03-05:flatline",
+        "n_days": 5,
+        "rows_removed": 0,
+        "oil_volume_kept": 2505.0
+      },
+      {
+        "finding_id": "11:2024-04-13:late_correction",
+        "n_days": 1,
+        "rows_removed": 1,
+        "oil_volume_kept": 18782.54
+      },
+      {
+        "finding_id": "7:2024-05-31:late_correction",
+        "n_days": 1,
+        "rows_removed": 1,
+        "oil_volume_kept": 16360.32
+      },
+      {
+        "finding_id": "8:2024-08-13:duplicate",
+        "n_days": 1,
+        "rows_removed": 1,
+        "oil_volume_kept": 1655.84
+      },
+      {
+        "finding_id": "10:2024-09-23:duplicate",
+        "n_days": 1,
+        "rows_removed": 1,
+        "oil_volume_kept": 9999.3
+      },
+      {
+        "finding_id": "2:2024-10-24:late_correction",
+        "n_days": 1,
+        "rows_removed": 1,
+        "oil_volume_kept": 4763.3
+      },
+      {
+        "finding_id": "2:2024-10-29:unit_error",
+        "n_days": 1,
+        "rows_removed": 0,
+        "oil_volume_kept": 859.52
+      },
+      {
+        "finding_id": "7:2025-01-11:unit_error",
+        "n_days": 1,
+        "rows_removed": 0,
+        "oil_volume_kept": 1453.31
+      },
+      {
+        "finding_id": "17:2025-02-03:duplicate",
+        "n_days": 1,
+        "rows_removed": 1,
+        "oil_volume_kept": 8520.43
+      },
+      {
+        "finding_id": "12:2025-03-08:flatline",
+        "n_days": 5,
+        "rows_removed": 0,
+        "oil_volume_kept": 7647.93
+      },
+      {
+        "finding_id": "3:2025-03-31:duplicate",
+        "n_days": 1,
+        "rows_removed": 1,
+        "oil_volume_kept": 3047.19
+      }
+    ]
+  },
+  "behavior": "answered"
+}

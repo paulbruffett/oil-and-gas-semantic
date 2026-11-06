@@ -28,6 +28,11 @@ from oag_generator.config import (
     trap_test_date,
     well_uwi,
 )
+from oag_generator.data_quality import (
+    clean_well_vol_daily,
+    compute_data_quality_gold,
+    inject_defects,
+)
 from oag_generator.gold import (
     compute_decline_gold,
     compute_deferment_gold,
@@ -484,6 +489,12 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
     gold_dir.mkdir(parents=True, exist_ok=True)
 
     cols = _build_tables(cfg)
+    # Data-quality knob (ADR 0040): defects go into the *written* WELL_VOL_DAILY after every table is
+    # built (its own rng stream, so nothing else moves); every KPI gold is computed on the cleaned
+    # rows. With the knob off there is nothing to inject and cleaning returns the table unchanged.
+    wvd_key = schema.WELL_VOL_DAILY.key
+    findings = inject_defects(cols[wvd_key], cfg) if cfg.data_quality_enabled else []
+    gold_cols = {**cols, wvd_key: clean_well_vol_daily(cols[wvd_key])}
     tables: dict[str, Path] = {}
     row_counts: dict[str, int] = {}
     for spec in schema.TABLES:
@@ -493,13 +504,15 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         row_counts[spec.key] = len(next(iter(cols[spec.key].values())))
 
     gold_answers = {
-        "surveillance": compute_surveillance_gold(cols, cfg),
-        "deferment": compute_deferment_gold(cols, cfg),
-        "decline": compute_decline_gold(cols, cfg),
-        "welltest": compute_welltest_gold(cols, cfg),
-        "watchlist": compute_watchlist_gold(cols, cfg),
-        "rollups": compute_rollup_gold(cols, cfg),
+        "surveillance": compute_surveillance_gold(gold_cols, cfg),
+        "deferment": compute_deferment_gold(gold_cols, cfg),
+        "decline": compute_decline_gold(gold_cols, cfg),
+        "welltest": compute_welltest_gold(gold_cols, cfg),
+        "watchlist": compute_watchlist_gold(gold_cols, cfg),
+        "rollups": compute_rollup_gold(gold_cols, cfg),
     }
+    if cfg.data_quality_enabled:
+        gold_answers["data_quality"] = compute_data_quality_gold(findings, cfg)
     gold_paths: dict[str, Path] = {}
     for key, answer in gold_answers.items():
         path = gold_dir / f"{key}.json"

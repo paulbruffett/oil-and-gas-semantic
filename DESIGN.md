@@ -128,6 +128,12 @@ collateral" or "shell". **Platform build**: one platform's implementation of the
 **Data-quality scenario well**: well 1 (`NO 15/9-F-1`), whose only well test predates the data, so its
 allocation rests on an untrustworthy test; it is also pinned to underperform and be misallocated
 (ADR 0024/0036). _Avoid_: "trap well".
+**Data-quality knob**: the opt-in `data_quality` config block that injects counted defects
+(duplicate, late correction, flatline, unit error) into WELL_VOL_DAILY; off by default, and then
+absent from `config_hash` (ADR 0040). _Avoid_: "noise", "dirty mode".
+**Cleaning rules**: what every KPI gold reads when the knob is on: one row per well-day, `Corrected`
+over `Measured`, then the lowest row id; flatlines and unit errors are *flagged*, kept as reported. A
+**finding** is one injected defect plus the action the rules take (`gold/data_quality.json`).
 
 ---
 
@@ -220,7 +226,8 @@ shared foundation at the repo root; each must reproduce the gold answers (ADR 00
 
 ### 6.1 Foundation inventory
 - **Data generator** (runnable, Python) → Parquet (canonical) + OSDU JSON (secondary) + gold answers.
-  Includes one seeded **data-quality scenario well** (§3) as a realistic defect to surface.
+  Includes one seeded **data-quality scenario well** (§3) as a realistic defect to surface, and the
+  opt-in **data-quality knob** (§3, ADR 0040; off for the reference dataset).
 - **Reference dataset config** — `configs/reference.yaml` (`config_hash 12a110eecfe2`); every platform
   build loads the dataset it generates.
 - **OSDU/PDM data-model spec** — the entity subset and table shapes.
@@ -244,6 +251,10 @@ shared foundation at the repo root; each must reproduce the gold answers (ADR 00
 | 4 | **Well-test & allocation validation** | "Which wells have stale tests or anomalous allocation?" | days-since-test, allocation variance | Well Test, Allocation |
 | 5 | **Operational exceptions / watchlist** | "Which wells are down, watering out, or showing GOR change?" | water cut, GOR, days-down | Reported Volume, Well Test, Down Time Event |
 | 6 | **Asset rollups** | "Oil/gas/water by field & operator this month vs last, biggest movers." | period-over-period Δ, contribution % | Reported Volume, Facility, Hierarchy |
+
+A seventh, **scenario** theme, *Data quality* ("Which daily well-volume records have data-quality
+problems, and what does the cleaning policy do with each?"), has gold only on a dataset generated with
+the data-quality knob on; elsewhere the gold check treats it as not applicable (ADR 0040).
 
 ### 6.3 Canonical KPI definitions
 Volumes (oil/gas/water, Σ reported volume); **BOE** = oil + gas ÷ 6; rates = phase volume ÷ on-stream
@@ -349,6 +360,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0037 — Fabric knowledge layer is a Fabric IQ ontology (preview), queried over its MCP endpoint](docs/adr/0037-fabric-knowledge-layer-iq-ontology.md)
 - [0038 — The rollup gold check also grades the by-operator set (amends 0025)](docs/adr/0038-rollup-gold-check-grades-by-operator.md)
 - [0039 — Fabric semantic model reads the Warehouse through a fixed identity, so a narrow agent can query it](docs/adr/0039-fabric-fixed-identity-semantic-model.md)
+- [0040 — Data-quality scenario knob: injected WELL_VOL_DAILY defects on a dedicated rng stream, off by default and out of config_hash; cleaning rules (one row per well-day, Corrected over Measured; flag, don't fix, flatlines and unit errors) applied before every KPI gold and in the reference compile; findings gold + scenario theme 7 (extends 0024/0032)](docs/adr/0040-data-quality-scenario-knob.md)
 
 ---
 

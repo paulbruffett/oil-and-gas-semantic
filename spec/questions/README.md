@@ -14,13 +14,16 @@ platform reference build (`platforms/<stack>/`) consumes them directly.
   (set-equality on ids + per-value relative tolerance). A block may list further sets under `also:`
   that must match too (the rollup question grades `by_operator` beside `by_field`, ADR 0038). The gold check (`oag_semantic.grading`) derives
   its specs from these blocks, so this artifact and the check cannot diverge. `status: implemented`
-  means the generator co-emits that theme's gold (all six themes today).
+  means the generator co-emits that theme's gold (all six themes today). `status: scenario` (theme 7,
+  data quality, ADR 0040) means gold exists only on a dataset generated with that scenario knob on;
+  its question names the knob under `scenario:` and its example's dataset under `example_config:`.
 - **`answer_submission.schema.json`** — JSON Schema (Draft 2020-12) for a single answer submission:
   natural-language `answer` + `key_values` (checked against gold) + optional `provenance` + optional
   `behavior`. Enforced when a submission set is scored: a submission the schema rejects grades
   incorrect, so the published contract is the checked contract.
 - **`examples/`** — one committed **worked example submission per question** (#48): exactly what a
-  perfect implementation would submit for the default-config dataset. Copy-paste-true — the shape and
+  perfect implementation would submit for the default-config dataset (for a scenario question, the
+  dataset its `example_config` names). Copy-paste-true — the shape and
   key names are what the gold check compares. Regenerate after a gold/catalog change with
   `python -m oag_semantic.examples`; `tests/test_question_examples.py` pins them to freshly generated
   gold.
@@ -29,7 +32,8 @@ platform reference build (`platforms/<stack>/`) consumes them directly.
 
 Every question with gold is checked: an unanswered one grades *incorrect* (`not submitted`), as does
 one the schema rejects (`schema-invalid`). A question is *skipped* only when it has no `grading` block
-or no gold artifact.
+or no gold artifact. A scenario question on a dataset with its scenario off is *not applicable*: it is
+neither graded nor skipped, so the reference dataset still passes 6/6 (ADR 0040).
 
 ## No drift between questions and gold
 

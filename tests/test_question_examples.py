@@ -14,23 +14,34 @@ import jsonschema
 import pytest
 
 from oag_generator.questions import load_catalog, load_submission_schema
-from oag_semantic.examples import EXAMPLES_DIR, write_examples
+from oag_semantic.examples import EXAMPLES_DIR, REPO_ROOT, example_configs, write_examples
 from oag_semantic.grading import SPECS, submission_from_gold
 
 
 @pytest.fixture(scope="session")
-def default_dataset_dir(tmp_path_factory):
-    """A dataset generated with the *shipped defaults* -- the substrate the examples document."""
+def example_datasets(tmp_path_factory):
+    """One generated dataset per config the examples document: the *shipped defaults* (key None)
+    and each scenario question's ``example_config`` (ADR 0040)."""
     from oag_generator import generate_dataset
 
-    out = tmp_path_factory.mktemp("default_dataset")
-    generate_dataset({}, out)
+    out = {}
+    for config in example_configs():
+        path = tmp_path_factory.mktemp("example_dataset")
+        generate_dataset({} if config is None else REPO_ROOT / config, path)
+        out[config] = path
     return out
 
 
-def test_every_gradable_question_has_a_committed_example(default_dataset_dir):
+@pytest.fixture(scope="session")
+def default_dataset_dir(example_datasets):
+    """A dataset generated with the *shipped defaults* -- the substrate most examples document."""
+    return example_datasets[None]
+
+
+def test_every_gradable_question_has_a_committed_example(example_datasets):
     """Each example exists, validates against the published schema, and equals the perfect-answer submission
-    built from freshly generated default-config gold (the generator is byte-stable, so this is exact)."""
+    built from freshly generated gold on the dataset it documents (the generator is byte-stable, so this
+    is exact)."""
     validator = jsonschema.Draft202012Validator(load_submission_schema())
     checked = 0
     for q in load_catalog().questions():
@@ -41,13 +52,13 @@ def test_every_gradable_question_has_a_committed_example(default_dataset_dir):
         assert path.exists(), f"missing worked example for {q.id}"
         example = json.loads(path.read_text())
         validator.validate(example)
-        gold = json.loads((default_dataset_dir / q.gold_artifact).read_text())
+        gold = json.loads((example_datasets[q.example_config] / q.gold_artifact).read_text())
         assert example == submission_from_gold(gold, spec, q.id, q.expected_behavior), (
-            f"{q.id}: committed example drifted from default-config gold -- regenerate with "
+            f"{q.id}: committed example drifted from its dataset's gold -- regenerate with "
             f"`python -m oag_semantic.examples`"
         )
         checked += 1
-    assert checked == 6
+    assert checked == 7  # the six use cases + the data-quality scenario question
 
 
 def test_no_orphan_examples():
@@ -57,10 +68,14 @@ def test_no_orphan_examples():
         assert path.stem in catalog_ids, f"orphan example {path.name} (question no longer in catalog)"
 
 
-def test_write_examples_is_deterministic(default_dataset_dir, tmp_path):
+def test_write_examples_is_deterministic(example_datasets, tmp_path):
     """Regenerating into a fresh directory reproduces the committed files byte-for-byte."""
-    written = write_examples(default_dataset_dir, tmp_path)
-    assert written  # wrote something
+    written = [
+        path
+        for config, dataset in example_datasets.items()
+        for path in write_examples(dataset, tmp_path, example_config=config)
+    ]
+    assert len(written) == 7
     for path in written:
         committed = EXAMPLES_DIR / path.name
         assert committed.read_text() == path.read_text(), f"{path.name} differs from committed copy"

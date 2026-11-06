@@ -57,6 +57,11 @@ Source: <https://osdu.pages.opengroup.org/platform/domain-data-mgmt-services/pro
 | WATER_VOLUME | N | NUMERIC(20,10) | | | The water volume for the reporting period. |
 | VOLUME_METHOD | N | CHARACTER VARYING(40) | | | measured, prorated, engineering study, etc. |
 
+*`VOLUME_METHOD` is free text in the PDM (no reference table). The generator writes `Measured`; with the
+data-quality knob on it also writes `Corrected` for a late restatement that supersedes the `Measured` row
+of the same well-day. `Corrected` is this project's value, not a published PDM or OSDU reference value
+(ADR 0040).*
+
 ## PRODUCT_VOLUME_SUMMARY  (forecast/expected series; QUANTITY_METHOD='Forecast')
 | Column | Nullable | Type | Key | Ref | Comment |
 |---|---|---|---|---|---|
