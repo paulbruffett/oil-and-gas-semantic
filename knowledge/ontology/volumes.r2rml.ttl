@@ -1,0 +1,49 @@
+# R2RML mapping for daily volumes, kept apart from mapping.r2rml.ttl so they never enter the master
+# graph (ADR 0041). Used only to build the graph that shapes.ttl checks for data-quality defects
+# (ADR 0043). Standard R2RML, so a virtual-graph engine (Ontop) could serve the same mapping later.
+#
+# "well_vol_daily_next" pairs each record with the same well's record(s) for the next calendar day, a
+# view built by oag_semantic.ontology, so shapes follow a link instead of doing date arithmetic. A
+# database loaded for Ontop needs the same view.
+
+@prefix rr:   <http://www.w3.org/ns/r2rml#> .
+@prefix oag:  <https://example.org/oag/ontology#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<#DailyVolume>
+    rr:logicalTable [ rr:tableName "well_vol_daily" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/id/well-volume-daily/{WELL_VOLUME_DAILY_ID}" ;
+                    rr:class oag:DailyVolume ] ;
+    rr:predicateObjectMap [ rr:predicate oag:rowId ;
+                            rr:objectMap [ rr:column "WELL_VOLUME_DAILY_ID" ; rr:datatype xsd:integer ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:ofWell ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/well/{WELL_ID}" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:volumeDate ;
+                            rr:objectMap [ rr:column "VOLUME_DATE" ; rr:datatype xsd:date ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:hoursOn ;
+                            rr:objectMap [ rr:column "HOURS_ON" ; rr:datatype xsd:double ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:oilVolume ;
+                            rr:objectMap [ rr:column "OIL_VOLUME" ; rr:datatype xsd:double ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:gasVolume ;
+                            rr:objectMap [ rr:column "GAS_VOLUME" ; rr:datatype xsd:double ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:waterVolume ;
+                            rr:objectMap [ rr:column "WATER_VOLUME" ; rr:datatype xsd:double ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:volumeMethod ; rr:objectMap [ rr:column "VOLUME_METHOD" ] ] .
+
+<#NextDay>
+    rr:logicalTable [ rr:tableName "well_vol_daily_next" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/id/well-volume-daily/{FROM_ID}" ] ;
+    rr:predicateObjectMap [ rr:predicate oag:nextDay ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/well-volume-daily/{TO_ID}" ] ] .
+
+# One node per well per day, holding every record reported for it (the cleaning rule's grain).
+<#WellDay>
+    rr:logicalTable [ rr:tableName "well_vol_daily" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/id/well-day/{WELL_ID}/{VOLUME_DATE}" ;
+                    rr:class oag:WellDay ] ;
+    rr:predicateObjectMap [ rr:predicate oag:ofWell ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/well/{WELL_ID}" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:volumeDate ;
+                            rr:objectMap [ rr:column "VOLUME_DATE" ; rr:datatype xsd:date ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:hasRecord ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/well-volume-daily/{WELL_VOLUME_DAILY_ID}" ] ] .

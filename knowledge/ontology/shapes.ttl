@@ -1,0 +1,160 @@
+# SHACL shapes for the RDF/OWL track (ADR 0043): what valid data looks like, as standard W3C files.
+#
+# Two kinds, checked together by oag_semantic.shacl:
+# - Entity shapes (SHACL Core, plus SPARQL constraints where a rule spans two entities) over the
+#   master graph: every well has one field, one facility and one operator; a well's field is its
+#   facility's field; no two canonical wells or facilities share a key. They run on one node per
+#   entity (oag_semantic.shacl drops the OSDU-record aliases), since SHACL ignores owl:sameAs.
+# - Data-quality shapes over daily volumes, mapped into a validation-only graph by volumes.r2rml.ttl.
+#   One shape per defect from the cleaning policy (ADR 0040). Duplicates and late corrections are
+#   counts on a well-day (SHACL Core); flatlines and unit errors compare consecutive days
+#   (SHACL-SPARQL, following oag:nextDay), focused on a well with the first offending record as the
+#   value. oagsh:defect names the defect, and sh:severity follows the policy's action: Info where the
+#   cleaning rule settles the row (duplicates, late corrections), Warning where a person must
+#   (flatlines, unit errors).
+#
+# Constraints across rows need sh:sparql (SHACL-SPARQL, part of the W3C SHACL Recommendation); SHACL
+# Core checks one node at a time.
+
+@prefix oag:    <https://example.org/oag/ontology#> .
+@prefix oagsh:  <https://example.org/oag/shapes#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+<https://example.org/oag/shapes> a owl:Ontology ;
+    rdfs:label "OAG shapes" ;
+    sh:declare [ sh:prefix "oag" ; sh:namespace "https://example.org/oag/ontology#"^^xsd:anyURI ] ,
+               [ sh:prefix "owl" ; sh:namespace "http://www.w3.org/2002/07/owl#"^^xsd:anyURI ] .
+
+oagsh:defect a owl:AnnotationProperty ;
+    rdfs:label "defect" ;
+    skos:definition "The data-quality defect a shape detects, as named in the findings gold (ADR 0040)." .
+
+# --- Entity shapes (master graph) ------------------------------------------------------------------
+
+oagsh:WellShape a sh:NodeShape ;
+    sh:targetClass oag:Well ;
+    sh:property [ sh:path oag:inField ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Field ] ,
+                [ sh:path oag:atFacility ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Facility ] ,
+                [ sh:path oag:operatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Organisation ] ,
+                [ sh:path oag:uwi ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+oagsh:FacilityShape a sh:NodeShape ;
+    sh:targetClass oag:Facility ;
+    sh:property [ sh:path oag:inField ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Field ] ,
+                [ sh:path oag:operatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Organisation ] ,
+                [ sh:path oag:facilityId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ] ,
+                [ sh:path oag:facilityType ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+oagsh:FieldShape a sh:NodeShape ;
+    sh:targetClass oag:Field ;
+    sh:property [ sh:path skos:prefLabel ; sh:minCount 1 ] .
+
+# A well reaches its field directly and through its facility; the two must agree, or the well rolls up
+# into two fields.
+oagsh:WellFieldMatchesFacilityShape a sh:NodeShape ;
+    sh:targetClass oag:Well ;
+    sh:sparql [
+        sh:message "The well's field differs from its facility's field ({?value})." ;
+        sh:prefixes <https://example.org/oag/shapes> ;
+        sh:select """
+            SELECT $this ?value WHERE {
+                $this oag:inField ?field ; oag:atFacility ?facility .
+                ?facility oag:inField ?value .
+                FILTER(?value != ?field)
+            }""" ] .
+
+# Keys make records of the same entity owl:sameAs. Two canonical wells (or facilities) that end up the
+# same share a key: duplicate master data, which the reasoner would otherwise merge silently.
+oagsh:DistinctKeysShape a sh:NodeShape ;
+    sh:targetClass oag:Well , oag:Facility ;
+    sh:sparql [
+        sh:message "Shares its key with another canonical entity ({?value})." ;
+        sh:prefixes <https://example.org/oag/shapes> ;
+        sh:select """
+            SELECT $this ?value WHERE {
+                $this owl:sameAs ?value .
+                FILTER(?value != $this
+                       && STRSTARTS(STR($this), "https://example.org/oag/id/")
+                       && STRSTARTS(STR(?value), "https://example.org/oag/id/"))
+            }""" ] .
+
+# --- Data-quality shapes (daily volumes, validation-only graph) ------------------------------------
+
+# Duplicates and late corrections are counts on a well-day, so they are plain SHACL Core.
+
+# A second record for the same well, day and method (the first-loaded one is kept). Reported on the
+# well-day.
+oagsh:DuplicateRecordShape a sh:NodeShape ;
+    sh:targetClass oag:WellDay ;
+    oagsh:defect "duplicate" ;
+    # Severity and message sit on the property shapes: in SHACL they belong to the shape that reports.
+    sh:property [ sh:path oag:hasRecord ; sh:qualifiedMaxCount 1 ; sh:severity sh:Info ;
+                  sh:message "Duplicate daily record: dropped, the first-loaded record is kept." ;
+                  sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Measured" ] ] ] ,
+                [ sh:path oag:hasRecord ; sh:qualifiedMaxCount 1 ; sh:severity sh:Info ;
+                  sh:message "Duplicate daily record: dropped, the first-loaded record is kept." ;
+                  sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Corrected" ] ] ] .
+
+# A Measured record restated by a Corrected one on the same well-day (the Corrected record is kept).
+oagsh:LateCorrectionShape a sh:NodeShape ;
+    sh:targetClass oag:WellDay ;
+    oagsh:defect "late_correction" ;
+    sh:severity sh:Info ;
+    sh:message "Measured record superseded by a later Corrected record." ;
+    sh:not [
+        sh:property [ sh:path oag:hasRecord ; sh:qualifiedMinCount 1 ;
+                      sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Measured" ] ] ] ,
+                    [ sh:path oag:hasRecord ; sh:qualifiedMinCount 1 ;
+                      sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Corrected" ] ] ] ] .
+
+# A stuck sensor: identical oil, gas and water on three or more consecutive full on-stream days. The
+# value is the first day of the run. Downtime days (all zeros) are excluded by requiring 24 hours on
+# and some oil.
+oagsh:FlatlineShape a sh:NodeShape ;
+    sh:targetClass oag:Well ;
+    oagsh:defect "flatline" ;
+    sh:severity sh:Warning ;
+    sh:sparql [
+        sh:message "Flatline: identical volumes on consecutive on-stream days (kept as reported)." ;
+        sh:prefixes <https://example.org/oag/shapes> ;
+        sh:select """
+            SELECT DISTINCT $this ?value WHERE {
+                ?value oag:ofWell $this ; oag:nextDay ?r1 ; oag:oilVolume ?o .
+                ?r1 oag:oilVolume ?o ; oag:nextDay ?r2 .
+                ?r2 oag:oilVolume ?o .
+                ?value oag:hoursOn ?h0 ; oag:gasVolume ?g ; oag:waterVolume ?w .
+                ?r1 oag:hoursOn ?h1 ; oag:gasVolume ?g ; oag:waterVolume ?w .
+                ?r2 oag:hoursOn ?h2 ; oag:gasVolume ?g ; oag:waterVolume ?w .
+                FILTER(?o > 0 && ?h0 >= 24 && ?h1 >= 24 && ?h2 >= 24)
+                FILTER NOT EXISTS {
+                    ?r0 oag:nextDay ?value ; oag:oilVolume ?o ; oag:gasVolume ?g ; oag:waterVolume ?w ;
+                        oag:hoursOn ?hp .
+                    FILTER(?hp >= 24)
+                }
+            }""" ] .
+
+# Oil reported in m3 in the bbl column: on a full on-stream day, oil is more than 3x below both
+# neighbouring full days while gas holds. A unit slip is 6.29x; natural day-to-day change in the
+# reference data stays within 0.69x-1.4x, so 3x sits well clear of both.
+oagsh:UnitErrorShape a sh:NodeShape ;
+    sh:targetClass oag:Well ;
+    oagsh:defect "unit_error" ;
+    sh:severity sh:Warning ;
+    sh:sparql [
+        sh:message "Possible unit error: oil about 6.29x below the neighbouring days, gas steady (kept as reported)." ;
+        sh:prefixes <https://example.org/oag/shapes> ;
+        sh:select """
+            SELECT DISTINCT $this ?value WHERE {
+                ?value oag:ofWell $this ; oag:nextDay ?next ; oag:oilVolume ?o .
+                ?prev oag:nextDay ?value ; oag:oilVolume ?op .
+                ?next oag:oilVolume ?on .
+                FILTER(?o > 0 && ?op > 3 * ?o && ?on > 3 * ?o)
+                ?value oag:hoursOn ?h ; oag:gasVolume ?g .
+                ?prev oag:hoursOn ?hp ; oag:gasVolume ?gp .
+                ?next oag:hoursOn ?hn .
+                FILTER(?h >= 24 && ?hp >= 24 && ?hn >= 24 && ?g > 0.5 * ?gp)
+            }""" ] .

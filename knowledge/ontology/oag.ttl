@@ -127,3 +127,31 @@ oag:metric a owl:DatatypeProperty ; rdfs:domain skos:Concept ; rdfs:range xsd:st
     skos:definition "Name of the governed metric (semantic layer) the concept denotes." .
 oag:comparison a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string .
 oag:thresholdRef a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string .
+
+# --- Facts (validation only) -----------------------------------------------------------------------
+# A daily volume record is a fact, so it is not in the master graph (ADR 0041). volumes.r2rml.ttl maps
+# WELL_VOL_DAILY into a separate graph that is built only to check it against shapes.ttl (ADR 0043).
+
+oag:DailyVolume a owl:Class ;
+    rdfs:label "Daily volume" ;
+    skos:definition "One WELL_VOL_DAILY record: a well's reported volumes for one day." .
+
+# The grain the cleaning rule works at: one well on one day, holding every record reported for it.
+oag:WellDay a owl:Class ;
+    rdfs:label "Well-day" ;
+    skos:definition "One well on one calendar day; should hold exactly one record per volume method." .
+
+oag:hasRecord a owl:ObjectProperty ; rdfs:domain oag:WellDay ; rdfs:range oag:DailyVolume .
+oag:ofWell a owl:ObjectProperty ; rdfs:range oag:Well ;
+    skos:definition "The well a daily record or well-day belongs to." .
+oag:rowId a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:integer ;
+    skos:definition "WELL_VOLUME_DAILY_ID: the record id; a lower id was loaded first." .
+oag:volumeDate a owl:DatatypeProperty ; rdfs:range xsd:date .
+oag:nextDay a owl:ObjectProperty ; rdfs:domain oag:DailyVolume ; rdfs:range oag:DailyVolume ;
+    skos:definition "Links a well's record to its record(s) for the following calendar day." .
+oag:hoursOn a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:double .
+oag:oilVolume a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:double .
+oag:gasVolume a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:double .
+oag:waterVolume a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:double .
+oag:volumeMethod a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:string ;
+    skos:definition "Measured, or Corrected for a late restatement." .

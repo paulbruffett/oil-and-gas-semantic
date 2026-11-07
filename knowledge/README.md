@@ -25,6 +25,9 @@ The same knowledge, built on W3C standards so it can be compared with the platfo
   the w3id.org/osdu ontology (ADR 0042).
 - `ontology/mapping.r2rml.ttl` — R2RML from the canonical tables, and from the dataset's OSDU records as
   a second source, to instances.
+- `ontology/shapes.ttl` — SHACL shapes (ADR 0043): entity rules on the master graph, and one
+  data-quality rule per defect on daily volumes. `ontology/volumes.r2rml.ttl` maps WELL_VOL_DAILY into
+  a separate graph used only for validation (daily records, well-days, next-day links).
 - `vocabulary.yaml` stays the single source of synonyms, terms and products; `oag_semantic.ontology`
   adds them as SKOS labels and concepts (products with `skos:broader`).
 
@@ -32,3 +35,6 @@ The same knowledge, built on W3C standards so it can be compared with the platfo
 views of the Parquet), applies OWL 2 RL reasoning (owlrl) and answers with SPARQL. `tests/test_ontology.py`
 holds every answer equal to the LPG's, the canonical tables' or the rollup gold's, and checks that the
 hierarchy, inheritance and identity come from reasoning, not the mapping.
+`oag_semantic.shacl.validate(onto)` checks the master graph; `data_quality_findings(dataset_dir, onto)`
+returns the defects the shapes find, as findings-gold ids. `tests/test_shacl.py` grades them against
+the findings gold and plants entity faults to check the shapes catch them.

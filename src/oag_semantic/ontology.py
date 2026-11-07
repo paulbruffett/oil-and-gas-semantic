@@ -39,9 +39,11 @@ from oag_semantic.lpg import VOCABULARY_PATH
 ONTOLOGY_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "ontology"
 TBOX_PATH = ONTOLOGY_DIR / "oag.ttl"
 MAPPING_PATH = ONTOLOGY_DIR / "mapping.r2rml.ttl"
+VOLUMES_MAPPING_PATH = ONTOLOGY_DIR / "volumes.r2rml.ttl"
 
 OAG = Namespace("https://example.org/oag/ontology#")
 ID = Namespace("https://example.org/oag/id/")  # canonical entities (the master records)
+OSDU_RECORD = Namespace("https://example.org/oag/osdu-record/")  # aliases from the OSDU export
 TERM = Namespace("https://example.org/oag/id/term/")
 PRODUCT = Namespace("https://example.org/oag/id/product/")
 PREFIXES = {"oag": OAG, "skos": SKOS, "rdf": RDF, "owl": OWL}
@@ -52,6 +54,15 @@ _OSDU_VIEWS = {
     "osdu_well": ("well", {"UWI": "VARCHAR"}),
     "osdu_facility": ("facility", {"FACILITY_ID": "BIGINT", "FACILITY_TYPE": "VARCHAR"}),
 }
+
+
+# Each daily record paired with the same well's record(s) for the next calendar day (oag:nextDay).
+_VOLUME_NEXT_VIEW = """
+CREATE VIEW "well_vol_daily_next" AS
+SELECT a.WELL_VOLUME_DAILY_ID AS "FROM_ID", b.WELL_VOLUME_DAILY_ID AS "TO_ID"
+FROM well_vol_daily a JOIN well_vol_daily b
+  ON a.WELL_ID = b.WELL_ID AND CAST(b.VOLUME_DATE AS DATE) = CAST(a.VOLUME_DATE AS DATE) + 1
+"""
 
 
 def _sql_path(path: Path) -> str:
@@ -69,8 +80,8 @@ def _osdu_view_sql(view: str, json_path: Path | None, columns: dict[str, str]) -
     )
 
 
-def map_canonical(dataset_dir: str | Path) -> Graph:
-    """Run the R2RML mapping over a dataset's canonical tables and OSDU records: asserted facts only."""
+def _materialize(dataset_dir: str | Path, mapping_path: Path) -> Graph:
+    """Run an R2RML mapping with morph-kgc over DuckDB views of a dataset's tables and OSDU records."""
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "canonical.duckdb"
         con = duckdb.connect(str(db))
@@ -80,15 +91,26 @@ def map_canonical(dataset_dir: str | Path) -> Graph:
             osdu = osdu_manifest_paths(dataset_dir)
             for view, (key, columns) in _OSDU_VIEWS.items():
                 con.execute(_osdu_view_sql(view, osdu.get(key), columns))
+            con.execute(_VOLUME_NEXT_VIEW)
         finally:
             con.close()
         # morph-kgc reads this with ExtendedInterpolation, so a literal '$' in a path is written '$$'.
-        mapping, db_path = (str(x).replace("$", "$$") for x in (MAPPING_PATH, db))
+        mapping, db_path = (str(x).replace("$", "$$") for x in (mapping_path, db))
         config = (
             "[CONFIGURATION]\nlogging_level: WARNING\n"
             f"[DataSource]\nmappings: {mapping}\ndb_url: duckdb:///{db_path}\n"
         )
         return morph_kgc.materialize(config)
+
+
+def map_canonical(dataset_dir: str | Path) -> Graph:
+    """Run the R2RML mapping over a dataset's canonical tables and OSDU records: asserted facts only."""
+    return _materialize(dataset_dir, MAPPING_PATH)
+
+
+def map_volumes(dataset_dir: str | Path) -> Graph:
+    """WELL_VOL_DAILY as RDF, for validation only: never part of the master graph (ADR 0043)."""
+    return _materialize(dataset_dir, VOLUMES_MAPPING_PATH)
 
 
 def _add_vocabulary(g: Graph, vocabulary_path: Path) -> None:
@@ -311,4 +333,4 @@ def load_ontology(dataset_dir: str | Path, vocabulary_path: str | Path = VOCABUL
     return OntologyGraph(g)
 
 
-__all__ = ["ID", "OAG", "OntologyGraph", "load_ontology", "map_canonical"]
+__all__ = ["ID", "OAG", "OSDU_RECORD", "OntologyGraph", "load_ontology", "map_canonical", "map_volumes"]
