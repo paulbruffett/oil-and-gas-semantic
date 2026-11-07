@@ -156,6 +156,16 @@ def test_products_resolve_through_broader(onto):
     assert onto.resolve_product("gross  liquids") == ["actual_oil", "actual_water"]
     assert onto.resolve_product("liquids") == onto.resolve_product("total liquids")
     assert onto.resolve_product("condensate") is None
+    assert onto.resolve_product("total liquids by field last month") == ["actual_oil", "actual_water"]
+
+
+def test_grouping_with_own_metric_is_not_double_counted(dataset_dir, tmp_path):
+    """A grouping product that has its own metric answers with it alone, not with its parts as well."""
+    vocab = yaml.safe_load(VOCABULARY_PATH.read_text())
+    vocab["products"]["gross_liquids"]["metric"] = "actual_liquids"
+    path = tmp_path / "vocabulary.yaml"
+    path.write_text(yaml.safe_dump(vocab))
+    assert load_ontology(dataset_dir, path).resolve_product("liquids") == ["actual_liquids"]
 
 
 def test_classes_carry_osdu_kinds(onto):

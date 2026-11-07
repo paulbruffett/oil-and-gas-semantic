@@ -1,4 +1,6 @@
-# Business vocabulary for the Labeled Property Graph (LPG) knowledge layer (ADR 0004, DESIGN.md §3/§6).
+# Business vocabulary for the knowledge layer (ADR 0004, DESIGN.md §3/§6), read by both the Labeled
+# Property Graph (oag_semantic.lpg) and the RDF/OWL ontology (oag_semantic.ontology, ADR 0041/0042).
+# The ontology also reads `products`, which the LPG ignores.
 #
 # The LPG's *instance* graph (well/field nodes and well->field edges) is built from the canonical
 # Parquet at load time; this file holds the *static* schema the graph carries alongside it:

@@ -22,6 +22,7 @@ entity it matches, so queries keep to IRIs under ``ID`` (the canonical namespace
 from __future__ import annotations
 
 import tempfile
+from itertools import product
 from pathlib import Path
 
 import duckdb
@@ -224,15 +225,24 @@ class OntologyGraph:
         """A product word -> the governed metrics that measure it, using narrower products for a grouping.
 
         "oil" -> [actual_oil]; "liquids" -> [actual_oil, actual_water] via skos:broader. None if unknown.
+        Labels match as in resolve_term: exact first, else the longest label contained in the phrase.
+        A product with its own metric is measured by it alone, so a grouping is never counted twice.
         """
         rows = self._select(
-            """SELECT DISTINCT ?metric WHERE {
+            """SELECT ?p WHERE {
                  ?p a oag:Product ; skos:prefLabel|skos:altLabel ?label .
-                 FILTER(LCASE(STR(?label)) = ?q)
-                 ?leaf skos:broader* ?p ; oag:metric ?metric } ORDER BY ?metric""",
+                 BIND(LCASE(STR(?label)) AS ?l)
+                 FILTER(?l = ?q || CONTAINS(?q, ?l)) }
+               ORDER BY DESC(?l = ?q) DESC(STRLEN(?l)) LIMIT 1""",
             q=Literal(_norm(phrase)),
         )
-        return [str(r[0]) for r in rows] or None
+        return sorted(set(self._product_metrics(rows[0][0]))) if rows else None
+
+    def _product_metrics(self, product: URIRef) -> list[str]:
+        own = self.graph.value(product, OAG.metric)
+        if own is not None:
+            return [str(own)]
+        return [m for child in self.graph.subjects(SKOS.broader, product) for m in self._product_metrics(child)]
 
     def _ids(self, query: str, **bindings) -> list[int]:
         return sorted({int(r[0]) for r in self._select(query, **bindings)})
@@ -268,24 +278,26 @@ class OntologyGraph:
         }
 
 
-def _apply_keys(g: Graph) -> list[tuple]:
+def _apply_keys(g: Graph) -> None:
     """OWL 2 RL rule prp-key: same class and same values for every key property -> owl:sameAs.
 
     owlrl's own prp-key (7.1.4, and its master branch) skips the last key property, so a one-property
     key such as (oag:uwi) makes every well the same as every other. This applies the rule correctly
-    and takes the owl:hasKey triples out so owlrl doesn't apply it again; the caller puts them back
-    after reasoning. It reads asserted types and key values, which the mapping always asserts.
+    and removes the owl:hasKey triples so owlrl never applies its version (the TBox file keeps them,
+    for other engines). It reads asserted types and key values, which the mapping always asserts.
     """
-    removed = list(g.triples((None, OWL.hasKey, None)))
-    for c, _, head in removed:
+    for c, _, head in list(g.triples((None, OWL.hasKey, None))):
         props = list(Collection(g, head))
-        where = " ".join(f"?x <{p}> ?v{i} . ?y <{p}> ?v{i} ." for i, p in enumerate(props))
-        rows = g.query(f"SELECT DISTINCT ?x ?y WHERE {{ ?x a <{c}> . ?y a <{c}> . {where} FILTER(?x != ?y) }}")
-        for x, y in list(rows):
-            g.add((x, OWL.sameAs, y))
-    for t in removed:
-        g.remove(t)
-    return removed
+        by_key: dict[tuple, list] = {}
+        for x in g.subjects(RDF.type, c):
+            for values in product(*(list(g.objects(x, p)) for p in props)):
+                by_key.setdefault(values, []).append(x)
+        for same in by_key.values():
+            for x in same:
+                for y in same:
+                    if x != y:
+                        g.add((x, OWL.sameAs, y))
+        g.remove((c, OWL.hasKey, head))
 
 
 def load_ontology(dataset_dir: str | Path, vocabulary_path: str | Path = VOCABULARY_PATH) -> OntologyGraph:
@@ -294,10 +306,8 @@ def load_ontology(dataset_dir: str | Path, vocabulary_path: str | Path = VOCABUL
     g.parse(TBOX_PATH)
     g += map_canonical(dataset_dir)
     _add_vocabulary(g, Path(vocabulary_path))
-    keys = _apply_keys(g)
+    _apply_keys(g)
     owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(g)
-    for t in keys:
-        g.add(t)
     return OntologyGraph(g)
 
 
