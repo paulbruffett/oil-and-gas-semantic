@@ -33,7 +33,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Canonical system of record | OSDU PDM tables: WELL, FIELD, FACILITY, WELL_VOL_DAILY | every answer is grounded in it | ● generator Parquet | ● same tables, mapped by R2RML; OSDU records as a second source | ● Delta via `read_files` | ● `COPY INTO` | ● Warehouse via `OPENROWSET` |
 | Deterministic gold | `gold/surveillance.json` | grades the agent | ● co-generated | ● same gold | ● 6/6 | ● 6/6 | ● 6/6 |
 | Stable identity | `FACILITY` composite key; UWI `NO 15/9-F-1` | cite and join entities | ● keys in the PDM shapes | ● IRIs built from canonical ids; facility by its PDM pair key | ○ informational keys, not declared here | ◐ keys not enforced; Semantic Views require them | ○ `NOT ENFORCED` keys, not declared here |
-| Data-quality rules | one row per well-day; Corrected over Measured | trust the numbers | ● applied before gold (ADR 0040) | ▷ 4: SHACL shapes | ○ pipeline expectations | ○ data metric functions | ? |
+| Data-quality rules | one row per well-day; Corrected over Measured | trust the numbers | ● applied before gold (ADR 0040); flatlines and unit errors only listed by the generator | ● SHACL finds every findings-gold defect (Core for duplicates and corrections, SPARQL for flatlines and unit errors) on a validation-only copy of daily volumes | ○ pipeline expectations | ○ data metric functions | ? |
 | Query in place, no copy | daily volumes read where they live | facts at question time | ● DuckDB over Parquet | ▷ 7: Ontop virtual graph | ● tables over Delta | ◐ loaded copy | ◐ typed tables materialized for Direct Lake |
 
 ## 2. Semantic / metrics layer
@@ -67,7 +67,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Class inheritance | Well, Facility and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ✗ | ✗ | ? |
 | Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl key rule replaced: ADR 0042) | ✗ | ✗ | ? |
 | Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ▷ 5: SHACL rule; definition as data | ● SQL function | ● SQL function | ◐ natural-language rule |
-| Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ▷ 4: SHACL shapes | ○ constraints, expectations | ○ data metric functions | ? |
+| Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ● SHACL shapes, incl. a well's field = its facility's and no shared keys | ○ constraints, expectations | ○ data metric functions | ? |
 | Graph query language | SPARQL, GQL, SQL | how tools query the graph | ● Python API | ● SPARQL | ◐ SQL | ◐ recursive SQL | ◐ GQL graph stays empty via the API; `ask_ontology` takes natural language |
 | Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
 
@@ -98,8 +98,12 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   reproduce gold with a governed-tool agent.
 - **Where the formal ontology adds something no platform does natively:** class inheritance, inferred
   inverse and transitive relationships, identity across systems, broader/narrower concepts, and
-  validation shapes as standard, portable files. Slice 3 built all but validation (slice 4), each
-  inferred from standard declarations rather than coded. These are layers 3–4, which the six use cases
+  validation shapes as standard, portable files. Slices 3 and 4 built them, each from standard
+  declarations rather than code.
+- **Validation splits by kind:** entity rules are natural SHACL. Row-level data quality is natural in
+  SQL (pipeline expectations, data metric functions); in SHACL it needed the rows mapped and a modelling
+  step (well-day nodes, next-day links) before the rules were both expressible and fast (ADR 0043).
+  SHACL also doesn't understand `owl:sameAs`, so shapes run on one node per entity. These are layers 3–4, which the six use cases
   barely exercise. Showing the difference needs questions that depend on them.
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);

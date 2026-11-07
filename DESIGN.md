@@ -117,6 +117,10 @@ R2RML mapping at query time, without a copy. _Avoid_: "knowledge graph" for eith
 entity, inferred when they share a key (UWI for a well, the PDM key for a facility). **Product**: a
 produced fluid (oil, gas, water) or a grouping of them (**gross liquids** = oil + water), as SKOS
 concepts.
+**Shape** (SHACL): a standard, declarative rule for what valid data looks like (ADR 0043). **Well-day**: one
+well on one calendar day, holding every daily record reported for it — the grain of the cleaning rule.
+**Validation-only volume graph**: daily volumes mapped to RDF only to check them against shapes; never
+part of the master graph.
 **Agent**: a system that answers an NL business question over the platform. A **semantic baseline** answers
 via deterministic metric selection; an **agentic variant** uses an LLM tool-use loop. The agent design is
 open (ADR 0005).
@@ -374,6 +378,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0040 — Data-quality scenario knob: injected WELL_VOL_DAILY defects on a dedicated rng stream, off by default and out of config_hash; cleaning rules (one row per well-day, Corrected over Measured; flag, don't fix, flatlines and unit errors) applied before every KPI gold and in the reference compile; findings gold + scenario theme 7 (extends 0024/0032)](docs/adr/0040-data-quality-scenario-knob.md)
 - [0041 — RDF/OWL knowledge track: a reasoned master graph (OWL 2 RL, SKOS, R2RML) with facts left in the warehouse; same files in-process and in GraphDB (activates the optional track in 0004)](docs/adr/0041-rdf-owl-knowledge-track-hybrid-master-graph.md)
 - [0042 — Ontology master graph: facilities and operators, identity inferred from OSDU records by key, product concepts, OSDU alignment by kind and SKOS mapping (extends 0041)](docs/adr/0042-ontology-master-graph-facilities-operators-identity.md)
+- [0043 — SHACL validation: entity shapes on the master graph, data-quality shapes on a validation-only volume graph (extends 0041, 0042)](docs/adr/0043-shacl-validation-entity-and-data-quality-shapes.md)
 
 ---
 
