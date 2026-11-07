@@ -4,11 +4,20 @@
 # Parquet) and later in a virtual-graph engine (Ontop) over a database holding the same tables.
 # R2RML table and column names are case-sensitive (delimited identifiers): a database loaded for Ontop
 # must keep the canonical names as they are (lower-case tables, upper-case columns).
+#
+# Two sources (ADR 0042):
+# - the canonical tables (field, well, facility), named by canonical ids;
+# - the OSDU records exported with each dataset (osdu_well, osdu_facility: flat views of the record
+#   id and key columns, built by oag_semantic.ontology). They get their own IRIs, as records in
+#   another system would. The ontology's owl:hasKey declarations let the reasoner infer owl:sameAs
+#   between a record and the canonical entity it describes; nothing here links them.
 
 @prefix rr:   <http://www.w3.org/ns/r2rml#> .
 @prefix oag:  <https://example.org/oag/ontology#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# --- Canonical tables ------------------------------------------------------------------------------
 
 <#Field>
     rr:logicalTable [ rr:tableName "field" ] ;
@@ -17,11 +26,59 @@
                             rr:objectMap [ rr:column "FIELD_ID" ; rr:datatype xsd:integer ] ] ;
     rr:predicateObjectMap [ rr:predicate skos:prefLabel ; rr:objectMap [ rr:column "FIELD_NAME" ] ] .
 
+# A facility is named by its OSDU PDM key, the pair (FACILITY_ID, FACILITY_TYPE).
+<#Facility>
+    rr:logicalTable [ rr:tableName "facility" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/id/facility/{FACILITY_ID}/{FACILITY_TYPE}" ;
+                    rr:class oag:Facility ] ;
+    rr:predicateObjectMap [ rr:predicate oag:facilityId ;
+                            rr:objectMap [ rr:column "FACILITY_ID" ; rr:datatype xsd:integer ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:facilityType ; rr:objectMap [ rr:column "FACILITY_TYPE" ] ] ;
+    rr:predicateObjectMap [ rr:predicate skos:prefLabel ; rr:objectMap [ rr:column "FACILITY_NAME" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:inField ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/field/{FIELD_ID}" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:operatedBy ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/organisation/{OPERATOR}" ] ] .
+
 <#Well>
     rr:logicalTable [ rr:tableName "well" ] ;
     rr:subjectMap [ rr:template "https://example.org/oag/id/well/{WELL_ID}" ; rr:class oag:Well ] ;
     rr:predicateObjectMap [ rr:predicate oag:wellId ;
                             rr:objectMap [ rr:column "WELL_ID" ; rr:datatype xsd:integer ] ] ;
     rr:predicateObjectMap [ rr:predicate oag:uwi ; rr:objectMap [ rr:column "UWI" ] ] ;
+    rr:predicateObjectMap [ rr:predicate skos:prefLabel ; rr:objectMap [ rr:column "WELL_NAME" ] ] ;
     rr:predicateObjectMap [ rr:predicate oag:inField ;
-                            rr:objectMap [ rr:template "https://example.org/oag/id/field/{FIELD_ID}" ] ] .
+                            rr:objectMap [ rr:template "https://example.org/oag/id/field/{FIELD_ID}" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:operatedBy ;
+                            rr:objectMap [ rr:template "https://example.org/oag/id/organisation/{OPERATOR}" ] ] ;
+    # WELL carries only FACILITY_ID, so the facility's IRI (which needs FACILITY_TYPE too) comes from
+    # a join to the facility table.
+    rr:predicateObjectMap [ rr:predicate oag:atFacility ;
+                            rr:objectMap [ rr:parentTriplesMap <#Facility> ;
+                                           rr:joinCondition [ rr:child "FACILITY_ID" ;
+                                                              rr:parent "FACILITY_ID" ] ] ] .
+
+# Operators are a name column on WELL and FACILITY; there is no operator table.
+<#Organisation>
+    rr:logicalTable [ rr:sqlQuery """
+        SELECT OPERATOR FROM well UNION SELECT OPERATOR FROM facility
+    """ ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/id/organisation/{OPERATOR}" ;
+                    rr:class oag:Organisation ] ;
+    rr:predicateObjectMap [ rr:predicate skos:prefLabel ; rr:objectMap [ rr:column "OPERATOR" ] ] .
+
+# --- OSDU records (a second source) ----------------------------------------------------------------
+
+<#OsduWell>
+    rr:logicalTable [ rr:tableName "osdu_well" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/osdu-record/{RECORD_ID}" ; rr:class oag:Well ] ;
+    rr:predicateObjectMap [ rr:predicate oag:osduRecordId ; rr:objectMap [ rr:column "RECORD_ID" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:uwi ; rr:objectMap [ rr:column "UWI" ] ] .
+
+<#OsduFacility>
+    rr:logicalTable [ rr:tableName "osdu_facility" ] ;
+    rr:subjectMap [ rr:template "https://example.org/oag/osdu-record/{RECORD_ID}" ; rr:class oag:Facility ] ;
+    rr:predicateObjectMap [ rr:predicate oag:osduRecordId ; rr:objectMap [ rr:column "RECORD_ID" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:facilityId ;
+                            rr:objectMap [ rr:column "FACILITY_ID" ; rr:datatype xsd:integer ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:facilityType ; rr:objectMap [ rr:column "FACILITY_TYPE" ] ] .

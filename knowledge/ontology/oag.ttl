@@ -1,12 +1,19 @@
 # OAG ontology (TBox) -- the RDF/OWL track of the knowledge layer (ADR 0041).
 #
 # Classes and properties here are the formal meaning the agent reasons with. Instances (the ABox) are
-# not written by hand: mapping.r2rml.ttl maps them from the canonical tables, and oag_semantic.ontology
-# adds the SKOS labels from knowledge/vocabulary.yaml. Reasoning is OWL 2 RL.
+# not written by hand: mapping.r2rml.ttl maps them from the canonical tables (and the OSDU records as a
+# second source), and oag_semantic.ontology adds the SKOS labels from knowledge/vocabulary.yaml.
+# Reasoning is OWL 2 RL.
 #
 # The namespace is a placeholder (example.org); see ADR 0041.
+#
+# Alignment to OSDU (ADR 0042): each class carries its official OSDU kind (oag:osduKind, checked against
+# the OSDU data-definitions schemas) and a SKOS mapping link to the class in the Apache-2.0 OSDU ontology
+# at https://w3id.org/osdu (a third-party RDF translation, not imported, so it plays no part in
+# reasoning). The mapping property says how close the match is.
 
 @prefix oag:  <https://example.org/oag/ontology#> .
+@prefix osdu: <https://w3id.org/osdu#> .
 @prefix owl:  <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
@@ -15,27 +22,62 @@
 <https://example.org/oag/ontology> a owl:Ontology ;
     rdfs:label "Oil and gas semantic reference ontology" .
 
+oag:osduKind a owl:AnnotationProperty ;
+    rdfs:label "OSDU kind" ;
+    skos:definition "The OSDU well-known schema kind (authority:source:entityType:version) a class aligns to." .
+
 # --- Classes ---------------------------------------------------------------------------------------
 
 oag:Asset a owl:Class ;
     rdfs:label "Asset" ;
     skos:definition "Anything in the production hierarchy that volumes roll up through." .
 
+# OSDU Well is "the origin of a set of wellbores"; ours carries a UWI and production, so it sits
+# between OSDU Well and Wellbore: a close match, not an exact one.
 oag:Well a owl:Class ;
     rdfs:subClassOf oag:Asset ;
     rdfs:label "Well" ;
-    skos:definition "A single producing entity; geolocated." .
+    skos:definition "A single producing entity; geolocated." ;
+    oag:osduKind "osdu:wks:master-data--Well:1.5.0" ;
+    skos:closeMatch osdu:Well ;
+    # Two records with the same UWI are the same well (identity across systems).
+    owl:hasKey ( oag:uwi ) .
+
+# OSDU GenericFacility is any facility not modelled explicitly; ours is a battery. The w3id ontology
+# has no GenericFacility, and its AbstractFacility also covers wells, so it is a broader match.
+oag:Facility a owl:Class ;
+    rdfs:subClassOf oag:Asset ;
+    rdfs:label "Facility" ;
+    skos:definition "A surface facility (a battery) that wells produce through." ;
+    oag:osduKind "osdu:wks:master-data--GenericFacility:1.0.1" ;
+    skos:broadMatch osdu:AbstractFacility ;
+    # The OSDU PDM key of FACILITY is the pair (FACILITY_ID, FACILITY_TYPE).
+    owl:hasKey ( oag:facilityId oag:facilityType ) .
 
 oag:Field a owl:Class ;
     rdfs:subClassOf oag:Asset ;
     rdfs:label "Field" ;
-    skos:definition "A producing asset grouping wells and reservoirs." .
+    skos:definition "A producing asset grouping wells and reservoirs." ;
+    oag:osduKind "osdu:wks:master-data--Field:1.1.0" ;
+    skos:exactMatch osdu:Field .
+
+# An operator runs assets; it is not part of the production hierarchy.
+oag:Organisation a owl:Class ;
+    rdfs:label "Organisation" ;
+    skos:definition "A company that operates assets." ;
+    oag:osduKind "osdu:wks:master-data--Organisation:1.2.0" ;
+    skos:exactMatch osdu:Organisation .
 
 # A business term (e.g. "below expected") is a SKOS concept whose definition is data: the governed
 # metric it denotes, a comparison and a threshold. The agent evaluates it through the semantic layer.
 oag:BusinessTerm a owl:Class ;
     rdfs:subClassOf skos:Concept ;
     rdfs:label "Business term" .
+
+# A produced fluid (oil, gas, water) or a grouping of them (gross liquids), arranged with skos:broader.
+oag:Product a owl:Class ;
+    rdfs:subClassOf skos:Concept ;
+    rdfs:label "Product" .
 
 # --- Relationships ---------------------------------------------------------------------------------
 
@@ -52,17 +94,36 @@ oag:hasPart a owl:ObjectProperty ;
 oag:inField a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:subPropertyOf oag:partOf ;
     rdfs:label "in field" ;
-    rdfs:domain oag:Well ;
+    rdfs:domain oag:Asset ;
     rdfs:range oag:Field .
+
+oag:atFacility a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:subPropertyOf oag:partOf ;
+    rdfs:label "at facility" ;
+    rdfs:domain oag:Well ;
+    rdfs:range oag:Facility .
+
+oag:operatedBy a owl:ObjectProperty ;
+    rdfs:label "operated by" ;
+    rdfs:domain oag:Asset ;
+    rdfs:range oag:Organisation .
+
+oag:operates a owl:ObjectProperty ;
+    owl:inverseOf oag:operatedBy ;
+    rdfs:label "operates" .
 
 # --- Attributes ------------------------------------------------------------------------------------
 
 oag:wellId a owl:DatatypeProperty ; rdfs:domain oag:Well ; rdfs:range xsd:integer .
 oag:fieldId a owl:DatatypeProperty ; rdfs:domain oag:Field ; rdfs:range xsd:integer .
+oag:facilityId a owl:DatatypeProperty ; rdfs:domain oag:Facility ; rdfs:range xsd:integer .
+oag:facilityType a owl:DatatypeProperty ; rdfs:domain oag:Facility ; rdfs:range xsd:string .
 oag:uwi a owl:DatatypeProperty ; rdfs:domain oag:Well ; rdfs:range xsd:string ;
     rdfs:label "unique well identifier" .
+oag:osduRecordId a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:label "OSDU record id" .
 
-oag:metric a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string ;
-    skos:definition "Name of the governed metric (semantic layer) the term denotes." .
+oag:metric a owl:DatatypeProperty ; rdfs:domain skos:Concept ; rdfs:range xsd:string ;
+    skos:definition "Name of the governed metric (semantic layer) the concept denotes." .
 oag:comparison a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string .
 oag:thresholdRef a owl:DatatypeProperty ; rdfs:domain oag:BusinessTerm ; rdfs:range xsd:string .
