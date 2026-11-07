@@ -33,9 +33,16 @@ can't be written in SHACL Core.
   - Info for what cleaning rule 1 settles: duplicates and corrections.
   - Warning for what a person must settle: flatlines and unit errors.
   - Violation for entity faults.
-- **Unit errors by a ratio heuristic, graded exactly.** A day is flagged when, on full on-stream days,
-  its oil is more than 3× below both neighbouring days while gas holds within 0.5×. A unit slip is
-  6.29×. Natural day-to-day change in the reference data stays within 0.69× to 1.4×.
+- **Flatlines from two days.** Identical oil, gas and water on two or more consecutive full
+  on-stream days, reported on the first day; the knob allows runs as short as two.
+- **Unit errors by a ratio heuristic, graded exactly.** A full on-stream day is flagged when its oil
+  is more than 3× below a neighbouring full on-stream day's (before or after) while its gas stays
+  above half of that day's.
+  - A unit slip is 6.29×. Natural day-to-day change in the reference data stays within 0.69× to 1.4×.
+  - One neighbour is enough, so a slip on the first or last day, next to downtime, or next to another
+    slip is still found.
+  - Only records that survive cleaning are checked: a Measured record superseded by a Corrected one
+    is a late correction, whatever its bias.
 - **Validate one node per entity.** SHACL does not understand `owl:sameAs`. After reasoning, a well's
   facility link also points at the facility's OSDU record, so "one facility" would count two. The
   shapes run on the master graph without the OSDU-record aliases. The canonical entity holds every

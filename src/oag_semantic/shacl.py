@@ -20,7 +20,7 @@ import pyshacl
 from rdflib import Graph, Namespace, URIRef
 from rdflib.namespace import SH
 
-from oag_semantic.ontology import OAG, ONTOLOGY_DIR, OSDU_RECORD, OntologyGraph, map_volumes
+from oag_semantic.ontology import ID, OAG, ONTOLOGY_DIR, OSDU_RECORD, OntologyGraph, map_volumes
 
 SHAPES_PATH = ONTOLOGY_DIR / "shapes.ttl"
 OAGSH = Namespace("https://example.org/oag/shapes#")
@@ -32,8 +32,8 @@ class ShapeResult:
 
     shape: str            # local name of the node shape, e.g. "WellShape"
     severity: str         # "Violation", "Warning" or "Info"
-    focus: str            # IRI of the focus node (a well for every data-quality shape)
-    value: str | None     # the offending value: for a data-quality shape, the daily record's IRI
+    focus: str            # IRI of the focus node: a well, or a well-day for duplicates and corrections
+    value: str | None     # the offending value: for a flatline or unit error, the daily record's IRI
     message: str
     defect: str | None    # the findings-gold defect name, for data-quality shapes
 
@@ -97,7 +97,9 @@ def data_quality_findings(dataset_dir: str | Path, onto: OntologyGraph) -> list[
         if r.defect is None:
             continue
         node = URIRef(r.value or r.focus)
-        well_id = int(onto.graph.value(volumes.value(node, OAG.ofWell), OAG.wellId))
+        # The well id is read from the record's own well IRI, so a record for a well missing from the
+        # master graph is still reported.
+        well_id = int(str(volumes.value(node, OAG.ofWell)).removeprefix(f"{ID}well/"))
         day = str(volumes.value(node, OAG.volumeDate))
         finding_id = f"{well_id}:{day}:{r.defect}"
         findings[finding_id] = {"finding_id": finding_id, "well_id": well_id, "volume_date": day,

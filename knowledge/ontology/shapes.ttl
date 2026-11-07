@@ -8,9 +8,9 @@
 # - Data-quality shapes over daily volumes, mapped into a validation-only graph by volumes.r2rml.ttl.
 #   One shape per defect from the cleaning policy (ADR 0040). Duplicates and late corrections are
 #   counts on a well-day (SHACL Core); flatlines and unit errors compare consecutive days
-#   (SHACL-SPARQL, following oag:nextDay), focused on a well with the first offending record as the
-#   value. oagsh:defect names the defect, and sh:severity follows the policy's action: Info where the
-#   cleaning rule settles the row (duplicates, late corrections), Warning where a person must
+#   (SHACL-SPARQL, following oag:nextDay), focused on a well with the offending record as the
+#   value. oagsh:defect names the defect, and sh:severity follows the policy's action: Info where
+#   the cleaning rule settles the row (duplicates, late corrections), Warning where a person must
 #   (flatlines, unit errors).
 #
 # Constraints across rows need sh:sparql (SHACL-SPARQL, part of the W3C SHACL Recommendation); SHACL
@@ -68,7 +68,8 @@ oagsh:WellFieldMatchesFacilityShape a sh:NodeShape ;
             }""" ] .
 
 # Keys make records of the same entity owl:sameAs. Two canonical wells (or facilities) that end up the
-# same share a key: duplicate master data, which the reasoner would otherwise merge silently.
+# same share a key: duplicate master data, which the reasoner would otherwise merge silently. The
+# shapes run without the OSDU-record aliases, so any other sameAs node is another canonical entity.
 oagsh:DistinctKeysShape a sh:NodeShape ;
     sh:targetClass oag:Well , oag:Facility ;
     sh:sparql [
@@ -77,9 +78,7 @@ oagsh:DistinctKeysShape a sh:NodeShape ;
         sh:select """
             SELECT $this ?value WHERE {
                 $this owl:sameAs ?value .
-                FILTER(?value != $this
-                       && STRSTARTS(STR($this), "https://example.org/oag/id/")
-                       && STRSTARTS(STR(?value), "https://example.org/oag/id/"))
+                FILTER(?value != $this)
             }""" ] .
 
 # --- Data-quality shapes (daily volumes, validation-only graph) ------------------------------------
@@ -111,9 +110,9 @@ oagsh:LateCorrectionShape a sh:NodeShape ;
                     [ sh:path oag:hasRecord ; sh:qualifiedMinCount 1 ;
                       sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Corrected" ] ] ] ] .
 
-# A stuck sensor: identical oil, gas and water on three or more consecutive full on-stream days. The
-# value is the first day of the run. Downtime days (all zeros) are excluded by requiring 24 hours on
-# and some oil.
+# A stuck sensor: identical oil, gas and water on two or more consecutive full on-stream days (the
+# knob allows runs as short as two). The value is the first day of the run. Downtime days (all zeros)
+# are excluded by requiring 24 hours on and some oil.
 oagsh:FlatlineShape a sh:NodeShape ;
     sh:targetClass oag:Well ;
     oagsh:defect "flatline" ;
@@ -123,13 +122,10 @@ oagsh:FlatlineShape a sh:NodeShape ;
         sh:prefixes <https://example.org/oag/shapes> ;
         sh:select """
             SELECT DISTINCT $this ?value WHERE {
-                ?value oag:ofWell $this ; oag:nextDay ?r1 ; oag:oilVolume ?o .
-                ?r1 oag:oilVolume ?o ; oag:nextDay ?r2 .
-                ?r2 oag:oilVolume ?o .
-                ?value oag:hoursOn ?h0 ; oag:gasVolume ?g ; oag:waterVolume ?w .
-                ?r1 oag:hoursOn ?h1 ; oag:gasVolume ?g ; oag:waterVolume ?w .
-                ?r2 oag:hoursOn ?h2 ; oag:gasVolume ?g ; oag:waterVolume ?w .
-                FILTER(?o > 0 && ?h0 >= 24 && ?h1 >= 24 && ?h2 >= 24)
+                ?value oag:ofWell $this ; oag:nextDay ?r1 ; oag:oilVolume ?o ; oag:gasVolume ?g ;
+                       oag:waterVolume ?w ; oag:hoursOn ?h0 .
+                ?r1 oag:oilVolume ?o ; oag:gasVolume ?g ; oag:waterVolume ?w ; oag:hoursOn ?h1 .
+                FILTER(?o > 0 && ?h0 >= 24 && ?h1 >= 24)
                 FILTER NOT EXISTS {
                     ?r0 oag:nextDay ?value ; oag:oilVolume ?o ; oag:gasVolume ?g ; oag:waterVolume ?w ;
                         oag:hoursOn ?hp .
@@ -137,24 +133,29 @@ oagsh:FlatlineShape a sh:NodeShape ;
                 }
             }""" ] .
 
-# Oil reported in m3 in the bbl column: on a full on-stream day, oil is more than 3x below both
-# neighbouring full days while gas holds. A unit slip is 6.29x; natural day-to-day change in the
-# reference data stays within 0.69x-1.4x, so 3x sits well clear of both.
+# Oil reported in m3 in the bbl column: on a full on-stream day, oil is more than 3x below a
+# neighbouring full on-stream day's (before or after) while gas stays above half of that day's. A unit
+# slip is 6.29x; natural day-to-day change in the reference data stays within 0.69x-1.4x, so 3x sits
+# well clear of both. One neighbour is enough, so a slip on the first or last day, next to downtime,
+# or next to another slip is still found. Only records that survive cleaning are checked: a Measured
+# record superseded by a Corrected one is a late correction, not a unit error.
 oagsh:UnitErrorShape a sh:NodeShape ;
     sh:targetClass oag:Well ;
     oagsh:defect "unit_error" ;
     sh:severity sh:Warning ;
     sh:sparql [
-        sh:message "Possible unit error: oil about 6.29x below the neighbouring days, gas steady (kept as reported)." ;
+        sh:message "Possible unit error: oil about 6.29x below a neighbouring day, gas steady (kept as reported)." ;
         sh:prefixes <https://example.org/oag/shapes> ;
         sh:select """
             SELECT DISTINCT $this ?value WHERE {
-                ?value oag:ofWell $this ; oag:nextDay ?next ; oag:oilVolume ?o .
-                ?prev oag:nextDay ?value ; oag:oilVolume ?op .
-                ?next oag:oilVolume ?on .
-                FILTER(?o > 0 && ?op > 3 * ?o && ?on > 3 * ?o)
-                ?value oag:hoursOn ?h ; oag:gasVolume ?g .
-                ?prev oag:hoursOn ?hp ; oag:gasVolume ?gp .
-                ?next oag:hoursOn ?hn .
-                FILTER(?h >= 24 && ?hp >= 24 && ?hn >= 24 && ?g > 0.5 * ?gp)
+                ?value oag:ofWell $this ; oag:oilVolume ?o ; oag:hoursOn ?h ; oag:gasVolume ?g .
+                FILTER(?o > 0 && ?h >= 24)
+                ?value (oag:nextDay|^oag:nextDay) ?n .
+                ?n oag:oilVolume ?on ; oag:hoursOn ?hn ; oag:gasVolume ?gn .
+                FILTER(?hn >= 24 && ?on > 3 * ?o && ?g > 0.5 * ?gn)
+                FILTER NOT EXISTS {
+                    ?value oag:volumeMethod "Measured" .
+                    ?day oag:hasRecord ?value , ?c .
+                    ?c oag:volumeMethod "Corrected" .
+                }
             }""" ] .

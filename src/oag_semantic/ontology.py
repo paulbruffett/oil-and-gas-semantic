@@ -80,7 +80,7 @@ def _osdu_view_sql(view: str, json_path: Path | None, columns: dict[str, str]) -
     )
 
 
-def _materialize(dataset_dir: str | Path, mapping_path: Path) -> Graph:
+def _materialize(dataset_dir: str | Path, mapping_path: Path, extra_views: tuple[str, ...] = ()) -> Graph:
     """Run an R2RML mapping with morph-kgc over DuckDB views of a dataset's tables and OSDU records."""
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "canonical.duckdb"
@@ -91,7 +91,8 @@ def _materialize(dataset_dir: str | Path, mapping_path: Path) -> Graph:
             osdu = osdu_manifest_paths(dataset_dir)
             for view, (key, columns) in _OSDU_VIEWS.items():
                 con.execute(_osdu_view_sql(view, osdu.get(key), columns))
-            con.execute(_VOLUME_NEXT_VIEW)
+            for view_sql in extra_views:
+                con.execute(view_sql)
         finally:
             con.close()
         # morph-kgc reads this with ExtendedInterpolation, so a literal '$' in a path is written '$$'.
@@ -110,7 +111,7 @@ def map_canonical(dataset_dir: str | Path) -> Graph:
 
 def map_volumes(dataset_dir: str | Path) -> Graph:
     """WELL_VOL_DAILY as RDF, for validation only: never part of the master graph (ADR 0043)."""
-    return _materialize(dataset_dir, VOLUMES_MAPPING_PATH)
+    return _materialize(dataset_dir, VOLUMES_MAPPING_PATH, (_VOLUME_NEXT_VIEW,))
 
 
 def _add_vocabulary(g: Graph, vocabulary_path: Path) -> None:

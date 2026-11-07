@@ -22,7 +22,7 @@ KNOB = {
     "duplicate_count": 2,
     "correction_count": 2,
     "flatline_count": 1,
-    "flatline_days": 4,
+    "flatline_days": 2,  # the shortest run the knob allows
     "unit_error_count": 2,
 }
 
@@ -39,11 +39,11 @@ def dq_dataset(tmp_path_factory, small_config):
     return out
 
 
-def _planted(dataset_dir, tmp_path, change):
-    """A copy of the dataset with ``change(rows)`` applied to the canonical WELL table."""
+def _planted(dataset_dir, tmp_path, change, table="well"):
+    """A copy of the dataset with ``change(rows)`` applied to one canonical table (WELL by default)."""
     copy = tmp_path / "planted"
     shutil.copytree(dataset_dir, copy)
-    path = canonical_table_paths(copy)["well"]
+    path = canonical_table_paths(copy)[table]
     table = pq.read_table(path)
     rows = table.to_pylist()
     change(rows)
@@ -66,6 +66,22 @@ def test_findings_match_the_findings_gold(dq_dataset):
 
 def test_clean_volumes_have_no_findings(dataset_dir, onto):
     assert data_quality_findings(dataset_dir, onto) == []
+
+
+def test_unit_error_on_the_last_day_is_found(dataset_dir, tmp_path):
+    """A unit slip with only one neighbouring day (the end of the history) is still found."""
+    planted_at = {}
+
+    def slip_last_day(rows):
+        last = max(r["VOLUME_DATE"] for r in rows)
+        row = next(r for r in rows
+                   if r["VOLUME_DATE"] == last and r["HOURS_ON"] >= 24 and r["OIL_VOLUME"] > 0)
+        row["OIL_VOLUME"] = round(row["OIL_VOLUME"] / 6.29, 2)
+        planted_at["id"] = f"{row['WELL_ID']}:{row['VOLUME_DATE']}:unit_error"
+
+    planted = _planted(dataset_dir, tmp_path, slip_last_day, table="well_vol_daily")
+    found = data_quality_findings(planted, load_ontology(planted))
+    assert [f["finding_id"] for f in found] == [planted_at["id"]]
 
 
 def test_volumes_stay_out_of_the_master_graph(dataset_dir, onto):
