@@ -26,3 +26,24 @@ terms:
     comparison: less_than
     threshold_ref: surveillance_flag_threshold
     description: A well whose production efficiency (actual/expected oil) is below the materiality band.
+
+# Produced fluids as a concept hierarchy (RDF/OWL track only: SKOS concepts with skos:broader, ADR 0042;
+# the LPG does not read this). A product with a metric is measured by that governed metric; a grouping
+# product (gross liquids) has no metric of its own and is answered by the products under it.
+# "Gross liquids" here means oil + water, the production-surveillance sense; some reporting uses
+# "liquids" for oil + condensate + NGL instead.
+products:
+  oil:
+    synonyms: ["oil", "crude", "crude oil"]
+    metric: actual_oil
+    broader: gross_liquids
+  water:
+    synonyms: ["water", "produced water"]
+    metric: actual_water
+    broader: gross_liquids
+  gas:
+    synonyms: ["gas", "associated gas"]
+    metric: actual_gas
+  gross_liquids:
+    synonyms: ["liquids", "gross liquids", "total liquids", "gross fluid"]
+    description: Oil and water together, as produced at the well.

@@ -30,9 +30,9 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 
 | Capability | Example | Agent use | Reference | Ontology | Databricks | Snowflake | Fabric |
 |---|---|---|---|---|---|---|---|
-| Canonical system of record | OSDU PDM tables: WELL, FIELD, FACILITY, WELL_VOL_DAILY | every answer is grounded in it | ● generator Parquet | ● same tables, mapped by R2RML | ● Delta via `read_files` | ● `COPY INTO` | ● Warehouse via `OPENROWSET` |
+| Canonical system of record | OSDU PDM tables: WELL, FIELD, FACILITY, WELL_VOL_DAILY | every answer is grounded in it | ● generator Parquet | ● same tables, mapped by R2RML; OSDU records as a second source | ● Delta via `read_files` | ● `COPY INTO` | ● Warehouse via `OPENROWSET` |
 | Deterministic gold | `gold/surveillance.json` | grades the agent | ● co-generated | ● same gold | ● 6/6 | ● 6/6 | ● 6/6 |
-| Stable identity | `FACILITY` composite key; UWI `NO 15/9-F-1` | cite and join entities | ● keys in the PDM shapes | ● IRIs built from canonical ids | ○ informational keys, not declared here | ◐ keys not enforced; Semantic Views require them | ○ `NOT ENFORCED` keys, not declared here |
+| Stable identity | `FACILITY` composite key; UWI `NO 15/9-F-1` | cite and join entities | ● keys in the PDM shapes | ● IRIs built from canonical ids; facility by its PDM pair key | ○ informational keys, not declared here | ◐ keys not enforced; Semantic Views require them | ○ `NOT ENFORCED` keys, not declared here |
 | Data-quality rules | one row per well-day; Corrected over Measured | trust the numbers | ● applied before gold (ADR 0040) | ▷ 4: SHACL shapes | ○ pipeline expectations | ○ data metric functions | ? |
 | Query in place, no copy | daily volumes read where they live | facts at question time | ● DuckDB over Parquet | ▷ 7: Ontop virtual graph | ● tables over Delta | ◐ loaded copy | ◐ typed tables materialized for Direct Lake |
 
@@ -52,18 +52,20 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 |---|---|---|---|---|---|---|---|
 | Entity resolution with synonyms | "the volve" → field Volve | turn the user's words into ids | ● LPG | ● SKOS `altLabel` + SPARQL | ● `resolve_field` + synonym table | ● `RESOLVE_FIELD`, `KG_RESOLVE` | ◐ alias entities via `ask_ontology` (model-driven) |
 | Business-term mapping | "underperforming" → efficiency below the band | phrase → metric + filter | ● vocabulary terms | ● SKOS concept, definition as data | ● `resolve_term` | ● `RESOLVE_TERM` | ◐ `BusinessTerm` entity; the data agent can't use it |
-| Broader / narrower concepts | "liquids" covers oil and water | widen or narrow a term | ✗ | ▷ 3: `skos:broader` | ✗ | ✗ | ? |
-| Labels in several languages | Norwegian and English names | answer in the user's terms | ✗ | ▷ 3: language-tagged labels | ✗ | ✗ | ? |
+| Broader / narrower concepts | "liquids" covers oil and water | widen or narrow a term | ✗ | ● `skos:broader`: gross liquids → oil, water | ✗ | ✗ | ? |
+| Labels in several languages | Norwegian and English names | answer in the user's terms | ✗ | ▷ deferred: the data has no names in other languages (ADR 0042) | ✗ | ✗ | ? |
+| Operators as entities | Equinor operates wells and facilities | "what does Equinor run?" | ✗ operator is a column | ● `operatedBy`, inferred `operates` | ◐ operator column | ● `OPERATED_BY` edges | ? |
+| Alignment to an industry model | our Well ≈ OSDU Well | read and exchange OSDU records | ◐ OSDU PDM table and column names | ● OSDU kind on each class + SKOS mapping to w3id.org/osdu | ◐ PDM names | ◐ PDM names | ◐ PDM names |
 
 ## 4. Knowledge layer — structure and reasoning
 
 | Capability | Example | Agent use | Reference | Ontology | Databricks | Snowflake | Fabric |
 |---|---|---|---|---|---|---|---|
-| Typed relationships | well in field; facility in field | navigate between entities | ● `IN_FIELD` | ● object properties | ◐ key columns + functions | ● `KG_EDGE` | ● entity relationships |
-| Multi-level hierarchy | well → facility → field → operator | roll up across levels | ◐ one level (well → field) | ◐ well → field, by transitive `partOf`; ▷ 3: full hierarchy | ◐ fixed joins | ● recursive `KG_TRAVERSE` | ? multi-hop over MCP |
+| Typed relationships | well at facility; facility in field | navigate between entities | ● `IN_FIELD` | ● object properties | ◐ key columns + functions | ● `KG_EDGE` | ● entity relationships |
+| Multi-level hierarchy | well → facility → field | roll up across levels | ◐ one level (well → field) | ● transitive `partOf` over well → facility → field | ◐ fixed joins | ● recursive `KG_TRAVERSE` | ? multi-hop over MCP |
 | Inverse relationships | field has part well | ask from either end | ◐ coded both ways | ● `owl:inverseOf`, inferred | ◐ coded | ◐ coded | ? |
-| Class inheritance | Well and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ✗ | ✗ | ? |
-| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ▷ 3: `owl:sameAs`, `skos:exactMatch` | ✗ | ✗ | ? |
+| Class inheritance | Well, Facility and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ✗ | ✗ | ? |
+| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl key rule replaced: ADR 0042) | ✗ | ✗ | ? |
 | Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ▷ 5: SHACL rule; definition as data | ● SQL function | ● SQL function | ◐ natural-language rule |
 | Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ▷ 4: SHACL shapes | ○ constraints, expectations | ○ data metric functions | ? |
 | Graph query language | SPARQL, GQL, SQL | how tools query the graph | ● Python API | ● SPARQL | ◐ SQL | ◐ recursive SQL | ◐ GQL graph stays empty via the API; `ask_ontology` takes natural language |
@@ -96,8 +98,9 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   reproduce gold with a governed-tool agent.
 - **Where the formal ontology adds something no platform does natively:** class inheritance, inferred
   inverse and transitive relationships, identity across systems, broader/narrower concepts, and
-  validation shapes as standard, portable files. These are rows 3–4, which the six use cases barely
-  exercise. Showing the difference needs questions that depend on them.
+  validation shapes as standard, portable files. Slice 3 built all but validation (slice 4), each
+  inferred from standard declarations rather than coded. These are layers 3–4, which the six use cases
+  barely exercise. Showing the difference needs questions that depend on them.
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);
   validation as pipeline expectations (Databricks) or data metric functions (Snowflake); and generating

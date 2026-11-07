@@ -4,13 +4,19 @@ Builds the master graph from three standard artifacts and answers the agent's kn
 SPARQL:
 
 - ``knowledge/ontology/oag.ttl``: the OWL ontology (classes, properties);
-- ``knowledge/ontology/mapping.r2rml.ttl``: R2RML from the canonical tables, run by morph-kgc over
-  DuckDB views of the canonical Parquet;
-- ``knowledge/vocabulary.yaml``: field synonyms and business terms, added as SKOS labels and concepts.
+- ``knowledge/ontology/mapping.r2rml.ttl``: R2RML from the canonical tables, and from the dataset's
+  OSDU records as a second source, run by morph-kgc over DuckDB views;
+- ``knowledge/vocabulary.yaml``: field synonyms, business terms and products, added as SKOS labels and
+  concepts.
 
-Then OWL 2 RL reasoning (owlrl) adds the inferred facts, e.g. ``field hasPart well`` from
-``well inField field``. It gives the same answers as the LPG (``oag_semantic.lpg``) through a
-different technology, which is what the comparison is about.
+Then OWL 2 RL reasoning (owlrl) adds the inferred facts: ``field hasPart well`` from
+``well atFacility facility inField field``, ``well a Asset`` from ``Well subClassOf Asset``, and
+``owl:sameAs`` between an OSDU record and the canonical entity with the same key (ADR 0042). It gives
+the same answers as the LPG (``oag_semantic.lpg``) and the canonical tables through a different
+technology, which is what the comparison is about.
+
+Answers name canonical entities only: after ``owl:sameAs`` an OSDU record carries every fact of the
+entity it matches, so queries keep to IRIs under ``ID`` (the canonical namespace).
 """
 
 from __future__ import annotations
@@ -23,9 +29,10 @@ import morph_kgc
 import owlrl
 import yaml
 from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import RDF, SKOS
+from rdflib.collection import Collection
+from rdflib.namespace import OWL, RDF, SKOS
 
-from oag_generator import canonical_table_paths
+from oag_generator import canonical_table_paths, osdu_manifest_paths
 from oag_semantic.lpg import VOCABULARY_PATH
 
 ONTOLOGY_DIR = Path(__file__).resolve().parents[2] / "knowledge" / "ontology"
@@ -33,19 +40,45 @@ TBOX_PATH = ONTOLOGY_DIR / "oag.ttl"
 MAPPING_PATH = ONTOLOGY_DIR / "mapping.r2rml.ttl"
 
 OAG = Namespace("https://example.org/oag/ontology#")
+ID = Namespace("https://example.org/oag/id/")  # canonical entities (the master records)
 TERM = Namespace("https://example.org/oag/id/term/")
-PREFIXES = {"oag": OAG, "skos": SKOS, "rdf": RDF}
+PRODUCT = Namespace("https://example.org/oag/id/product/")
+PREFIXES = {"oag": OAG, "skos": SKOS, "rdf": RDF, "owl": OWL}
+
+# Flat views of the OSDU record export: record id plus the key columns identity is inferred from.
+# Empty when a dataset carries no OSDU records (e.g. the redacted eval bundle, ADR 0026).
+_OSDU_VIEWS = {
+    "osdu_well": ("well", {"UWI": "VARCHAR"}),
+    "osdu_facility": ("facility", {"FACILITY_ID": "BIGINT", "FACILITY_TYPE": "VARCHAR"}),
+}
+
+
+def _sql_path(path: Path) -> str:
+    return str(path).replace("'", "''")
+
+
+def _osdu_view_sql(view: str, json_path: Path | None, columns: dict[str, str]) -> str:
+    if json_path is None:
+        cols = ", ".join(f'CAST(NULL AS {t}) AS "{c}"' for c, t in {"RECORD_ID": "VARCHAR", **columns}.items())
+        return f'CREATE VIEW "{view}" AS SELECT {cols} WHERE false'
+    cols = ", ".join(f'CAST(r.data."{c}" AS {t}) AS "{c}"' for c, t in columns.items())
+    return (
+        f'CREATE VIEW "{view}" AS SELECT r.id AS "RECORD_ID", {cols} FROM '
+        f"(SELECT unnest(records) AS r FROM read_json('{_sql_path(json_path)}', maximum_object_size=1000000000))"
+    )
 
 
 def map_canonical(dataset_dir: str | Path) -> Graph:
-    """Run the R2RML mapping over a dataset's canonical tables: the asserted instances, no reasoning."""
+    """Run the R2RML mapping over a dataset's canonical tables and OSDU records: asserted facts only."""
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "canonical.duckdb"
         con = duckdb.connect(str(db))
         try:
             for table, path in canonical_table_paths(dataset_dir).items():
-                quoted = str(path).replace("'", "''")
-                con.execute(f'CREATE VIEW "{table}" AS SELECT * FROM read_parquet(\'{quoted}\')')
+                con.execute(f'CREATE VIEW "{table}" AS SELECT * FROM read_parquet(\'{_sql_path(path)}\')')
+            osdu = osdu_manifest_paths(dataset_dir)
+            for view, (key, columns) in _OSDU_VIEWS.items():
+                con.execute(_osdu_view_sql(view, osdu.get(key), columns))
         finally:
             con.close()
         # morph-kgc reads this with ExtendedInterpolation, so a literal '$' in a path is written '$$'.
@@ -58,7 +91,7 @@ def map_canonical(dataset_dir: str | Path) -> Graph:
 
 
 def _add_vocabulary(g: Graph, vocabulary_path: Path) -> None:
-    """Field synonyms become skos:altLabel on the field; business terms become oag:BusinessTerm concepts."""
+    """Field synonyms become skos:altLabel on the field; business terms and products become SKOS concepts."""
     vocab = yaml.safe_load(vocabulary_path.read_text()) or {}
     fields_by_name = {
         str(name).lower(): f for f in g.subjects(RDF.type, OAG.Field) for name in g.objects(f, SKOS.prefLabel)
@@ -78,6 +111,18 @@ def _add_vocabulary(g: Graph, vocabulary_path: Path) -> None:
             g.add((term, OAG.thresholdRef, Literal(spec["threshold_ref"])))
         for synonym in spec.get("synonyms", []):
             g.add((term, SKOS.altLabel, Literal(synonym)))
+    for key, spec in (vocab.get("products") or {}).items():
+        product = PRODUCT[key]
+        g.add((product, RDF.type, OAG.Product))
+        g.add((product, SKOS.prefLabel, Literal(key)))
+        if spec.get("description"):
+            g.add((product, SKOS.definition, Literal(spec["description"])))
+        if spec.get("metric"):
+            g.add((product, OAG.metric, Literal(spec["metric"])))
+        if spec.get("broader"):
+            g.add((product, SKOS.broader, PRODUCT[spec["broader"]]))
+        for synonym in spec.get("synonyms", []):
+            g.add((product, SKOS.altLabel, Literal(synonym)))
 
 
 def _norm(s: str) -> str:
@@ -104,21 +149,97 @@ class OntologyGraph:
         return int(rows[0][0]) if rows else None
 
     def wells_in_field(self, field_id: int) -> list[int]:
-        """WELL_IDs a field has as parts. Uses oag:hasPart, which only exists after reasoning."""
-        rows = self._select(
-            """SELECT ?wid WHERE {
-                 ?f oag:fieldId ?fid ; oag:hasPart ?w . ?w a oag:Well ; oag:wellId ?wid }
-               ORDER BY ?wid""",
+        """WELL_IDs a field has as parts, directly or through a facility (inferred oag:hasPart)."""
+        return self._ids(
+            """SELECT DISTINCT ?id WHERE {
+                 ?f oag:fieldId ?fid ; oag:hasPart ?w . ?w a oag:Well ; oag:wellId ?id } ORDER BY ?id""",
             fid=Literal(int(field_id)),
         )
-        return [int(r[0]) for r in rows]
 
     def field_of_well(self, well_id: int) -> int | None:
-        rows = self._select(
-            """SELECT ?fid WHERE { ?w oag:wellId ?wid ; oag:partOf ?f . ?f a oag:Field ; oag:fieldId ?fid }""",
+        ids = self._ids(
+            """SELECT DISTINCT ?id WHERE { ?w oag:wellId ?wid ; oag:partOf ?f . ?f a oag:Field ; oag:fieldId ?id }""",
             wid=Literal(int(well_id)),
         )
-        return int(rows[0][0]) if rows else None
+        return ids[0] if ids else None
+
+    def facilities_in_field(self, field_id: int) -> list[int]:
+        return self._ids(
+            """SELECT DISTINCT ?id WHERE {
+                 ?f oag:fieldId ?fid ; oag:hasPart ?x . ?x a oag:Facility ; oag:facilityId ?id } ORDER BY ?id""",
+            fid=Literal(int(field_id)),
+        )
+
+    def wells_at_facility(self, facility_id: int) -> list[int]:
+        return self._ids(
+            """SELECT DISTINCT ?id WHERE {
+                 ?x a oag:Facility ; oag:facilityId ?xid ; oag:hasPart ?w . ?w a oag:Well ; oag:wellId ?id }
+               ORDER BY ?id""",
+            xid=Literal(int(facility_id)),
+        )
+
+    def facility_of_well(self, well_id: int) -> int | None:
+        ids = self._ids(
+            """SELECT DISTINCT ?id WHERE { ?w oag:wellId ?wid ; oag:atFacility ?x . ?x oag:facilityId ?id }""",
+            wid=Literal(int(well_id)),
+        )
+        return ids[0] if ids else None
+
+    def assets_in_field(self, field_id: int) -> list[str]:
+        """Every asset in a field, of any subtype (Well, Facility, ...): canonical IRIs.
+
+        Asks for oag:Asset, a class no instance is mapped to; membership comes from subclass reasoning.
+        """
+        return self._iris(
+            """SELECT DISTINCT ?a WHERE { ?f oag:fieldId ?fid ; oag:hasPart ?a . ?a a oag:Asset }""",
+            fid=Literal(int(field_id)),
+        )
+
+    def operator_of(self, entity: str) -> str | None:
+        """The name of the organisation operating an entity (by IRI)."""
+        rows = self._select(
+            """SELECT DISTINCT ?name WHERE { ?e oag:operatedBy ?o . ?o skos:prefLabel ?name } ORDER BY ?name""",
+            e=URIRef(entity),
+        )
+        return str(rows[0][0]) if rows else None
+
+    def assets_operated_by(self, operator: str) -> list[str]:
+        """Canonical IRIs of every asset an operator (name, any case) operates, via inferred oag:operates."""
+        return self._iris(
+            """SELECT DISTINCT ?a WHERE {
+                 ?o a oag:Organisation ; skos:prefLabel ?name ; oag:operates ?a .
+                 FILTER(LCASE(STR(?name)) = ?q) }""",
+            q=Literal(_norm(operator)),
+        )
+
+    def osdu_record_ids(self, entity: str) -> list[str]:
+        """OSDU record ids for a canonical entity: records inferred to be the same thing (owl:sameAs)."""
+        rows = self._select(
+            """SELECT DISTINCT ?rid WHERE { ?e owl:sameAs ?r . ?r oag:osduRecordId ?rid } ORDER BY ?rid""",
+            e=URIRef(entity),
+        )
+        return [str(r[0]) for r in rows]
+
+    def resolve_product(self, phrase: str) -> list[str] | None:
+        """A product word -> the governed metrics that measure it, using narrower products for a grouping.
+
+        "oil" -> [actual_oil]; "liquids" -> [actual_oil, actual_water] via skos:broader. None if unknown.
+        """
+        rows = self._select(
+            """SELECT DISTINCT ?metric WHERE {
+                 ?p a oag:Product ; skos:prefLabel|skos:altLabel ?label .
+                 FILTER(LCASE(STR(?label)) = ?q)
+                 ?leaf skos:broader* ?p ; oag:metric ?metric } ORDER BY ?metric""",
+            q=Literal(_norm(phrase)),
+        )
+        return [str(r[0]) for r in rows] or None
+
+    def _ids(self, query: str, **bindings) -> list[int]:
+        return sorted({int(r[0]) for r in self._select(query, **bindings)})
+
+    def _iris(self, query: str, **bindings) -> list[str]:
+        """Bound IRIs from the first column, canonical entities only (no OSDU record aliases)."""
+        return sorted({str(r[0]) for r in self._select(query, **bindings) if str(r[0]).startswith(str(ID))})
 
     def resolve_term(self, phrase: str) -> dict | None:
         """A business phrase -> the term's definition (metric, comparison, threshold_ref).
@@ -147,14 +268,37 @@ class OntologyGraph:
         }
 
 
+def _apply_keys(g: Graph) -> list[tuple]:
+    """OWL 2 RL rule prp-key: same class and same values for every key property -> owl:sameAs.
+
+    owlrl's own prp-key (7.1.4, and its master branch) skips the last key property, so a one-property
+    key such as (oag:uwi) makes every well the same as every other. This applies the rule correctly
+    and takes the owl:hasKey triples out so owlrl doesn't apply it again; the caller puts them back
+    after reasoning. It reads asserted types and key values, which the mapping always asserts.
+    """
+    removed = list(g.triples((None, OWL.hasKey, None)))
+    for c, _, head in removed:
+        props = list(Collection(g, head))
+        where = " ".join(f"?x <{p}> ?v{i} . ?y <{p}> ?v{i} ." for i, p in enumerate(props))
+        rows = g.query(f"SELECT DISTINCT ?x ?y WHERE {{ ?x a <{c}> . ?y a <{c}> . {where} FILTER(?x != ?y) }}")
+        for x, y in list(rows):
+            g.add((x, OWL.sameAs, y))
+    for t in removed:
+        g.remove(t)
+    return removed
+
+
 def load_ontology(dataset_dir: str | Path, vocabulary_path: str | Path = VOCABULARY_PATH) -> OntologyGraph:
     """TBox + mapped instances + SKOS vocabulary, then OWL 2 RL reasoning."""
     g = Graph()
     g.parse(TBOX_PATH)
     g += map_canonical(dataset_dir)
     _add_vocabulary(g, Path(vocabulary_path))
+    keys = _apply_keys(g)
     owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(g)
+    for t in keys:
+        g.add(t)
     return OntologyGraph(g)
 
 
-__all__ = ["OAG", "OntologyGraph", "load_ontology", "map_canonical"]
+__all__ = ["ID", "OAG", "OntologyGraph", "load_ontology", "map_canonical"]
