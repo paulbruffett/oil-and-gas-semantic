@@ -23,17 +23,16 @@ from rdflib.namespace import RDF, XSD
 
 from oag_generator import read_dataset_manifest
 from oag_semantic.compile import SurveillanceResult, compute_surveillance
-from oag_semantic.manifest import SemanticLayer
+from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 from oag_semantic.ontology import ID, OAG, ONTOLOGY_DIR, TERM, OntologyGraph
 
 RULES_PATH = ONTOLOGY_DIR / "rules.ttl"
 
-# The governed metrics a term can name, read off the semantic layer's per-well values.
-_METRIC_VALUES = {
-    "production_efficiency": lambda w: w.efficiency,
+# Per-well values of the governed simple metrics, as the reference compile computes them. A ratio
+# metric (production_efficiency) is read from the semantic layer as numerator over denominator.
+_SIMPLE_VALUES = {
     "actual_oil": lambda w: w.actual_oil_bbl,
     "expected_oil": lambda w: w.expected_oil_bbl,
-    "oil_shortfall": lambda w: w.shortfall_bbl,
 }
 _COMPARISONS = {"less_than": operator.lt, "greater_than": operator.gt}
 
@@ -42,16 +41,44 @@ def _parameters(dataset_dir: str | Path) -> dict:
     return read_dataset_manifest(dataset_dir)["config"]
 
 
+def _definition(onto: OntologyGraph, key: str) -> dict:
+    """A business term's definition, read from the graph by the term's IRI."""
+    term = TERM[key]
+    found = {name: onto.graph.value(term, prop)
+             for name, prop in (("metric", OAG.metric), ("comparison", OAG.comparison),
+                                ("threshold_ref", OAG.thresholdRef))}
+    if None in found.values():
+        raise ValueError(f"business term {key!r} has no complete definition in the graph")
+    return {name: str(v) for name, v in found.items()}
+
+
+def _holds(layer: SemanticLayer, metric: str, compare, threshold: float, w) -> bool:
+    """Whether a well's governed metric value satisfies ``compare(value, threshold)``.
+
+    A ratio compares its numerator with threshold x denominator, the form the gold and the compile
+    use, so a value at the threshold is never decided differently by rounding.
+    """
+    m = layer.metrics.get(metric)
+    if m is not None and m.type == "ratio":
+        num, den = (m.type_params[part]["name"] for part in ("numerator", "denominator"))
+        if num in _SIMPLE_VALUES and den in _SIMPLE_VALUES:
+            return compare(_SIMPLE_VALUES[num](w), threshold * _SIMPLE_VALUES[den](w))
+    elif m is not None and metric in _SIMPLE_VALUES:
+        return compare(_SIMPLE_VALUES[metric](w), threshold)
+    raise ValueError(f"cannot evaluate governed metric {metric!r} per well")
+
+
 def below_expected_by_definition(dataset_dir: str | Path, onto: OntologyGraph,
                                  layer: SemanticLayer | None = None) -> list[int]:
     """The wells below expected, from the term's definition in the graph: sorted well ids."""
-    term = onto.resolve_term("below expected")
-    if term is None or term["metric"] not in _METRIC_VALUES or term["comparison"] not in _COMPARISONS:
-        raise ValueError(f"cannot evaluate the term definition {term!r}")
+    term = _definition(onto, "below_expected")
+    if term["comparison"] not in _COMPARISONS:
+        raise ValueError(f"unknown comparison {term['comparison']!r}")
+    layer = layer or load_semantic_layer()
     threshold = _parameters(dataset_dir)[term["threshold_ref"]]
-    value, compare = _METRIC_VALUES[term["metric"]], _COMPARISONS[term["comparison"]]
+    compare = _COMPARISONS[term["comparison"]]
     wells = compute_surveillance(dataset_dir, layer).wells
-    return sorted(w.well_id for w in wells if compare(value(w), threshold))
+    return sorted(w.well_id for w in wells if _holds(layer, term["metric"], compare, threshold, w))
 
 
 def period_graph(result: SurveillanceResult, parameters: dict) -> Graph:
@@ -66,7 +93,8 @@ def period_graph(result: SurveillanceResult, parameters: dict) -> Graph:
         g.add((node, OAG.periodEnd, end))
         g.add((node, OAG.actualOil, Literal(w.actual_oil_bbl, datatype=XSD.double)))
         g.add((node, OAG.expectedOil, Literal(w.expected_oil_bbl, datatype=XSD.double)))
-        g.add((node, OAG.productionEfficiency, Literal(w.efficiency, datatype=XSD.double)))
+        if w.expected_oil_bbl > 0:  # undefined without a forecast
+            g.add((node, OAG.productionEfficiency, Literal(w.efficiency, datatype=XSD.double)))
     for name, value in parameters.items():
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             node = ID[f"parameter/{name}"]

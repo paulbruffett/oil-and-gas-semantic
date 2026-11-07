@@ -24,7 +24,9 @@
     sh:declare [ sh:prefix "oag" ; sh:namespace "https://example.org/oag/ontology#"^^xsd:anyURI ] ,
                [ sh:prefix "term" ; sh:namespace "https://example.org/oag/id/term/"^^xsd:anyURI ] .
 
-# Below expected: production efficiency under the surveillance threshold over the period.
+# Below expected: production efficiency under the surveillance threshold over the period, compared
+# as the gold does (actual < threshold x expected) so rounding never decides a well at the threshold.
+# Flags are named id/flag/below_expected/well/{id}/{start}/{end}, beside the well's own IRI.
 oagr:BelowExpectedRule a sh:NodeShape ;
     sh:targetClass oag:WellPeriod ;
     sh:rule [
@@ -36,10 +38,11 @@ oagr:BelowExpectedRule a sh:NodeShape ;
                       oag:periodStart ?start ; oag:periodEnd ?end ; oag:productionEfficiency ?eff .
             } WHERE {
                 $this oag:ofWell ?well ; oag:periodStart ?start ; oag:periodEnd ?end ;
-                      oag:productionEfficiency ?eff .
+                      oag:actualOil ?actual ; oag:expectedOil ?expected .
+                OPTIONAL { $this oag:productionEfficiency ?eff }
                 term:below_expected oag:thresholdRef ?ref .
                 ?parameter a oag:Parameter ; oag:parameterName ?ref ; oag:value ?threshold .
-                FILTER(?eff < ?threshold)
-                BIND(IRI(CONCAT(STR(term:below_expected), "/", STRAFTER(STR(?well), "/id/well/"),
-                                "/", STR(?start), "/", STR(?end))) AS ?flag)
+                FILTER(?actual < ?threshold * ?expected)
+                BIND(IRI(CONCAT(STRBEFORE(STR(?well), "well/"), "flag/below_expected/",
+                                STRAFTER(STR(?well), "/id/"), "/", STR(?start), "/", STR(?end))) AS ?flag)
             }""" ] .

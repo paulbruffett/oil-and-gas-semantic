@@ -15,8 +15,9 @@ platforms evaluate it with a SQL function. Fabric has a natural-language rule.
 **Decision.**
 - **Two runtimes of the same term, compared** (`oag_semantic.rules`):
   - **Definition as data** (`below_expected_by_definition`). Read the term's SKOS definition from the
-    master graph, look up the threshold by its reference in the dataset's parameters, and apply it in
-    code to the governed metric values. Nothing about the term is written in code.
+    master graph by its IRI, look up the threshold by its reference in the dataset's parameters, and
+    apply it in code to the governed metric values. The metric's form comes from the semantic layer.
+    Nothing about the term is written in code.
   - **SHACL rule** (`derive_flags`, `below_expected_by_rule`). `knowledge/ontology/rules.ttl` holds a
     SHACL `sh:SPARQLRule` that writes `oag:Flag` records. The rule reads the threshold from data, but
     its metric and comparison are written into the rule.
@@ -27,7 +28,11 @@ platforms evaluate it with a SQL function. Fabric has a natural-language rule.
   graph:
   - one `oag:WellPeriod` per well, holding the period and the governed metric values;
   - one `oag:Parameter` per numeric dataset setting (the threshold's `oag:thresholdRef` names one);
-  - the `oag:Flag` records the rule derives, each with its term (`oag:ofTerm`), well and period.
+  - the `oag:Flag` records the rule derives, each with its term (`oag:ofTerm`), well and period, named
+    `id/flag/below_expected/well/{id}/{start}/{end}`.
+- **Ratios compared without dividing.** "Efficiency below 90%" is evaluated as actual < 0.9 ×
+  expected, the form the gold and the compile use. Then rounding never decides a well at the threshold,
+  and a well with no forecast is never flagged. Both runtimes do this.
 - **Graded against the surveillance gold.** Both runtimes must flag exactly the gold's wells, and they
   must follow a changed threshold.
 
