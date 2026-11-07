@@ -84,6 +84,7 @@ class SurveillanceResult:
     flag_threshold: float
     evaluated_well_ids: tuple[int, ...]
     flagged: tuple[WellSurveillance, ...]
+    wells: tuple[WellSurveillance, ...] = ()  # every evaluated well, flagged or not, by well_id
 
     @property
     def n_wells_evaluated(self) -> int:
@@ -161,21 +162,22 @@ def compute_surveillance(
         con.close()
 
     evaluated: list[int] = []
+    wells: list[WellSurveillance] = []
     flagged: list[WellSurveillance] = []
     for well_id, uwi, field_id, expected_oil, actual_oil in rows:
         evaluated.append(int(well_id))
+        well = WellSurveillance(
+            well_id=int(well_id),
+            uwi=uwi,
+            field_id=int(field_id),
+            expected_oil_bbl=float(expected_oil),
+            actual_oil_bbl=float(actual_oil),
+            shortfall_bbl=float(expected_oil) - float(actual_oil),
+            efficiency=float(actual_oil) / float(expected_oil) if expected_oil else float("nan"),
+        )
+        wells.append(well)
         if actual_oil < threshold * expected_oil:  # produced materially below forecast
-            flagged.append(
-                WellSurveillance(
-                    well_id=int(well_id),
-                    uwi=uwi,
-                    field_id=int(field_id),
-                    expected_oil_bbl=float(expected_oil),
-                    actual_oil_bbl=float(actual_oil),
-                    shortfall_bbl=float(expected_oil) - float(actual_oil),
-                    efficiency=float(actual_oil) / float(expected_oil),
-                )
-            )
+            flagged.append(well)
     # Deterministic order: biggest miss first, then well_id for ties (matches gold.py).
     flagged.sort(key=lambda r: (-r.shortfall_bbl, r.well_id))
 
@@ -186,6 +188,7 @@ def compute_surveillance(
         flag_threshold=threshold,
         evaluated_well_ids=tuple(evaluated),
         flagged=tuple(flagged),
+        wells=tuple(wells),
     )
 
 

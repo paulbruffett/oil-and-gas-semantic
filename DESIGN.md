@@ -121,6 +121,10 @@ concepts.
 well on one calendar day, holding every daily record reported for it — the grain of the cleaning rule.
 **Validation-only volume graph**: daily volumes mapped to RDF only to check them against shapes; never
 part of the master graph.
+**Flag**: a dated record that a business term held for a well over a period, derived by a rule; never a
+class membership (ADR 0044). **Well period**: a well's governed metric values over one period, the input
+a rule compares. **Definition as data**: a business term evaluated from its SKOS definition (metric,
+comparison, threshold reference), so changing the term needs no code change.
 **Agent**: a system that answers an NL business question over the platform. A **semantic baseline** answers
 via deterministic metric selection; an **agentic variant** uses an LLM tool-use loop. The agent design is
 open (ADR 0005).
@@ -379,6 +383,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0041 — RDF/OWL knowledge track: a reasoned master graph (OWL 2 RL, SKOS, R2RML) with facts left in the warehouse; same files in-process and in GraphDB (activates the optional track in 0004)](docs/adr/0041-rdf-owl-knowledge-track-hybrid-master-graph.md)
 - [0042 — Ontology master graph: facilities and operators, identity inferred from OSDU records by key, product concepts, OSDU alignment by kind and SKOS mapping (extends 0041)](docs/adr/0042-ontology-master-graph-facilities-operators-identity.md)
 - [0043 — SHACL validation: entity shapes on the master graph, data-quality shapes on a validation-only volume graph (extends 0041, 0042)](docs/adr/0043-shacl-validation-entity-and-data-quality-shapes.md)
+- [0044 — Business-term rules: "below expected" from its definition as data and from a SHACL rule, over governed metric values (extends 0041, 0043)](docs/adr/0044-business-term-rules-definition-as-data-and-shacl-rule.md)
 
 ---
 

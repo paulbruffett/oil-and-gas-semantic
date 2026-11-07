@@ -155,3 +155,35 @@ oag:gasVolume a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range 
 oag:waterVolume a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:double .
 oag:volumeMethod a owl:DatatypeProperty ; rdfs:domain oag:DailyVolume ; rdfs:range xsd:string ;
     skos:definition "Measured, or Corrected for a late restatement." .
+
+# --- Derived records (rules) -----------------------------------------------------------------------
+# A business term like "below expected" holds for a well over a period, so it is never a class
+# membership (ADR 0041). The governed metric values for a period and the flags a rule derives from
+# them are dated records in a separate derived graph, never in the master graph (ADR 0044).
+
+oag:WellPeriod a owl:Class ;
+    rdfs:label "Well period" ;
+    skos:definition "A well's governed metric values over one period, as the semantic layer computes them." .
+
+oag:Flag a owl:Class ;
+    rdfs:label "Flag" ;
+    skos:definition "A dated record that a business term held for a well over a period." .
+
+oag:Parameter a owl:Class ;
+    rdfs:label "Parameter" ;
+    skos:definition "A named setting a business term refers to, such as a threshold (oag:thresholdRef)." .
+
+oag:ofTerm a owl:ObjectProperty ; rdfs:domain oag:Flag ; rdfs:range oag:BusinessTerm ;
+    skos:definition "The business term a flag records." .
+oag:periodStart a owl:DatatypeProperty ; rdfs:range xsd:date .
+oag:periodEnd a owl:DatatypeProperty ; rdfs:range xsd:date .
+oag:actualOil a owl:DatatypeProperty ; rdfs:domain oag:WellPeriod ; rdfs:range xsd:double ;
+    skos:definition "The governed metric actual_oil for the period (bbl)." .
+oag:expectedOil a owl:DatatypeProperty ; rdfs:domain oag:WellPeriod ; rdfs:range xsd:double ;
+    skos:definition "The governed metric expected_oil for the period (bbl)." .
+oag:productionEfficiency a owl:DatatypeProperty ; rdfs:range xsd:double ;
+    skos:definition "The governed metric production_efficiency for the period: actual over expected oil." .
+oag:parameterName a owl:DatatypeProperty ; rdfs:domain oag:Parameter ; rdfs:range xsd:string ;
+    skos:definition "The name a business term's oag:thresholdRef uses for this parameter." .
+oag:value a owl:DatatypeProperty ; rdfs:domain oag:Parameter ;
+    skos:definition "The parameter's value for this dataset." .

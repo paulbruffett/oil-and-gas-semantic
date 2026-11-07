@@ -1,0 +1,45 @@
+# SHACL rules for the RDF/OWL track (ADR 0044): business terms derived as dated flag records.
+#
+# "Below expected" holds for a well over a period, so it is a flag record with a period, never a class
+# membership (ADR 0041). The rule runs on a derived graph: one oag:WellPeriod per well holding the
+# governed metric values the semantic layer computed, plus the dataset's parameters. The graph never
+# sums raw rows, so the metric is defined once, in the semantic layer.
+#
+# The rule reads the threshold from data (the term's oag:thresholdRef names an oag:Parameter); the
+# metric and the comparison are written into the rule. oag_semantic.rules also evaluates the same term
+# straight from its SKOS definition, and the two must agree.
+#
+# SHACL rules (sh:SPARQLRule) are SHACL Advanced Features, a W3C Working Group Note, not part of the
+# SHACL Recommendation the validation shapes use.
+
+@prefix oag:    <https://example.org/oag/ontology#> .
+@prefix oagr:   <https://example.org/oag/rules#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+<https://example.org/oag/rules> a owl:Ontology ;
+    rdfs:label "OAG rules" ;
+    sh:declare [ sh:prefix "oag" ; sh:namespace "https://example.org/oag/ontology#"^^xsd:anyURI ] ,
+               [ sh:prefix "term" ; sh:namespace "https://example.org/oag/id/term/"^^xsd:anyURI ] .
+
+# Below expected: production efficiency under the surveillance threshold over the period.
+oagr:BelowExpectedRule a sh:NodeShape ;
+    sh:targetClass oag:WellPeriod ;
+    sh:rule [
+        a sh:SPARQLRule ;
+        sh:prefixes <https://example.org/oag/rules> ;
+        sh:construct """
+            CONSTRUCT {
+                ?flag a oag:Flag ; oag:ofTerm term:below_expected ; oag:ofWell ?well ;
+                      oag:periodStart ?start ; oag:periodEnd ?end ; oag:productionEfficiency ?eff .
+            } WHERE {
+                $this oag:ofWell ?well ; oag:periodStart ?start ; oag:periodEnd ?end ;
+                      oag:productionEfficiency ?eff .
+                term:below_expected oag:thresholdRef ?ref .
+                ?parameter a oag:Parameter ; oag:parameterName ?ref ; oag:value ?threshold .
+                FILTER(?eff < ?threshold)
+                BIND(IRI(CONCAT(STR(term:below_expected), "/", STRAFTER(STR(?well), "/id/well/"),
+                                "/", STR(?start), "/", STR(?end))) AS ?flag)
+            }""" ] .
