@@ -58,5 +58,8 @@ answers and break parity with the LPG and the platforms.
 **Consequences.** The master graph answers facility, operator, asset, identity and product questions;
 the tests hold them equal to the canonical tables and the rollup gold, since the LPG has no equivalent.
 The OSDU record views are built by the loader, so the Ontop runtime (slice 7) needs the same views.
+A well now reaches its field two ways (its own FIELD_ID and its facility's); if they disagree it is
+counted in both fields, so slice 4 should add a shape requiring them to agree. The key rule reads
+asserted types and key values only; a key that depends on inferred ones would need a second pass.
 The owlrl workaround should go once owlrl is fixed; a report upstream is worth filing. The kind
 versions are pinned to what was current when checked and need refreshing as OSDU releases new ones.
