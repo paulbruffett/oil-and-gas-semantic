@@ -66,7 +66,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Inverse relationships | field has part well | ask from either end | ◐ coded both ways | ● `owl:inverseOf`, inferred | ◐ coded | ◐ coded | ? |
 | Class inheritance | Well, Facility and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ✗ | ✗ | ? |
 | Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl key rule replaced: ADR 0042) | ✗ | ✗ | ? |
-| Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ▷ 5: SHACL rule; definition as data | ● SQL function | ● SQL function | ◐ natural-language rule |
+| Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ● definition as data and a SHACL rule, both over governed metric values; dated flag records (ADR 0044) | ● SQL function | ● SQL function | ◐ natural-language rule |
 | Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ● SHACL shapes, incl. a well's field = its facility's and no shared keys | ○ constraints, expectations | ○ data metric functions | ? |
 | Graph query language | SPARQL, GQL, SQL | how tools query the graph | ● Python API | ● SPARQL | ◐ SQL | ◐ recursive SQL | ◐ GQL graph stays empty via the API; `ask_ontology` takes natural language |
 | Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
@@ -105,6 +105,9 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   step (well-day nodes, next-day links) before the rules were both expressible and fast (ADR 0043).
   SHACL also doesn't understand `owl:sameAs`, so shapes run on one node per entity. These are layers 3–4, which the six use cases
   barely exercise. Showing the difference needs questions that depend on them.
+- **Rules depend on where the definition lives:** the term's definition, stored as data, needs no code
+  change when the term changes. A SHACL rule, like the platforms' SQL functions, is a second copy of the
+  definition. Neither adds inference: both compare a number the semantic layer computed (ADR 0044).
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);
   validation as pipeline expectations (Databricks) or data metric functions (Snowflake); and generating
