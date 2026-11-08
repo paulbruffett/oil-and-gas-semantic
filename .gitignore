@@ -33,3 +33,8 @@ spec/volve/*.xlsx
 # Local MLflow tracking artifacts from databricks/agent deploy runs
 platforms/databricks/agent/mlflow.db
 platforms/databricks/agent/mlruns/
+
+# GraphDB runtime (ADR 0046): downloaded JDBC driver and the generated DuckDB file
+knowledge/graphdb/lib/
+knowledge/graphdb/data/
+knowledge/graphdb/graphdb.license

@@ -57,7 +57,7 @@ _OSDU_VIEWS = {
 
 
 # Each daily record paired with the same well's record(s) for the next calendar day (oag:nextDay).
-_VOLUME_NEXT_VIEW = """
+VOLUME_NEXT_VIEW = """
 CREATE VIEW "well_vol_daily_next" AS
 SELECT a.WELL_VOLUME_DAILY_ID AS "FROM_ID", b.WELL_VOLUME_DAILY_ID AS "TO_ID"
 FROM well_vol_daily a JOIN well_vol_daily b
@@ -80,19 +80,35 @@ def _osdu_view_sql(view: str, json_path: Path | None, columns: dict[str, str]) -
     )
 
 
+def create_views(con: duckdb.DuckDBPyConnection, dataset_dir: str | Path,
+                 extra_views: tuple[str, ...] = (VOLUME_NEXT_VIEW,)) -> list[str]:
+    """The DuckDB views the R2RML mappings read: canonical tables, OSDU records, next-day links.
+
+    One definition for every runtime: morph-kgc here, and the DuckDB file Ontop reads (slice 7).
+    Returns the view names.
+    """
+    tables = canonical_table_paths(dataset_dir)
+    for table, path in tables.items():
+        con.execute(f'CREATE VIEW "{table}" AS SELECT * FROM read_parquet(\'{_sql_path(path)}\')')
+    osdu = osdu_manifest_paths(dataset_dir)
+    for view, (key, columns) in _OSDU_VIEWS.items():
+        con.execute(_osdu_view_sql(view, osdu.get(key), columns))
+    for view_sql in extra_views:
+        con.execute(view_sql)
+    return [*tables, *_OSDU_VIEWS, *(_view_name(v) for v in extra_views)]
+
+
+def _view_name(view_sql: str) -> str:
+    return view_sql.split('"')[1]
+
+
 def _materialize(dataset_dir: str | Path, mapping_path: Path, extra_views: tuple[str, ...] = ()) -> Graph:
     """Run an R2RML mapping with morph-kgc over DuckDB views of a dataset's tables and OSDU records."""
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "canonical.duckdb"
         con = duckdb.connect(str(db))
         try:
-            for table, path in canonical_table_paths(dataset_dir).items():
-                con.execute(f'CREATE VIEW "{table}" AS SELECT * FROM read_parquet(\'{_sql_path(path)}\')')
-            osdu = osdu_manifest_paths(dataset_dir)
-            for view, (key, columns) in _OSDU_VIEWS.items():
-                con.execute(_osdu_view_sql(view, osdu.get(key), columns))
-            for view_sql in extra_views:
-                con.execute(view_sql)
+            create_views(con, dataset_dir, extra_views)
         finally:
             con.close()
         # morph-kgc reads this with ExtendedInterpolation, so a literal '$' in a path is written '$$'.
@@ -111,7 +127,7 @@ def map_canonical(dataset_dir: str | Path) -> Graph:
 
 def map_volumes(dataset_dir: str | Path) -> Graph:
     """WELL_VOL_DAILY as RDF, for validation only: never part of the master graph (ADR 0043)."""
-    return _materialize(dataset_dir, VOLUMES_MAPPING_PATH, (_VOLUME_NEXT_VIEW,))
+    return _materialize(dataset_dir, VOLUMES_MAPPING_PATH, (VOLUME_NEXT_VIEW,))
 
 
 def _add_vocabulary(g: Graph, vocabulary_path: Path) -> None:
@@ -328,15 +344,22 @@ def _apply_keys(g: Graph) -> None:
         g.remove((c, OWL.hasKey, head))
 
 
-def load_ontology(dataset_dir: str | Path, vocabulary_path: str | Path = VOCABULARY_PATH) -> OntologyGraph:
-    """TBox + mapped instances + SKOS vocabulary, then OWL 2 RL reasoning."""
+def asserted_graph(dataset_dir: str | Path, vocabulary_path: str | Path = VOCABULARY_PATH) -> Graph:
+    """TBox + mapped instances + SKOS vocabulary: what every runtime loads before reasoning."""
     g = Graph()
     g.parse(TBOX_PATH)
     g += map_canonical(dataset_dir)
     _add_vocabulary(g, Path(vocabulary_path))
+    return g
+
+
+def load_ontology(dataset_dir: str | Path, vocabulary_path: str | Path = VOCABULARY_PATH) -> OntologyGraph:
+    """The asserted graph, then OWL 2 RL reasoning (with the key rule done here, see _apply_keys)."""
+    g = asserted_graph(dataset_dir, vocabulary_path)
     _apply_keys(g)
     owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(g)
     return OntologyGraph(g)
 
 
-__all__ = ["ID", "OAG", "OSDU_RECORD", "OntologyGraph", "load_ontology", "map_canonical", "map_volumes"]
+__all__ = ["ID", "OAG", "OSDU_RECORD", "OntologyGraph", "asserted_graph", "create_views", "load_ontology",
+           "map_canonical", "map_volumes"]

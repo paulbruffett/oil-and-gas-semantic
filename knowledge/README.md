@@ -48,3 +48,21 @@ surveillance gold.
 tools (SPARQL over the master graph, including a read-only `sparql_query`) and the governed metric tools
 (ADR 0045). `tests/test_ontology_agent.py` drives it with a scripted model; `python -m
 oag_semantic.ontology_agent <dataset_dir>` runs the live check against gold and the reasoning checks.
+
+### GraphDB runtime (ADR 0046)
+
+The same files on a second engine, checked to agree: GraphDB's OWL 2 RL reasoning, its SHACL engine,
+and Ontop serving daily volumes live from DuckDB.
+
+```bash
+colima start --cpu 4 --memory 6                          # any Docker runtime
+knowledge/graphdb/graphdb.sh up                           # GraphDB on 127.0.0.1:7200
+uv run python -m oag_semantic.graphdb load <dataset_dir>  # oag-master + oag-facts
+```
+
+Without a licence file this runs GraphDB 10.8.14, the last licence-free release. With one at
+`knowledge/graphdb/graphdb.license` (gitignored) it runs 11.5.2. `oag_semantic.graphdb.master_graph()`
+is the knowledge API over GraphDB; `validate` and `data_quality_findings` run the shapes there;
+`oil_by_field` is a hybrid query. `tests/test_graphdb.py` checks it all against the in-process runtime
+and skips when GraphDB isn't running.
+

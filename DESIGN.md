@@ -131,6 +131,9 @@ open (ADR 0005). **Knowledge tool**: an agent tool that answers about entities a
 layer (for the ontology agent, SPARQL over the master graph), never with numbers. **Metric tool**: an agent
 tool that returns a governed answer from the semantic layer. **Entity answer**: the structured answer to a
 question whose answer is a set of entities, reported as canonical IRIs (ADR 0045).
+**Virtual graph**: facts served as RDF from where they live, by rewriting SPARQL into SQL (Ontop over
+DuckDB), never copied into a store. **Hybrid query**: one SPARQL query that joins the copied, reasoned
+master graph to the virtual facts (`SERVICE`) (ADR 0046).
 
 ### Use cases & platform builds
 **Use case / Question**: a business-user analytical question the agent must answer (§6).
@@ -388,6 +391,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0043 — SHACL validation: entity shapes on the master graph, data-quality shapes on a validation-only volume graph (extends 0041, 0042)](docs/adr/0043-shacl-validation-entity-and-data-quality-shapes.md)
 - [0044 — Business-term rules: "below expected" from its definition as data and from a SHACL rule, over governed metric values (extends 0041, 0043)](docs/adr/0044-business-term-rules-definition-as-data-and-shacl-rule.md)
 - [0045 — Ontology agent: Claude over SPARQL knowledge tools, a read-only SPARQL tool and governed metric tools; graded answers built in code (extends 0005, 0041)](docs/adr/0045-ontology-agent-sparql-and-metric-tools.md)
+- [0046 — GraphDB runtime: the same files on a second engine, with Ontop serving daily volumes live from DuckDB (extends 0041–0045)](docs/adr/0046-graphdb-runtime-ontop-over-duckdb.md)
 
 ---
 
