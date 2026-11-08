@@ -11,10 +11,12 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+from rdflib.namespace import SKOS
+
 import pytest
 
 from oag_semantic.grading import score_submissions
-from oag_semantic.ontology import ID, load_ontology
+from oag_semantic.ontology import ID, OAG, load_ontology
 from oag_semantic.ontology_agent import (
     THEMES,
     OntologyAgent,
@@ -54,6 +56,11 @@ def _agent(dataset_dir, onto, *steps):
     return OntologyAgent(dataset_dir, onto=onto, client=model), model
 
 
+def _first_field(onto):
+    """The field the reasoning checks use: the lowest FIELD_ID, as reasoning_checks picks it."""
+    return min(int(i) for i in onto.graph.objects(None, OAG.fieldId))
+
+
 def _gold(dataset_dir, name):
     return json.loads((dataset_dir / "gold" / f"{name}.json").read_text())
 
@@ -71,24 +78,49 @@ def test_each_metric_tool_answers_its_question_to_gold(dataset_dir, onto):
 
 
 def test_field_scoped_surveillance_resolves_through_the_ontology(dataset_dir, onto):
-    name = str(onto.graph.value(ID["field/1"], onto.graph.namespace_manager.expand_curie("skos:prefLabel")))
-    agent, _ = _agent(dataset_dir, onto, [("resolve_field", {"name": name.upper()})],
-                      [("surveillance_below_expected", {"field_id": 1})], "Done.")
+    first = _first_field(onto)
+    name = str(onto.graph.value(ID[f"field/{first}"], SKOS.prefLabel))
+    agent, _ = _agent(dataset_dir, onto, [("surveillance_below_expected", {"field": name.upper()})], "Done.")
     run = agent.ask(f"Which wells in {name} are below expected?")
-    in_field = set(onto.wells_in_field(1))
+    in_field = set(onto.wells_in_field(first))
     want = sorted(r["well_id"] for r in _gold(dataset_dir, "surveillance")["flagged"] if r["well_id"] in in_field)
     assert sorted(r["well_id"] for r in run.submission["key_values"]["flagged"]) == want
-    assert run.submission["provenance"]["entities"] == [f"{ID}field/1"]
-    assert run.submission["provenance"]["filters"] == ["field_id = 1"]
+    assert run.submission["provenance"]["entities"] == [f"{ID}field/{first}"]
+    assert run.submission["provenance"]["filters"] == [f"field_id = {first}"]
 
 
 def test_unknown_field_asks_instead_of_answering_for_the_fleet(dataset_dir, onto):
-    agent, _ = _agent(dataset_dir, onto, [("resolve_field", {"name": "Nonesuch"})],
-                      [("surveillance_below_expected", {})], "Which field?")
+    agent, model = _agent(dataset_dir, onto, [("surveillance_below_expected", {"field": "Nonesuch"})],
+                          "Which field?")
     run = agent.ask("Which wells in Nonesuch are below expected?")
     assert run.submission["behavior"] == "clarification-requested"
     assert run.submission["key_values"] == {"flagged": []}
     assert "Nonesuch" in run.submission["answer"]
+    assert '"found": false' in model.tool_results(1)[0]["content"]  # the model is told, too
+
+
+def test_unfinished_turn_gives_no_graded_answer(dataset_dir, onto):
+    """A refusal (or max_tokens) after a metric tool ran is not an answer, even with rows in hand."""
+    agent, model = _agent(dataset_dir, onto, [("deferment_by_cause", {})], "")
+    model.steps[-1] = "refused"
+    original = model._create
+
+    def refuse(**request):
+        response = original(**request)
+        if response.stop_reason == "end_turn":
+            response.stop_reason = "refusal"
+        return response
+
+    model.beta.messages.create = refuse
+    run = agent.ask("What did we defer?")
+    assert run.stopped == "refusal" and run.submission is None
+
+
+def test_tool_failure_goes_back_to_the_model(dataset_dir, onto):
+    """A failure the tool didn't anticipate is an error result for the model, not a crash."""
+    agent, model = _agent(dataset_dir, onto, [("assets_in_field", {"field_id": "not a number"})], "Hm.")
+    run = agent.ask("Assets?")
+    assert model.tool_results(1)[0]["is_error"] is True and run.text == "Hm."
 
 
 def test_no_metric_tool_means_no_graded_answer(dataset_dir, onto):
@@ -103,9 +135,11 @@ def test_knowledge_tools_answer_the_reasoning_checks(dataset_dir, onto):
     checks = dict(reasoning_checks(dataset_dir))
     assert len(checks) == 5
     (assets_q, assets), (wells_q, wells), (fac_q, facilities), (_, products), (osdu_q, osdu) = checks.items()
+    first = _first_field(onto)
 
-    assert sorted(a["iri"] for a in agent._run_tool("assets_in_field", {"field_id": 1}, None, {})) == assets
-    assert {a["class"] for a in agent._run_tool("assets_in_field", {"field_id": 1}, None, {})} == {"Well", "Facility"}
+    in_field = agent._run_tool("assets_in_field", {"field_id": first}, None, {})
+    assert sorted(a["iri"] for a in in_field) == assets
+    assert {a["class"] for a in in_field} == {"Well", "Facility"}
     operator = fac_q.removeprefix("Which facilities does ").removesuffix(" operate?")
     operated = agent._run_tool("assets_operated_by", {"operator": operator}, None, {})
     assert sorted(a["iri"] for a in operated if a["class"] == "Facility") == facilities
@@ -121,7 +155,7 @@ def test_knowledge_tools_answer_the_reasoning_checks(dataset_dir, onto):
 
 def test_report_entities_is_the_entity_answer(dataset_dir, onto):
     question, expected = reasoning_checks(dataset_dir)[0]
-    agent, _ = _agent(dataset_dir, onto, [("assets_in_field", {"field_id": 1})],
+    agent, _ = _agent(dataset_dir, onto, [("assets_in_field", {"field_id": _first_field(onto)})],
                       [("report_entities", {"iris": list(reversed(expected))})], "Listed.")
     run = agent.ask(question)
     assert run.entities == expected and run.submission is None
@@ -135,9 +169,17 @@ def test_report_entities_is_the_entity_answer(dataset_dir, onto):
     "not sparql",
 ])
 def test_sparql_tool_is_read_only(dataset_dir, onto, query):
+    """Updates, CONSTRUCT, remote SERVICE calls and FROM loads are refused, checked on the parsed query."""
     agent, _ = _agent(dataset_dir, onto)
     with pytest.raises(SparqlRejected):
         agent.sparql_query(query)
+
+
+def test_sparql_words_in_literals_are_fine(dataset_dir, onto):
+    """Only the parsed query decides: 'service' or 'from' inside a string is not a SERVICE or FROM."""
+    agent, _ = _agent(dataset_dir, onto)
+    found = agent.sparql_query('SELECT ?x WHERE { ?x a oag:Field . FILTER(?x != "service from load") }')
+    assert found["rows"]
 
 
 def test_tool_errors_go_back_to_the_model(dataset_dir, onto):

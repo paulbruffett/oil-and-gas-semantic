@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +32,7 @@ import pyarrow.parquet as pq
 from rdflib import URIRef
 from rdflib.namespace import RDF, SKOS
 from rdflib.plugins.sparql import prepareQuery
+from rdflib.plugins.sparql.algebra import traverse
 
 from oag_generator import canonical_table_paths, osdu_manifest_paths
 from oag_semantic import compile as reference
@@ -60,7 +60,8 @@ THEMES: dict[str, Theme] = {
         "surveillance-below-expected-oil", reference.compute_surveillance,
         ("production_efficiency", "expected_oil", "actual_oil", "oil_shortfall"),
         "Wells producing below expected oil over the surveillance window, with the shortfall. "
-        "Optional field_id (from resolve_field) scopes it to one field; 0 or absent = the fleet."),
+        "Pass field (the name as the user wrote it) to scope it to one field; omit it for the fleet. "
+        "An unknown field name returns not-found: then ask the user."),
     "deferment_by_cause": Theme(
         "deferment-top-downtime-causes", reference.compute_deferment,
         ("downtime_hours", "expected_oil", "uptime_pct"),
@@ -95,9 +96,9 @@ Two kinds of tools:
   the one that matches. Their rows are returned to the user separately, so summarise them: counts and
   the single biggest item, not every row.
 - Knowledge tools answer from the ontology (OWL/SKOS master graph of fields, facilities, wells,
-  operators, business terms, products and OSDU record identity; no volumes). Use resolve_field for any
-  named field before scoping a metric tool. If a named field does not resolve, say it is unknown and
-  ask the user; do not guess and do not fall back to the whole fleet.
+  operators, business terms, products and OSDU record identity; no volumes). When a question names a
+  field, pass that name to surveillance_below_expected as field. If a field does not resolve, say it
+  is unknown and ask the user; do not guess and do not fall back to the whole fleet.
   "Field X" in a decline question is not a name: it means the field with the largest cumulative oil,
   which decline_wells_faster selects itself.
 
@@ -124,7 +125,7 @@ def _tool(name: str, description: str, properties: dict | None = None, required:
                              "required": list(required), "additionalProperties": False}}
 
 
-_FIELD_ID = {"field_id": {"type": "integer", "description": "FIELD_ID from resolve_field; 0 = fleet"}}
+_FIELD_ID = {"field_id": {"type": "integer", "description": "FIELD_ID from resolve_field"}}
 _ENTITY = {"iri": {"type": "string", "description": "Canonical entity IRI"}}
 
 TOOLS = [
@@ -147,7 +148,9 @@ TOOLS = [
           "are predeclared.", {"query": {"type": "string"}}, ("query",)),
     _tool("report_entities", "Report the entities that answer an entity question, as canonical IRIs.",
           {"iris": {"type": "array", "items": {"type": "string"}}}, ("iris",)),
-    *(_tool(name, theme.description, _FIELD_ID if name == "surveillance_below_expected" else None)
+    *(_tool(name, theme.description,
+            {"field": {"type": "string", "description": "Field name or synonym"}}
+            if name == "surveillance_below_expected" else None)
       for name, theme in THEMES.items()),
 ]
 
@@ -161,11 +164,21 @@ class AgentRun:
     text: str = ""
     submission: dict | None = None
     entities: list[str] | None = None
+    stopped: str | None = None  # why the model didn't finish (refusal, max_tokens, max_turns)
     tool_calls: list[tuple[str, dict]] = field(default_factory=list)
 
 
 class SparqlRejected(ValueError):
     pass
+
+
+def _uses_service(algebra) -> bool:
+    """Whether a parsed query has a SERVICE pattern, which would call a remote endpoint."""
+    found: list = []
+    # A traverse() visitor that returns a value replaces the node, so only record and return None.
+    traverse(algebra, visitPre=lambda n: (
+        found.append(n) if getattr(n, "name", None) == "ServiceGraphPattern" else None))
+    return bool(found)
 
 
 def _value(row: Any, key: str) -> Any:
@@ -190,7 +203,6 @@ class OntologyAgent:
 
             client = anthropic.Anthropic()
         self.client = client
-        self._results: dict[str, Any] = {}
 
     # --- knowledge tools -------------------------------------------------------------------------
 
@@ -220,15 +232,17 @@ class OntologyAgent:
 
     def sparql_query(self, query: str) -> dict:
         """Read-only SELECT/ASK over the master graph: no updates, no remote SERVICE or FROM loads."""
-        if re.search(r"\b(SERVICE|FROM|LOAD)\b", query, re.IGNORECASE):
-            raise SparqlRejected("SERVICE, FROM and LOAD are not allowed; query the master graph only")
         try:
             prepared = prepareQuery(query, initNs=PREFIXES)
-        except Exception as e:  # rdflib raises several parser error types
+        except Exception as e:  # rdflib raises several parser error types; updates fail here too
             raise SparqlRejected(f"only a read-only SELECT or ASK query is allowed: {e}") from e
         kind = prepared.algebra.name
         if kind not in ("SelectQuery", "AskQuery"):
             raise SparqlRejected(f"only SELECT and ASK are allowed, not {kind}")
+        if prepared.algebra.get("datasetClause"):
+            raise SparqlRejected("FROM is not allowed: query the master graph only")
+        if _uses_service(prepared.algebra):
+            raise SparqlRejected("SERVICE is not allowed: query the master graph only")
         result = self.onto.graph.query(prepared)
         if kind == "AskQuery":
             return {"ask": bool(result.askAnswer)}
@@ -266,8 +280,6 @@ class OntologyAgent:
             out = self.resolve_field(args["name"])
             if out["found"]:
                 state["entities"].append(out["iri"])
-            else:
-                state["unresolved"].append(args["name"])
             return out
         if name == "resolve_term":
             return o.resolve_term(args["phrase"]) or {"found": False, "phrase": args["phrase"]}
@@ -287,7 +299,14 @@ class OntologyAgent:
             run.entities = sorted(set(args["iris"]))
             return {"reported": len(run.entities)}
         if name in THEMES:
-            field_id = int(args.get("field_id") or 0)
+            field_id = 0
+            if args.get("field"):  # resolved here, in code, so an unknown name can never mean the fleet
+                resolved = self.resolve_field(args["field"])
+                if not resolved["found"]:
+                    state["theme"], state["unknown_field"] = (name, None, {}), args["field"]
+                    return {**resolved, "note": "Unknown field: ask the user which field they mean."}
+                field_id = resolved["field_id"]
+                state["entities"].append(resolved["iri"])
             key_values, shown = self._metric(name, field_id)
             state["theme"] = (name, field_id, key_values)
             return shown
@@ -295,7 +314,7 @@ class OntologyAgent:
 
     def ask(self, question: str) -> AgentRun:
         run = AgentRun(question)
-        state: dict = {"entities": [], "unresolved": [], "theme": None}
+        state: dict = {"entities": [], "theme": None, "unknown_field": None}
         messages: list = [{"role": "user", "content": question}]
         for _ in range(MAX_TURNS):
             response = self.client.beta.messages.create(
@@ -307,6 +326,8 @@ class OntologyAgent:
             calls = [b for b in response.content if b.type == "tool_use"]
             if response.stop_reason != "tool_use" or not calls:
                 run.text = "".join(b.text for b in response.content if b.type == "text").strip()
+                if response.stop_reason in ("refusal", "max_tokens"):
+                    run.stopped = response.stop_reason  # unfinished: no graded answer
                 break
             results = []
             for call in calls:
@@ -315,28 +336,29 @@ class OntologyAgent:
                     out = self._run_tool(call.name, dict(call.input), run, state)
                     results.append({"type": "tool_result", "tool_use_id": call.id,
                                     "content": json.dumps(out, default=str)})
-                except (SparqlRejected, KeyError, ValueError, TypeError) as e:
+                except Exception as e:  # the tool boundary: any failure goes back to the model
                     results.append({"type": "tool_result", "tool_use_id": call.id,
                                     "content": f"Error: {e}", "is_error": True})
             messages.append({"role": "user", "content": results})
         else:
-            run.text = run.text or "Stopped: too many tool calls without an answer."
+            run.stopped = "max_turns"
         run.submission = self._submission(run, state)
         return run
 
     def _submission(self, run: AgentRun, state: dict) -> dict | None:
         """The graded answer, built in code from the last metric tool the model called."""
-        if state["theme"] is None:
+        if state["theme"] is None or run.stopped is not None:
             return None
         name, field_id, key_values = state["theme"]
         theme = THEMES[name]
         provenance = {"metrics": list(theme.metrics), "dimensions": [], "filters": [],
                       "entities": sorted(set(state["entities"]))}
-        if name == "surveillance_below_expected" and not field_id and state["unresolved"]:
-            missing = ", ".join(repr(n) for n in state["unresolved"])
+        if field_id is None:  # the field named in the question did not resolve
+            sets = [s.set_key for s in SPECS[theme.question_id].sets()]
             return {"question_id": theme.question_id, "behavior": "clarification-requested",
-                    "answer": f"The field {missing} is not known in this dataset; which field did you mean?",
-                    "key_values": {k: [] for k in key_values}, "provenance": provenance}
+                    "answer": f"The field {state['unknown_field']!r} is not known in this dataset; "
+                              "which field did you mean?",
+                    "key_values": {k: [] for k in sets}, "provenance": provenance}
         if field_id:
             provenance["filters"].append(f"field_id = {field_id}")
         return {"question_id": theme.question_id, "behavior": "answered",
@@ -399,16 +421,19 @@ def main(argv: list[str]) -> int:  # pragma: no cover -- needs a live model
             if run.submission:
                 submissions[run.submission["question_id"]] = run.submission
             print(f"asked {q.id}: tools {[n for n, _ in run.tool_calls]}")
+    six = {t.question_id for t in THEMES.values()}
     report = score_submissions(submissions, dataset_dir)
-    for g in report.grades:
+    grades = [g for g in report.grades if g.question_id in six]  # not the scenario question
+    for g in grades:
         print(f"{'PASS' if g.correct else 'FAIL'}  {g.question_id}  {g.note or ''}")
 
     # A field-scoped question: the field resolves through the ontology, and the flagged wells must be
     # gold's flagged wells in that field.
-    field_name = str(agent.onto.graph.value(ID["field/1"], SKOS.prefLabel))
+    first = min(int(i) for i in agent.onto.graph.objects(None, OAG.fieldId))
+    field_name = str(agent.onto.graph.value(ID[f"field/{first}"], SKOS.prefLabel))
     scoped = agent.ask(f"Which wells in the {field_name} field produced below expected oil this week?")
     gold = json.loads((dataset_dir / "gold" / "surveillance.json").read_text())
-    in_field = set(agent.onto.wells_in_field(1))
+    in_field = set(agent.onto.wells_in_field(first))
     want = sorted(r["well_id"] for r in gold["flagged"] if r["well_id"] in in_field)
     got = sorted(r["well_id"] for r in (scoped.submission or {}).get("key_values", {}).get("flagged", []))
     print(f"{'PASS' if got == want else 'FAIL'}  field-scoped surveillance ({field_name}): {got}, gold {want}")
@@ -425,7 +450,7 @@ def main(argv: list[str]) -> int:  # pragma: no cover -- needs a live model
         ok = run.entities == expected
         passed += ok
         print(f"{'PASS' if ok else 'FAIL'}  {question}  ({len(run.entities or [])}/{len(expected)})")
-    print(f"gold check {sum(g.correct for g in report.grades)}/{len(THEMES)}; "
+    print(f"gold check {sum(g.correct for g in grades)}/{len(THEMES)}; "
           f"reasoning checks {passed}/{len(checks)}")
     return 0
 

@@ -26,8 +26,9 @@ The open questions for the ontology track were:
   - **Knowledge tools** answer from the master graph with SPARQL: resolve a field, term or product;
     assets in a field (by inheritance); operator of an asset; assets an operator runs; OSDU record
     ids.
-  - **A read-only `sparql_query` tool** for questions no named tool covers. It accepts only SELECT and
-    ASK, rejects SERVICE, FROM and LOAD, and returns at most 200 rows. The master graph holds entities
+  - **A read-only `sparql_query` tool** for questions no named tool covers. The parsed query decides:
+    only SELECT and ASK, no FROM and no SERVICE, so a remote call or load is refused but a literal
+    containing those words is fine. At most 200 rows. The master graph holds entities
     and words but no numbers (ADR 0041), so free SPARQL can't get around the governed metrics.
   - **Metric tools**, one per use case, backed by the reference compile over the semantic layer.
     Field-scoped surveillance filters by the ontology's well-to-field rollup.
@@ -37,9 +38,14 @@ The open questions for the ontology track were:
   - An entity answer (a set of wells, facilities, products) is reported through `report_entities` as
     canonical IRIs.
   - Provenance lists the resolved entity IRIs and the field filter.
-- **Unknown names are asked about, not guessed.** If a named field doesn't resolve, surveillance
-  returns `clarification-requested` with an empty set; this is enforced in code, not only by the
-  prompt.
+- **Unknown names are asked about, not guessed.** The surveillance tool takes the field *name* and
+  resolves it in code. An unknown name returns not-found to the model and a `clarification-requested`
+  submission with an empty set. It never becomes a fleet answer, whether or not the model looked the
+  field up first. Code can't tell a question named a field the model left out entirely; that part
+  rests on the prompt, as on the platforms.
+- **Only a finished turn is an answer.** A refusal, `max_tokens` or the turn limit gives no
+  submission, even if a metric tool already ran. Any tool failure goes back to the model as an error
+  result instead of ending the run.
 - **Questions:**
   - the six catalog questions, graded against gold;
   - a field-scoped question and an unknown-field question, as the Fabric agent has;
