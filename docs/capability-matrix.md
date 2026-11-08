@@ -6,7 +6,7 @@ with a domain example and how the agent uses it. Then one column per technology:
 - **Reference** — the platform-neutral foundation in this repo (generator, OSI + DuckDB compile, LPG,
   `oag_semantic.agent`).
 - **Ontology** — the standards-based RDF/OWL track (ADR 0041): OWL, SKOS, R2RML, SPARQL, SHACL, run
-  in-process and later in GraphDB.
+  in-process and in GraphDB (ADR 0046).
 - **Databricks**, **Snowflake**, **Fabric** — the platform reference builds in `platforms/`.
 
 Compare with [`platform-comparison.md`](platform-comparison.md), which explains the platform findings
@@ -34,7 +34,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Deterministic gold | `gold/surveillance.json` | grades the agent | ● co-generated | ● same gold | ● 6/6 | ● 6/6 | ● 6/6 |
 | Stable identity | `FACILITY` composite key; UWI `NO 15/9-F-1` | cite and join entities | ● keys in the PDM shapes | ● IRIs built from canonical ids; facility by its PDM pair key | ○ informational keys, not declared here | ◐ keys not enforced; Semantic Views require them | ○ `NOT ENFORCED` keys, not declared here |
 | Data-quality rules | one row per well-day; Corrected over Measured | trust the numbers | ● applied before gold (ADR 0040); flatlines and unit errors only listed by the generator | ● SHACL finds every findings-gold defect (Core for duplicates and corrections, SPARQL for flatlines and unit errors) on a validation-only copy of daily volumes | ○ pipeline expectations | ○ data metric functions | ? |
-| Query in place, no copy | daily volumes read where they live | facts at question time | ● DuckDB over Parquet | ▷ 7: Ontop virtual graph | ● tables over Delta | ◐ loaded copy | ◐ typed tables materialized for Direct Lake |
+| Query in place, no copy | daily volumes read where they live | facts at question time | ● DuckDB over Parquet | ● Ontop virtual graph over DuckDB, joined to the master graph with `SERVICE` (ADR 0046) | ● tables over Delta | ◐ loaded copy | ◐ typed tables materialized for Direct Lake |
 
 ## 2. Semantic / metrics layer
 
@@ -65,11 +65,11 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Multi-level hierarchy | well → facility → field | roll up across levels | ◐ one level (well → field) | ● transitive `partOf` over well → facility → field | ◐ fixed joins | ● recursive `KG_TRAVERSE` | ? multi-hop over MCP |
 | Inverse relationships | field has part well | ask from either end | ◐ coded both ways | ● `owl:inverseOf`, inferred | ◐ coded | ◐ coded | ? |
 | Class inheritance | Well, Facility and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ✗ | ✗ | ? |
-| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl key rule replaced: ADR 0042) | ✗ | ✗ | ? |
-| Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ● definition as data and a SHACL rule, both over governed metric values; dated flag records (ADR 0044) | ● SQL function | ● SQL function | ◐ natural-language rule |
-| Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ● SHACL shapes, incl. a well's field = its facility's and no shared keys | ○ constraints, expectations | ○ data metric functions | ? |
+| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl's key rule replaced, ADR 0042; GraphDB's is correct as is) | ✗ | ✗ | ? |
+| Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ● definition as data and a SHACL rule, both over governed metric values; dated flag records (ADR 0044). GraphDB doesn't run SHACL rules | ● SQL function | ● SQL function | ◐ natural-language rule |
+| Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ● SHACL shapes, incl. a well's field = its facility's and no shared keys; pySHACL and GraphDB agree | ○ constraints, expectations | ○ data metric functions | ? |
 | Graph query language | SPARQL, GQL, SQL | how tools query the graph | ● Python API | ● SPARQL | ◐ SQL | ◐ recursive SQL | ◐ GQL graph stays empty via the API; `ask_ontology` takes natural language |
-| Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
+| Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines, checked: in-process and GraphDB agree (ADR 0046) | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
 
 ## 5. Agent layer
 
@@ -114,6 +114,11 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   is. The model reached for free SPARQL when no named tool fit (the OSDU lookup). That's safe because
   the graph holds no numbers (ADR 0045). These reasoning checks aren't in the catalog yet, so the
   platforms haven't been asked them.
+- **Portability holds where it was tested:** GraphDB gives the in-process answers on every knowledge
+  check, and the same validation results, SPARQL constraints included. It also gets the key rule
+  right without the workaround owlrl needs. The exception is SHACL rules (a W3C Note), which GraphDB
+  doesn't run. Ontop serves the daily volumes live from DuckDB, so facts are queried in place
+  (ADR 0046).
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);
   validation as pipeline expectations (Databricks) or data metric functions (Snowflake); and generating

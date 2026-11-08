@@ -34,24 +34,38 @@ oagsh:defect a owl:AnnotationProperty ;
     skos:definition "The data-quality defect a shape detects, as named in the findings gold (ADR 0040)." .
 
 # --- Entity shapes (master graph) ------------------------------------------------------------------
+# Property shapes that report results are named, not blank nodes: an engine names a result by the
+# shape that produced it, and a blank node's id differs between engines (GraphDB reports its own).
 
 oagsh:WellShape a sh:NodeShape ;
     sh:targetClass oag:Well ;
-    sh:property [ sh:path oag:inField ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Field ] ,
-                [ sh:path oag:atFacility ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Facility ] ,
-                [ sh:path oag:operatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Organisation ] ,
-                [ sh:path oag:uwi ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+    sh:property oagsh:WellInField , oagsh:WellAtFacility , oagsh:WellOperatedBy , oagsh:WellUwi .
+oagsh:WellInField a sh:PropertyShape ;
+    sh:path oag:inField ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Field .
+oagsh:WellAtFacility a sh:PropertyShape ;
+    sh:path oag:atFacility ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Facility .
+oagsh:WellOperatedBy a sh:PropertyShape ;
+    sh:path oag:operatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Organisation .
+oagsh:WellUwi a sh:PropertyShape ;
+    sh:path oag:uwi ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string .
 
 oagsh:FacilityShape a sh:NodeShape ;
     sh:targetClass oag:Facility ;
-    sh:property [ sh:path oag:inField ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Field ] ,
-                [ sh:path oag:operatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Organisation ] ,
-                [ sh:path oag:facilityId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ] ,
-                [ sh:path oag:facilityType ; sh:minCount 1 ; sh:maxCount 1 ] .
+    sh:property oagsh:FacilityInField , oagsh:FacilityOperatedBy , oagsh:FacilityId , oagsh:FacilityType .
+oagsh:FacilityInField a sh:PropertyShape ;
+    sh:path oag:inField ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Field .
+oagsh:FacilityOperatedBy a sh:PropertyShape ;
+    sh:path oag:operatedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class oag:Organisation .
+oagsh:FacilityId a sh:PropertyShape ;
+    sh:path oag:facilityId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer .
+oagsh:FacilityType a sh:PropertyShape ;
+    sh:path oag:facilityType ; sh:minCount 1 ; sh:maxCount 1 .
 
 oagsh:FieldShape a sh:NodeShape ;
     sh:targetClass oag:Field ;
-    sh:property [ sh:path skos:prefLabel ; sh:minCount 1 ] .
+    sh:property oagsh:FieldLabel .
+oagsh:FieldLabel a sh:PropertyShape ;
+    sh:path skos:prefLabel ; sh:minCount 1 .
 
 # A well reaches its field directly and through its facility; the two must agree, or the well rolls up
 # into two fields.
@@ -90,13 +104,16 @@ oagsh:DistinctKeysShape a sh:NodeShape ;
 oagsh:DuplicateRecordShape a sh:NodeShape ;
     sh:targetClass oag:WellDay ;
     oagsh:defect "duplicate" ;
-    # Severity and message sit on the property shapes: in SHACL they belong to the shape that reports.
-    sh:property [ sh:path oag:hasRecord ; sh:qualifiedMaxCount 1 ; sh:severity sh:Info ;
-                  sh:message "Duplicate daily record: dropped, the first-loaded record is kept." ;
-                  sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Measured" ] ] ] ,
-                [ sh:path oag:hasRecord ; sh:qualifiedMaxCount 1 ; sh:severity sh:Info ;
-                  sh:message "Duplicate daily record: dropped, the first-loaded record is kept." ;
-                  sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Corrected" ] ] ] .
+    sh:property oagsh:DuplicateMeasured , oagsh:DuplicateCorrected .
+# Severity and message sit on the property shapes: in SHACL they belong to the shape that reports.
+oagsh:DuplicateMeasured a sh:PropertyShape ;
+    sh:path oag:hasRecord ; sh:qualifiedMaxCount 1 ; sh:severity sh:Info ;
+    sh:message "Duplicate daily record: dropped, the first-loaded record is kept." ;
+    sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Measured" ] ] .
+oagsh:DuplicateCorrected a sh:PropertyShape ;
+    sh:path oag:hasRecord ; sh:qualifiedMaxCount 1 ; sh:severity sh:Info ;
+    sh:message "Duplicate daily record: dropped, the first-loaded record is kept." ;
+    sh:qualifiedValueShape [ sh:property [ sh:path oag:volumeMethod ; sh:hasValue "Corrected" ] ] .
 
 # A Measured record restated by a Corrected one on the same well-day (the Corrected record is kept).
 oagsh:LateCorrectionShape a sh:NodeShape ;

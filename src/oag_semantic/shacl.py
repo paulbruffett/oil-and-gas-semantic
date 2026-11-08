@@ -57,14 +57,24 @@ def _canonical(graph: Graph) -> Graph:
     return out
 
 
-def validate(onto: OntologyGraph, volumes: Graph | None = None) -> list[ShapeResult]:
-    """Validate the master graph (plus daily volumes, if given) against the shapes. Empty = conforms."""
-    shapes = Graph().parse(SHAPES_PATH)
+def validation_data(onto: OntologyGraph, volumes: Graph | None = None) -> Graph:
+    """What the shapes run on: the master graph, one node per entity, plus daily volumes if given."""
     data = _canonical(onto.graph)
     if volumes is not None:
         data += volumes
-    _, report, _ = pyshacl.validate(data, shacl_graph=shapes, inference="none", allow_infos=True,
-                                    allow_warnings=True)
+    return data
+
+
+def validate(onto: OntologyGraph, volumes: Graph | None = None) -> list[ShapeResult]:
+    """Validate the master graph (plus daily volumes, if given) against the shapes. Empty = conforms."""
+    shapes = Graph().parse(SHAPES_PATH)
+    _, report, _ = pyshacl.validate(validation_data(onto, volumes), shacl_graph=shapes, inference="none",
+                                    allow_infos=True, allow_warnings=True)
+    return parse_report(report, shapes)
+
+
+def parse_report(report: Graph, shapes: Graph) -> list[ShapeResult]:
+    """A W3C SHACL validation report as results, from any engine (pySHACL here, GraphDB's too)."""
     # A property shape is a blank node; name its result by the node shape that holds it.
     owner = {prop: node for node, prop in shapes.subject_objects(SH.property)}
     results = []
@@ -92,8 +102,13 @@ def data_quality_findings(dataset_dir: str | Path, onto: OntologyGraph) -> list[
     daily record (flatlines, unit errors); both carry the well and the date.
     """
     volumes = map_volumes(dataset_dir)
+    return findings_from(validate(onto, volumes), volumes)
+
+
+def findings_from(results: list[ShapeResult], volumes: Graph) -> list[dict]:
+    """Data-quality results as findings-gold rows (``finding_id = well_id:date:defect``)."""
     findings: dict[str, dict] = {}
-    for r in validate(onto, volumes):
+    for r in results:
         if r.defect is None:
             continue
         node = URIRef(r.value or r.focus)
@@ -107,4 +122,5 @@ def data_quality_findings(dataset_dir: str | Path, onto: OntologyGraph) -> list[
     return [findings[k] for k in sorted(findings)]
 
 
-__all__ = ["SHAPES_PATH", "ShapeResult", "data_quality_findings", "validate"]
+__all__ = ["SHAPES_PATH", "ShapeResult", "data_quality_findings", "findings_from", "parse_report", "validate",
+           "validation_data"]
