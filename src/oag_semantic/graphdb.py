@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.error
-import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -38,6 +38,7 @@ from oag_semantic.ontology import (
     VOLUMES_MAPPING_PATH,
     OntologyGraph,
     asserted_graph,
+    _sql_path,
     create_views,
     map_volumes,
 )
@@ -50,27 +51,29 @@ CONTAINER_DATA_DIR = "/data"
 
 
 class GraphDBError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 def _call(method: str, path: str, body: bytes | None = None, content_type: str | None = None,
-          accept: str | None = None) -> str:
+          accept: str | None = None, timeout: float = 600) -> str:
     request = urllib.request.Request(GRAPHDB_URL + path, data=body, method=method)
     if content_type:
         request.add_header("Content-Type", content_type)
     if accept:
         request.add_header("Accept", accept)
     try:
-        with urllib.request.urlopen(request, timeout=600) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.read().decode()
     except urllib.error.HTTPError as e:
-        raise GraphDBError(f"{method} {path}: {e.code} {e.read().decode()[:500]}") from e
+        raise GraphDBError(f"{method} {path}: {e.code} {e.read().decode()[:500]}", e.code) from e
 
 
 def available() -> bool:
-    """Whether a GraphDB server answers at ``GRAPHDB_URL``."""
+    """Whether a GraphDB server answers at ``GRAPHDB_URL`` (within 3 s: tests ask this at collection)."""
     try:
-        _call("GET", "/rest/info/version")
+        _call("GET", "/rest/info/version", timeout=3)
         return True
     except (GraphDBError, OSError):
         return False
@@ -83,8 +86,9 @@ def version() -> dict:
 def delete_repository(repo_id: str) -> None:
     try:
         _call("DELETE", f"/rest/repositories/{repo_id}")
-    except GraphDBError:
-        pass  # absent already
+    except GraphDBError as e:
+        if e.status != 404:  # absent already is fine; any other failure is real
+            raise
 
 
 def create_repository(repo_id: str, **params: str) -> None:
@@ -136,8 +140,8 @@ def upload(repo_id: str, graph: Graph) -> None:
 def select(repo_id: str, query: str) -> list[dict[str, str]]:
     """Run a SELECT with the ontology's prefixes; rows as {variable: value}."""
     prologue = "".join(f"PREFIX {p}: <{ns}>\n" for p, ns in PREFIXES.items())
-    text = _call("GET", f"/repositories/{repo_id}?" + urllib.parse.urlencode({"query": prologue + query}),
-                 accept="application/sparql-results+json")
+    text = _call("POST", f"/repositories/{repo_id}", (prologue + query).encode(),  # POST: no URL length limit
+                 "application/sparql-query", accept="application/sparql-results+json")
     return [{k: v["value"] for k, v in row.items()} for row in json.loads(text)["results"]["bindings"]]
 
 
@@ -153,7 +157,7 @@ def export_duckdb(dataset_dir: str | Path, path: Path) -> list[str]:
     con = duckdb.connect()
     try:
         views = create_views(con, dataset_dir)
-        con.execute(f"ATTACH '{str(tmp).replace(chr(39), chr(39) * 2)}' AS out")
+        con.execute(f"ATTACH '{_sql_path(tmp)}' AS out")
         for view in views:
             con.execute(f'CREATE TABLE out."{view}" AS SELECT * FROM "{view}"')
         con.execute("DETACH out")
@@ -163,9 +167,24 @@ def export_duckdb(dataset_dir: str | Path, path: Path) -> list[str]:
     return views
 
 
+def _check_driver_matches() -> None:
+    """The JDBC driver graphdb.sh fetches must match the duckdb that writes the file Ontop reads."""
+    pinned = re.search(r'^JDBC_VERSION="([0-9.]+)"', (GRAPHDB_DIR / "graphdb.sh").read_text(), re.M)
+    if pinned is None or not pinned.group(1).startswith(duckdb.__version__ + "."):
+        found = pinned.group(1) if pinned else "none"
+        raise GraphDBError(f"graphdb.sh pins DuckDB JDBC {found}, but Python duckdb is {duckdb.__version__}: "
+                           "update JDBC_VERSION in knowledge/graphdb/graphdb.sh and rerun it")
+
+
+def remove_data(prefix: str) -> None:
+    """Remove a prefix's DuckDB file (delete its facts repository first, which holds it open)."""
+    (DATA_DIR / f"{prefix}.duckdb").unlink(missing_ok=True)
+
+
 def load(dataset_dir: str | Path, prefix: str = "oag") -> dict[str, str]:
     """Build a dataset's GraphDB runtime: ``<prefix>-master`` (copied, OWL 2 RL) and ``<prefix>-facts``
     (virtual, Ontop over ``data/<prefix>.duckdb``). Returns the repository ids."""
+    _check_driver_matches()
     master, facts = f"{prefix}-master", f"{prefix}-facts"
     create_repository(master, ruleset="owl2-rl", disableSameAs="false")
     upload(master, asserted_graph(dataset_dir))

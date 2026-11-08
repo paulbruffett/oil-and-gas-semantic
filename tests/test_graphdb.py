@@ -38,6 +38,7 @@ def loaded(dataset_dir):
     yield repos
     for repo in repos.values():
         graphdb.delete_repository(repo)
+    graphdb.remove_data(PREFIX)
 
 
 @pytest.fixture(scope="module")
