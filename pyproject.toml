@@ -36,12 +36,14 @@ dev = [
 # morph-kgc to run the R2RML mapping over DuckDB views of the canonical Parquet, and pySHACL to
 # validate with SHACL shapes (ADR 0043). pySHACL stays on 0.31: newer releases need rdflib >= 7.3, which
 # morph-kgc excludes.
+# The Anthropic SDK drives the ontology agent (ADR 0045); its tests use a scripted model, no key.
 ontology = [
     "rdflib>=7.1,<8",
     "owlrl>=7.1,<8",
     "morph-kgc>=2.10,<3",
     "duckdb-engine>=0.17,<0.18",
     "pyshacl>=0.31,<0.32",
+    "anthropic>=1,<2",
 ]
 
 [build-system]

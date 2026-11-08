@@ -75,12 +75,12 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 
 | Capability | Example | Agent use | Reference | Ontology | Databricks | Snowflake | Fabric |
 |---|---|---|---|---|---|---|---|
-| Governed tools | `wells_below_expected(field)` | the agent's only way to data | ● `oag_semantic.agent` | ▷ 6: SPARQL tools + metric tools | ● UC functions | ● SQL functions | ● DAX tools (custom agent) |
+| Governed tools | `wells_below_expected(field)` | the agent's only way to data | ● `oag_semantic.agent` | ● Claude Sonnet 5.5: SPARQL knowledge tools, a read-only `sparql_query` and the governed metric tools (ADR 0045) | ● UC functions | ● SQL functions | ● DAX tools (custom agent) |
 | Native tool calling in the platform | model picks a tool | the agent loop | — | — | ● model serving | ◐ `COMPLETE` rejected tools; single routing call | ✗ model is in Foundry, outside the workspace |
 | Platform NL-to-data service | Genie, Cortex Analyst, data agent | answers without custom code | — | — | ○ Genie | ● Cortex Analyst | ● data agent, 4–5/6 per run |
-| Clarification on unknown entities | "Nonesuch field" → ask | don't guess | ● | ▷ 6 | ● | ? | ● custom agent |
-| Answer provenance | metric, filters, entities used | explain and check | ● answer schema | ▷ 6: plus entity IRIs | ● | ● | ● |
-| Gold result, six use cases | | | ● | ▷ 6 | ● 6/6 | ● 6/6 | ● 6/6 custom agent |
+| Clarification on unknown entities | "Nonesuch field" → ask | don't guess | ● | ● enforced in code | ● | ? | ● custom agent |
+| Answer provenance | metric, filters, entities used | explain and check | ● answer schema | ● plus entity IRIs; entity answers as IRIs | ● | ● | ● |
+| Gold result, six use cases | | | ● | ● 6/6, plus 5/5 reasoning checks | ● 6/6 | ● 6/6 | ● 6/6 custom agent |
 
 ## 6. Governance (cross-cutting)
 
@@ -108,6 +108,12 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 - **Rules depend on where the definition lives:** the term's definition, stored as data, needs no code
   change when the term changes. A SHACL rule, like the platforms' SQL functions, is a second copy of the
   definition. Neither adds inference: both compare a number the semantic layer computed (ADR 0044).
+- **The agent shows the ontology's reach on entity questions:** with the same contract as the platform
+  agents (governed tools, graded answers built in code) it scores 6/6, and it also answers questions
+  that need reasoning: every asset in a field, by operator, total liquids, and which well an OSDU record
+  is. The model reached for free SPARQL when no named tool fit (the OSDU lookup). That's safe because
+  the graph holds no numbers (ADR 0045). These reasoning checks aren't in the catalog yet, so the
+  platforms haven't been asked them.
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);
   validation as pipeline expectations (Databricks) or data metric functions (Snowflake); and generating
