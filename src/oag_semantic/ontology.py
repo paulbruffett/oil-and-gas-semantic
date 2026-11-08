@@ -251,6 +251,11 @@ class OntologyGraph:
         Labels match as in resolve_term: exact first, else the longest label contained in the phrase.
         A product with its own metric is measured by it alone, so a grouping is never counted twice.
         """
+        product = self.product_iri(phrase)
+        return sorted(set(self._product_metrics(product))) if product is not None else None
+
+    def product_iri(self, phrase: str) -> URIRef | None:
+        """A product word -> the product concept it names (matched as in :meth:`resolve_product`)."""
         rows = self._select(
             """SELECT ?p WHERE {
                  ?p a oag:Product ; skos:prefLabel|skos:altLabel ?label .
@@ -259,7 +264,7 @@ class OntologyGraph:
                ORDER BY DESC(?l = ?q) DESC(STRLEN(?l)) LIMIT 1""",
             q=Literal(_norm(phrase)),
         )
-        return sorted(set(self._product_metrics(rows[0][0]))) if rows else None
+        return rows[0][0] if rows else None
 
     def _product_metrics(self, product: URIRef) -> list[str]:
         own = self.graph.value(product, OAG.metric)

@@ -127,7 +127,10 @@ a rule compares. **Definition as data**: a business term evaluated from its SKOS
 comparison, threshold reference), so changing the term needs no code change.
 **Agent**: a system that answers an NL business question over the platform. A **semantic baseline** answers
 via deterministic metric selection; an **agentic variant** uses an LLM tool-use loop. The agent design is
-open (ADR 0005).
+open (ADR 0005). **Knowledge tool**: an agent tool that answers about entities and words from the knowledge
+layer (for the ontology agent, SPARQL over the master graph), never with numbers. **Metric tool**: an agent
+tool that returns a governed answer from the semantic layer. **Entity answer**: the structured answer to a
+question whose answer is a set of entities, reported as canonical IRIs (ADR 0045).
 
 ### Use cases & platform builds
 **Use case / Question**: a business-user analytical question the agent must answer (§6).
@@ -384,6 +387,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0042 — Ontology master graph: facilities and operators, identity inferred from OSDU records by key, product concepts, OSDU alignment by kind and SKOS mapping (extends 0041)](docs/adr/0042-ontology-master-graph-facilities-operators-identity.md)
 - [0043 — SHACL validation: entity shapes on the master graph, data-quality shapes on a validation-only volume graph (extends 0041, 0042)](docs/adr/0043-shacl-validation-entity-and-data-quality-shapes.md)
 - [0044 — Business-term rules: "below expected" from its definition as data and from a SHACL rule, over governed metric values (extends 0041, 0043)](docs/adr/0044-business-term-rules-definition-as-data-and-shacl-rule.md)
+- [0045 — Ontology agent: Claude over SPARQL knowledge tools, a read-only SPARQL tool and governed metric tools; graded answers built in code (extends 0005, 0041)](docs/adr/0045-ontology-agent-sparql-and-metric-tools.md)
 
 ---
 
