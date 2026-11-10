@@ -134,6 +134,8 @@ question whose answer is a set of entities, reported as canonical IRIs (ADR 0045
 **Virtual graph**: facts served as RDF from where they live, by rewriting SPARQL into SQL (Ontop over
 DuckDB), never copied into a store. **Hybrid query**: one SPARQL query that joins the copied, reasoned
 master graph to the virtual facts (`SERVICE`) (ADR 0046).
+**Generated platform knowledge**: a platform's knowledge SQL written from the ontology rather than by
+hand; its rules (subclass closure, transitive part-of, keys) compiled into plain SQL views (ADR 0047).
 
 ### Use cases & platform builds
 **Use case / Question**: a business-user analytical question the agent must answer (§6).
@@ -392,6 +394,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0044 — Business-term rules: "below expected" from its definition as data and from a SHACL rule, over governed metric values (extends 0041, 0043)](docs/adr/0044-business-term-rules-definition-as-data-and-shacl-rule.md)
 - [0045 — Ontology agent: Claude over SPARQL knowledge tools, a read-only SPARQL tool and governed metric tools; graded answers built in code (extends 0005, 0041)](docs/adr/0045-ontology-agent-sparql-and-metric-tools.md)
 - [0046 — GraphDB runtime: the same files on a second engine, with Ontop serving daily volumes live from DuckDB (extends 0041–0045)](docs/adr/0046-graphdb-runtime-ontop-over-duckdb.md)
+- [0047 — Platform knowledge generated from the ontology: vocabulary, products, inheritance, part-of and identity as SQL (extends 0041–0046)](docs/adr/0047-platform-knowledge-generated-from-the-ontology.md)
 
 ---
 

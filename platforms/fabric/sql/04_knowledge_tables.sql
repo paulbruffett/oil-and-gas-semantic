@@ -9,8 +9,8 @@
 --   well_alias      UWI and well name -> well_id (what the Snowflake KG_RESOLVE matches on)
 --   business_term   knowledge/vocabulary.yaml terms: one row per synonym phrase -> governed metric
 -- Aliases are stored lower-cased and trimmed, like the reference LPG's _norm() (which also collapses
--- inner whitespace; no name in the data has any). The vocabulary
--- rows copy knowledge/vocabulary.yaml; verify_knowledge.py checks them against the reference LPG.
+-- inner whitespace; no name in the data has any). The vocabulary rows (business_term, field synonyms)
+-- are generated from the ontology (ADR 0047); verify_knowledge.py checks them against the reference LPG.
 
 DROP TABLE IF EXISTS knowledge.operator;
 GO
@@ -26,12 +26,25 @@ GO
 INSERT INTO knowledge.field_alias (alias, field_id, source)
 SELECT LOWER(TRIM(field_name)), field_id, 'name' FROM semantic.field;
 GO
--- vocabulary.yaml field_synonyms (synonym -> canonical FIELD_NAME), resolved to field_id by name.
+-- BEGIN GENERATED vocabulary (python -m oag_semantic.platform_knowledge; do not edit)
+DROP TABLE IF EXISTS knowledge.business_term;
+GO
+CREATE TABLE knowledge.business_term (phrase VARCHAR(100) NOT NULL, term VARCHAR(50) NOT NULL, metric VARCHAR(50) NOT NULL, comparison VARCHAR(20) NOT NULL, threshold_ref VARCHAR(50), description VARCHAR(400));
+GO
+INSERT INTO knowledge.business_term VALUES
+  ('below expected', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('below forecast', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('below plan', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('under-performing', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('underperforming', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.');
+GO
+-- Field synonyms (synonym -> canonical field name), resolved to field_id by name.
 INSERT INTO knowledge.field_alias (alias, field_id, source)
 SELECT s.alias, f.field_id, 'synonym'
-FROM (VALUES ('volve field', 'Volve'), ('the volve', 'Volve'), ('sleipner ost', 'Sleipner')) AS s(alias, canonical)
+FROM (VALUES ('sleipner ost', 'Sleipner'), ('the volve', 'Volve'), ('volve field', 'Volve')) AS s(alias, canonical)
 JOIN semantic.field f ON LOWER(f.field_name) = LOWER(s.canonical);
 GO
+-- END GENERATED vocabulary
 
 DROP TABLE IF EXISTS knowledge.well_alias;
 GO
@@ -39,20 +52,6 @@ CREATE TABLE knowledge.well_alias AS
 SELECT CAST(LOWER(TRIM(uwi)) AS VARCHAR(100)) AS alias, well_id, CAST('uwi' AS VARCHAR(20)) AS source FROM semantic.well
 UNION ALL
 SELECT CAST(LOWER(TRIM(well_name)) AS VARCHAR(100)), well_id, CAST('name' AS VARCHAR(20)) FROM semantic.well;
-GO
-
-DROP TABLE IF EXISTS knowledge.business_term;
-GO
-CREATE TABLE knowledge.business_term (
-  phrase VARCHAR(100) NOT NULL, term VARCHAR(50) NOT NULL, metric VARCHAR(50) NOT NULL,
-  comparison VARCHAR(20) NOT NULL, threshold_ref VARCHAR(50), description VARCHAR(400));
-GO
-INSERT INTO knowledge.business_term VALUES
-  ('below expected',   'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
-  ('under-performing', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
-  ('underperforming',  'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
-  ('below forecast',   'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
-  ('below plan',       'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.');
 GO
 
 SELECT 'operator' AS t, COUNT(*) AS n FROM knowledge.operator
