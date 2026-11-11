@@ -23,6 +23,7 @@ SQL for the engineering tests, which run it and compare its answers with the ont
 
 from __future__ import annotations
 
+import functools
 import re
 import sys
 from collections import defaultdict
@@ -31,9 +32,9 @@ from pathlib import Path
 
 from rdflib import Graph, Namespace, URIRef
 from rdflib.collection import Collection
-from rdflib.namespace import OWL, RDF, RDFS, SKOS
+from rdflib.namespace import OWL, RDF, RDFS, SKOS, XSD
 
-from oag_semantic.ontology import ID, MAPPING_PATH, OAG, TBOX_PATH, OntologyGraph, load_ontology
+from oag_semantic.ontology import ID, MAPPING_PATH, OAG, TBOX_PATH, OntologyGraph, _norm, load_ontology
 
 RR = Namespace("http://www.w3.org/ns/r2rml#")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -55,11 +56,20 @@ class Dialect:
     def table(self, name: str, columns: list[str], rows: list[tuple], comment: str = "") -> str:
         # A column is "name" (typed as this dialect's string) or "name TYPE ..." (kept as given).
         cols = ", ".join(c if " " in c else f"{c} {self.string}" for c in columns)
-        values = ",\n".join("  (" + ", ".join(_lit(v) for v in r) + ")" for r in rows)
         target = f"{self.knowledge}.{name}"
-        if self.name == "fabric":
-            return (self.end(f"DROP TABLE IF EXISTS {target}") + self.end(f"CREATE TABLE {target} ({cols})")
-                    + self.end(f"INSERT INTO {target} VALUES\n{values}"))
+
+        def values(chunk):
+            return ",\n".join("  (" + ", ".join(_lit(v) for v in r) + ")" for r in chunk)
+
+        if self.name == "fabric":  # T-SQL takes at most 1000 rows per INSERT ... VALUES
+            inserts = "".join(self.end(f"INSERT INTO {target} VALUES\n{values(rows[i:i + 1000])}")
+                              for i in range(0, len(rows), 1000))
+            return self.end(f"DROP TABLE IF EXISTS {target}") + self.end(f"CREATE TABLE {target} ({cols})") + inserts
+        if not rows:  # an empty VALUES list is a syntax error everywhere
+            create = f"CREATE OR REPLACE TABLE {target} ({cols})"
+            return self.end(create + (f"\n  COMMENT {'= ' if self.name == 'snowflake' else ''}{_lit(comment)}"
+                                      if comment and self.name in ("databricks", "snowflake") else ""))
+        values = values(rows)
         if self.name == "databricks":
             return (self.end(f"CREATE OR REPLACE TABLE {target} ({cols})" + (f"\n  COMMENT {_lit(comment)}" if comment else ""))
                     + self.end(f"INSERT OVERWRITE {target} VALUES\n{values}"))
@@ -99,10 +109,6 @@ def _local(iri) -> str:
     return re.split(r"[#/]", str(iri))[-1]
 
 
-def _norm(text) -> str:
-    return " ".join(str(text).lower().split())
-
-
 # --- what the ontology says ------------------------------------------------------------------------
 
 
@@ -113,7 +119,7 @@ def term_rows(onto: OntologyGraph) -> list[tuple]:
         fields = (g.value(term, SKOS.prefLabel), g.value(term, OAG.metric), g.value(term, OAG.comparison),
                   g.value(term, OAG.thresholdRef), g.value(term, SKOS.definition))
         key, metric, comparison, threshold, definition = (None if v is None else str(v) for v in fields)
-        for phrase in {_norm(p) for p in g.objects(term, SKOS.altLabel)}:
+        for phrase in {_norm(str(p)) for p in g.objects(term, SKOS.altLabel)}:
             rows.append((phrase, key, metric, comparison, threshold, definition))
     return sorted(rows)
 
@@ -121,7 +127,7 @@ def term_rows(onto: OntologyGraph) -> list[tuple]:
 def field_synonym_rows(onto: OntologyGraph) -> list[tuple]:
     """(synonym, canonical field name) for every field skos:altLabel."""
     g = onto.graph
-    return sorted({(_norm(alt), str(g.value(f, SKOS.prefLabel)))
+    return sorted({(_norm(str(alt)), str(g.value(f, SKOS.prefLabel)))
                    for f in g.subjects(RDF.type, OAG.Field) for alt in g.objects(f, SKOS.altLabel)})
 
 
@@ -138,12 +144,8 @@ def product_rows(onto: OntologyGraph) -> tuple[list[tuple], list[tuple], list[tu
                          None if broader is None else str(g.value(broader, SKOS.prefLabel)),
                          None if definition is None else str(definition)))
         synonyms |= {(_norm(s), key) for s in g.objects(p, SKOS.altLabel)} | {(_norm(key), key)}
-        measured |= {(key, m) for m in onto._product_metrics(p)}
+        measured |= {(key, m) for m in onto.product_metrics(p)}
     return sorted(products), sorted(synonyms), sorted(measured)
-
-
-def _tbox() -> Graph:
-    return Graph().parse(TBOX_PATH)
 
 
 def class_rows(tbox: Graph) -> list[tuple]:
@@ -174,23 +176,45 @@ def _maps(mapping: Graph) -> dict[URIRef, TriplesMap]:
     return maps
 
 
+# R2RML percent-encodes a template value's characters outside iunreserved (IRI-safe), so an OSDU record
+# id like oag:WELL:1 becomes oag%3AWELL%3A1 in the IRI. '%' goes first, so nothing is encoded twice.
+# Backslash is left out: it is an escape character in Databricks and Snowflake string literals.
+_IRI_UNSAFE = "% !\"#$&'()*+,/:;<=>?@[]^`{|}"
+
+
+def _iri_safe(d: Dialect, column: str, integer: bool) -> str:
+    expr = d.text(column)
+    if integer:  # digits (and a sign) need no encoding
+        return expr
+    for ch in _IRI_UNSAFE:
+        expr = f"REPLACE({expr}, {_lit(ch)}, '%{ord(ch):02X}')"
+    return expr
+
+
 def _iri_sql(d: Dialect, template: str, alias: str) -> str:
-    """An R2RML IRI template as SQL: CONCAT of its literal parts and the columns cast to text."""
+    """An R2RML IRI template as SQL: CONCAT of its literal parts and its IRI-safe column values."""
+    integers = _sources()[3]
     parts = []
     for i, piece in enumerate(re.split(r"\{([^}]+)\}", template)):
         if i % 2:
-            parts.append(d.text(f"{alias}.{piece}"))
+            parts.append(_iri_safe(d, f"{alias}.{piece}", piece in integers))
         elif piece:
             parts.append(_lit(piece))
     return f"CONCAT({', '.join(parts)})"
 
 
+@functools.lru_cache(maxsize=1)
+def _sources():
+    """The TBox, the mapping, its triples maps, its integer columns and the partOf subproperties."""
+    tbox, mapping = Graph().parse(TBOX_PATH), Graph().parse(MAPPING_PATH)
+    integers = {str(mapping.value(om, RR.column)) for om in mapping.subjects(RR.datatype, XSD.integer)
+                if mapping.value(om, RR.column) is not None}
+    part_of = set(tbox.subjects(RDFS.subPropertyOf * "*", OAG.partOf))  # type: ignore[operator]
+    return tbox, mapping, _maps(mapping), frozenset(integers), frozenset(part_of)
+
+
 def _canonical(m: TriplesMap) -> bool:
     return m.table is not None and m.template.startswith(str(ID))
-
-
-def _part_of_properties(tbox: Graph) -> set[URIRef]:
-    return {p for p in tbox.subjects(RDFS.subPropertyOf * "*", OAG.partOf)}  # type: ignore[operator]
 
 
 def _edges(d: Dialect, mapping: Graph, maps: dict, tbox: Graph) -> list[tuple[str, str, str, str]]:
@@ -202,7 +226,7 @@ def _edges(d: Dialect, mapping: Graph, maps: dict, tbox: Graph) -> list[tuple[st
             continue
         for pom in mapping.objects(node, RR.predicateObjectMap):
             prop = mapping.value(pom, RR.predicate)
-            if prop not in _part_of_properties(tbox):
+            if prop not in _sources()[4]:
                 continue
             obj = mapping.value(pom, RR.objectMap)
             template, parent = mapping.value(obj, RR.template), mapping.value(obj, RR.parentTriplesMap)
@@ -247,7 +271,7 @@ def vocabulary_sql(d: Dialect, onto: OntologyGraph) -> str:
     """The vocabulary rows, in the table shapes each platform's resolver functions read."""
     terms, synonyms = term_rows(onto), field_synonym_rows(onto)
     if d.name == "fabric":
-        values = ", ".join(f"({_lit(s)}, {_lit(n)})" for s, n in synonyms)
+        values = ", ".join(f"({_lit(s)}, {_lit(n)})" for s, n in synonyms) or "(NULL, NULL)"  # never empty
         # The Fabric IQ BusinessTerm entity keys on phrase: keep its original, non-null column types.
         columns = ["phrase VARCHAR(100) NOT NULL", "term VARCHAR(50) NOT NULL", "metric VARCHAR(50) NOT NULL",
                    "comparison VARCHAR(20) NOT NULL", "threshold_ref VARCHAR(50)", "description VARCHAR(400)"]
@@ -264,8 +288,7 @@ def vocabulary_sql(d: Dialect, onto: OntologyGraph) -> str:
 
 def ontology_sql(d: Dialect, onto: OntologyGraph) -> str:
     """Products, the class hierarchy, and the entity / asset / part-of views over the canonical tables."""
-    tbox, mapping = _tbox(), Graph().parse(MAPPING_PATH)
-    maps = _maps(mapping)
+    tbox, mapping, maps = _sources()[:3]
     products, product_synonyms, product_metrics = product_rows(onto)
     entity = "\nUNION ALL\n".join(
         f"SELECT {_iri_sql(d, m.template, 't')} AS iri, '{m.cls}' AS class_name FROM {d.canonical}.{m.table} t"
@@ -301,8 +324,7 @@ def ontology_sql(d: Dialect, onto: OntologyGraph) -> str:
 
 def identity_sql(d: Dialect) -> str:
     """same_as: canonical entity <-> OSDU record, joined on each class's owl:hasKey columns."""
-    tbox, mapping = _tbox(), Graph().parse(MAPPING_PATH)
-    maps = _maps(mapping)
+    tbox, mapping, maps = _sources()[:3]
     selects = []
     for cls in sorted(tbox.subjects(OWL.hasKey, None), key=str):
         keys = list(Collection(tbox, tbox.value(cls, OWL.hasKey)))

@@ -268,7 +268,7 @@ class OntologyGraph:
         A product with its own metric is measured by it alone, so a grouping is never counted twice.
         """
         product = self.product_iri(phrase)
-        return sorted(set(self._product_metrics(product))) if product is not None else None
+        return sorted(set(self.product_metrics(product))) if product is not None else None
 
     def product_iri(self, phrase: str) -> URIRef | None:
         """A product word -> the product concept it names (matched as in :meth:`resolve_product`)."""
@@ -282,11 +282,12 @@ class OntologyGraph:
         )
         return rows[0][0] if rows else None
 
-    def _product_metrics(self, product: URIRef) -> list[str]:
+    def product_metrics(self, product: URIRef) -> list[str]:
+        """The governed metrics that measure a product: its own, else those of the products under it."""
         own = self.graph.value(product, OAG.metric)
         if own is not None:
             return [str(own)]
-        return [m for child in self.graph.subjects(SKOS.broader, product) for m in self._product_metrics(child)]
+        return [m for child in self.graph.subjects(SKOS.broader, product) for m in self.product_metrics(child)]
 
     def _ids(self, query: str, **bindings) -> list[int]:
         return sorted({int(r[0]) for r in self._select(query, **bindings)})

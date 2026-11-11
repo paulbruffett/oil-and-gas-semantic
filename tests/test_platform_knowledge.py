@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import duckdb
 import pytest
+from rdflib import URIRef
 
 from oag_generator import generate_dataset
 from oag_semantic.ontology import ID, create_views, load_ontology
@@ -70,8 +71,13 @@ def test_every_canonical_entity_is_typed(sql, onto):
 
 
 def test_identity_crosswalk_matches_owl_same_as(sql, onto):
+    """Record ids and the record IRIs themselves (R2RML percent-encodes them: oag%3AWELL%3A1)."""
     for iri in onto._iris("SELECT ?x WHERE { { ?x a oag:Well } UNION { ?x a oag:Facility } }"):
         assert _col(sql, "SELECT record_id FROM knowledge.same_as WHERE iri = ?", iri) == onto.osdu_record_ids(iri)
+        aliases = sorted(str(r[0]) for r in onto._select(
+            'SELECT DISTINCT ?r WHERE { ?e owl:sameAs ?r . FILTER(STRSTARTS(STR(?r), "https://example.org/oag/osdu-record/")) }',
+            e=URIRef(iri)))
+        assert _col(sql, "SELECT alias_iri FROM knowledge.same_as WHERE iri = ?", iri) == aliases
 
 
 def test_products_and_terms_resolve_as_in_the_ontology(sql, onto):

@@ -65,9 +65,10 @@ these ✗ or ? for every platform.
   yet.
 - **The generator translates only what this mapping uses:**
   - `rr:tableName` maps (the `Organisation` map's `rr:sqlQuery` is skipped);
-  - IRI templates over numeric ids and plain codes. R2RML percent-encodes template values, plain
-    SQL `CONCAT` doesn't, so a value with reserved characters would give a different IRI. The DuckDB
-    test would catch it.
+  - IRI templates, with R2RML's percent-encoding written as `REPLACE` calls for non-integer columns,
+    so an OSDU record id `oag:WELL:1` gives the ontology's IRI `oag%3AWELL%3A1`. ASCII only, and
+    backslash isn't encoded (it is an escape in Databricks and Snowflake literals). The DuckDB test
+    checks the record IRIs against `owl:sameAs`.
 - Synonym rows now carry the term's definition, as Fabric's already did, instead of "Synonym of
   below-expected." That's descriptive only; the resolvers read the metric.
 - Regenerate with `python -m oag_semantic.platform_knowledge <default-config dataset>`, and check
