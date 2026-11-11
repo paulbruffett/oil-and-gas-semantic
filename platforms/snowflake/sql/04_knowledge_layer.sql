@@ -11,7 +11,8 @@
 --   * surveillance_below_expected reads the governed semantic layer through `SEMANTIC_VIEW(... WHERE ...)`
 --     (the Snowflake analogue of the Databricks `MEASURE()`-over-metric-view query); the frozen window
 --     + threshold still come from DATASET_PARAM via the PARAM() UDF, so nothing is agent-invented.
--- Source of the static vocabulary: knowledge/vocabulary.yaml (kept in sync with the shell).
+-- The vocabulary rows are generated from the ontology (ADR 0047): knowledge/vocabulary.yaml -> SKOS ->
+-- `python -m oag_semantic.platform_knowledge`, so the platforms can't drift from the shell.
 
 CREATE SCHEMA IF NOT EXISTS OAG_FABLE.KNOWLEDGE
   COMMENT = 'Knowledge layer (LPG): business vocabulary, entity resolution, rollup nav as Snowflake UDFs/tables (DESIGN §4 layer 4, ADR 0004).';
@@ -56,25 +57,22 @@ INSERT OVERWRITE INTO OAG_FABLE.KNOWLEDGE.DATASET_PARAM VALUES
   ('rollup_prior_start',            '2025-02-01'),
   ('rollup_prior_end',              '2025-02-28');
 
--- Business phrase -> governed metric (semantic mapping). synonym pre-normalized (lower+trim).
-CREATE OR REPLACE TABLE OAG_FABLE.KNOWLEDGE.VOCABULARY_TERM (
-  synonym STRING, term_key STRING, metric STRING, comparison STRING, threshold_ref STRING, description STRING)
+-- BEGIN GENERATED vocabulary (python -m oag_semantic.platform_knowledge; do not edit)
+CREATE OR REPLACE TABLE OAG_FABLE.KNOWLEDGE.vocabulary_term (synonym STRING, term_key STRING, metric STRING, comparison STRING, threshold_ref STRING, description STRING)
   COMMENT = 'Business vocabulary: phrase synonyms -> the governed metric + comparison they denote (story 15).';
-INSERT OVERWRITE INTO OAG_FABLE.KNOWLEDGE.VOCABULARY_TERM VALUES
-  ('below expected',   'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
-  ('under-performing', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'Synonym of below-expected.'),
-  ('underperforming',  'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'Synonym of below-expected.'),
-  ('below forecast',   'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'Synonym of below-expected.'),
-  ('below plan',       'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'Synonym of below-expected.');
-
--- Alternate/informal field names -> canonical FIELD_NAME (entity resolution).
-CREATE OR REPLACE TABLE OAG_FABLE.KNOWLEDGE.FIELD_SYNONYM (synonym STRING, canonical_field_name STRING)
+INSERT OVERWRITE INTO OAG_FABLE.KNOWLEDGE.vocabulary_term VALUES
+  ('below expected', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('below forecast', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('below plan', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('under-performing', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.'),
+  ('underperforming', 'below_expected', 'production_efficiency', 'less_than', 'surveillance_flag_threshold', 'A well whose production efficiency (actual/expected oil) is below the materiality band.');
+CREATE OR REPLACE TABLE OAG_FABLE.KNOWLEDGE.field_synonym (synonym STRING, canonical_field_name STRING)
   COMMENT = 'Field-name synonyms resolving to the canonical FIELD_NAME (story 14).';
-INSERT OVERWRITE INTO OAG_FABLE.KNOWLEDGE.FIELD_SYNONYM VALUES
-  ('volve field',  'Volve'),
-  ('the volve',    'Volve'),
-  ('sleipner ost', 'Sleipner');
-
+INSERT OVERWRITE INTO OAG_FABLE.KNOWLEDGE.field_synonym VALUES
+  ('sleipner ost', 'Sleipner'),
+  ('the volve', 'Volve'),
+  ('volve field', 'Volve');
+-- END GENERATED vocabulary
 -- norm: lowercase + trim (matches lpg._norm behaviorally).
 CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.NORM(s STRING) RETURNS STRING
   COMMENT = 'Normalize a phrase for matching: lowercase + trim.'

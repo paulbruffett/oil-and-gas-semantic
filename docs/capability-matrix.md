@@ -20,6 +20,7 @@ in prose. This page is the checklist they hang off.
 | ◐ | built here with a workaround (named in the cell) |
 | ○ | the platform has a feature for it, not built here |
 | ▷ | planned in the ontology slices (number given) |
+| ◇ | generated from the ontology for the platform (SQL committed, its logic tested in DuckDB), not yet deployed (ADR 0047) |
 | ✗ | no native support |
 | ? | not verified |
 | — | not this technology's job (the cell says which layer does it) |
@@ -52,7 +53,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 |---|---|---|---|---|---|---|---|
 | Entity resolution with synonyms | "the volve" → field Volve | turn the user's words into ids | ● LPG | ● SKOS `altLabel` + SPARQL | ● `resolve_field` + synonym table | ● `RESOLVE_FIELD`, `KG_RESOLVE` | ◐ alias entities via `ask_ontology` (model-driven) |
 | Business-term mapping | "underperforming" → efficiency below the band | phrase → metric + filter | ● vocabulary terms | ● SKOS concept, definition as data | ● `resolve_term` | ● `RESOLVE_TERM` | ◐ `BusinessTerm` entity; the data agent can't use it |
-| Broader / narrower concepts | "liquids" covers oil and water | widen or narrow a term | ✗ | ● `skos:broader`: gross liquids → oil, water | ✗ | ✗ | ? |
+| Broader / narrower concepts | "liquids" covers oil and water | widen or narrow a term | ✗ | ● `skos:broader`: gross liquids → oil, water | ◇ `product`, `product_metric` tables | ◇ `product`, `product_metric` tables | ◇ `product`, `product_metric` tables |
 | Labels in several languages | Norwegian and English names | answer in the user's terms | ✗ | ▷ deferred: the data has no names in other languages (ADR 0042) | ✗ | ✗ | ? |
 | Operators as entities | Equinor operates wells and facilities | "what does Equinor run?" | ✗ operator is a column | ● `operatedBy`, inferred `operates` | ◐ operator column | ● `OPERATED_BY` edges | ? |
 | Alignment to an industry model | our Well ≈ OSDU Well | read and exchange OSDU records | ◐ OSDU PDM table and column names | ● OSDU kind on each class + SKOS mapping to w3id.org/osdu | ◐ PDM names | ◐ PDM names | ◐ PDM names |
@@ -62,10 +63,10 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Capability | Example | Agent use | Reference | Ontology | Databricks | Snowflake | Fabric |
 |---|---|---|---|---|---|---|---|
 | Typed relationships | well at facility; facility in field | navigate between entities | ● `IN_FIELD` | ● object properties | ◐ key columns + functions | ● `KG_EDGE` | ● entity relationships |
-| Multi-level hierarchy | well → facility → field | roll up across levels | ◐ one level (well → field) | ● transitive `partOf` over well → facility → field | ◐ fixed joins | ● recursive `KG_TRAVERSE` | ? multi-hop over MCP |
+| Multi-level hierarchy | well → facility → field | roll up across levels | ◐ one level (well → field) | ● transitive `partOf` over well → facility → field | ◐ fixed joins; ◇ `part_of` closure view | ● recursive `KG_TRAVERSE`; ◇ `part_of` closure view | ? multi-hop over MCP; ◇ `part_of` closure view |
 | Inverse relationships | field has part well | ask from either end | ◐ coded both ways | ● `owl:inverseOf`, inferred | ◐ coded | ◐ coded | ? |
-| Class inheritance | Well, Facility and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ✗ | ✗ | ? |
-| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl's key rule replaced, ADR 0042; GraphDB's is correct as is) | ✗ | ✗ | ? |
+| Class inheritance | Well, Facility and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ◇ `asset` view over `entity` + `ontology_class` | ◇ `asset` view over `entity` + `ontology_class` | ◇ `asset` view over `entity` + `ontology_class` |
+| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl's key rule replaced, ADR 0042; GraphDB's is correct as is) | ◇ `same_as` view on the keys; needs the OSDU records staged | ◇ `same_as` view on the keys; needs the OSDU records staged | ◇ `same_as` view on the keys; needs the OSDU records staged |
 | Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ● definition as data and a SHACL rule, both over governed metric values; dated flag records (ADR 0044). GraphDB doesn't run SHACL rules | ● SQL function | ● SQL function | ◐ natural-language rule |
 | Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ● SHACL shapes, incl. a well's field = its facility's and no shared keys; pySHACL and GraphDB agree | ○ constraints, expectations | ○ data metric functions | ? |
 | Graph query language | SPARQL, GQL, SQL | how tools query the graph | ● Python API | ● SPARQL | ◐ SQL | ◐ recursive SQL | ◐ GQL graph stays empty via the API; `ask_ontology` takes natural language |
@@ -122,4 +123,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);
   validation as pipeline expectations (Databricks) or data metric functions (Snowflake); and generating
-  their knowledge tables from the ontology so one source feeds all three.
+  their knowledge tables from the ontology so one source feeds all three. Slice 8 generates that SQL
+  (ADR 0047): vocabulary rows in place of the hand-typed copies, and products, inheritance, the part-of
+  closure and the identity crosswalk as tables and plain views. The ontology's rules are compiled into
+  plain SQL, so no reasoner runs on a platform. Deploying it is the next step.
