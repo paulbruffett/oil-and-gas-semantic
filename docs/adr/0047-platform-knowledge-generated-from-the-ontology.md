@@ -33,10 +33,10 @@ these ✗ or ? for every platform.
   on the class's `owl:hasKey` columns. It needs the OSDU records staged as `canonical.osdu_well` and
   `osdu_facility`, which no platform loads today. So it is its own deploy step and doesn't break the
   rest.
-- **Generated from the platforms' dataset**, the default config, because field synonyms live on field
+- **Generated from the platforms' dataset**, `configs/reference.yaml` (`data/frozen`), because field synonyms live on field
   instances in the ontology. A dataset with fewer fields would silently drop synonyms for the missing
   ones.
-- **Checked here, not deployed.**
+- **Checked here, and on each platform after a deploy.**
   - `tests/test_platform_knowledge.py` fails if any committed platform file differs from the
     generator's output.
   - It runs the same SQL in the DuckDB dialect over the canonical tables, and checks every answer
@@ -57,12 +57,18 @@ these ✗ or ? for every platform.
 - The vocabulary can no longer drift between the shell and the three platforms, and the platforms
   gain products, inheritance, the part-of closure and identity as SQL. The matrix marks these ◇:
   generated, logic tested, not deployed.
-- **Not run on any platform.** The dialect details are unverified there: Fabric Warehouse's
-  `CREATE OR ALTER VIEW`, `CAST(... AS STRING)` on Databricks and Snowflake, and `CONCAT` with a
-  cast on all three. Deploying needs each workspace up (Fabric capacity may be paused) and
-  costs cloud credit.
-- The identity views need the OSDU records staged on each platform first. No load script does that
-  yet.
+- **Deployed on Snowflake and Fabric (2026-11-14), not on Databricks.**
+  - On both, every object was created as generated, and `knowledge_checks` (the same checks the DuckDB
+    test runs) matches the ontology. That covers inheritance, the part-of closure, products, terms, field
+    synonyms and the identity crosswalk, down to the percent-encoded record IRIs.
+  - Snowflake's agent still scores 6/6, and Fabric's own ontology checks (`verify_knowledge.py`) still
+    match. Fabric's agent wasn't rerun: its model endpoint wasn't configured on the deploying machine.
+  - Rerunning Snowflake's `04` recreates two tables, which drops `OAG_ANALYST`'s SELECT on them. The
+    `SYSADMIN` grants in `06_governance.sql` have to be rerun; the agent's function grants survive.
+  - Databricks isn't deployed: no CLI login on the deploying machine. Its dialect (`CAST ... AS
+    STRING`, `INSERT OVERWRITE`) is unverified.
+- The identity views need the OSDU records staged first. `--export-osdu` writes them as Parquet, and
+  each platform's `02b_load_osdu_records.sql` loads them next to the canonical tables.
 - **The generator translates only what this mapping uses:**
   - `rr:tableName` maps (the `Organisation` map's `rr:sqlQuery` is skipped);
   - IRI templates, with R2RML's percent-encoding written as `REPLACE` calls for non-integer columns,
@@ -71,5 +77,5 @@ these ✗ or ? for every platform.
     checks the record IRIs against `owl:sameAs`.
 - Synonym rows now carry the term's definition, as Fabric's already did, instead of "Synonym of
   below-expected." That's descriptive only; the resolvers read the metric.
-- Regenerate with `python -m oag_semantic.platform_knowledge <default-config dataset>`, and check
+- Regenerate with `python -m oag_semantic.platform_knowledge data/frozen`, and check
   drift with `--check`.

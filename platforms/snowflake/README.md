@@ -159,8 +159,8 @@ snow sql -c $CONN -f sql/09_cortex_analyst.sql
 #     Generate a key pair per service user and paste the public halves in first — see the file.
 snow sql -c $CONN -f sql/10_service_users.sql
 
-# Then sql/11_ontology_knowledge.sql and sql/12_ontology_identity.sql, generated from the ontology
-# (ADR 0047): see "Ontology knowledge" below. Not yet deployed.
+# Then sql/02b_load_osdu_records.sql, sql/11_ontology_knowledge.sql and sql/12_ontology_identity.sql,
+# generated from the ontology (ADR 0047): see "Ontology knowledge" below.
 
 # 11. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
 (cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py)
@@ -289,15 +289,27 @@ on the agent**, so `USAGE ON AGENT` is re-applied by `sql/07`/`sql/09` themselve
 user and the isolation is fiction — hence `DEFAULT_SECONDARY_ROLES = ()` on both service users, and
 `USE SECONDARY ROLES NONE` when testing a role interactively.
 
-### Ontology knowledge (generated, not yet deployed)
+### Ontology knowledge (generated from the ontology, ADR 0047)
 
-`sql/11_ontology_knowledge.sql` and `sql/12_ontology_identity.sql` are generated from the ontology (ADR 0047), as is the vocabulary block in
-`sql/04_knowledge_layer.sql`. Don't edit them: change `knowledge/vocabulary.yaml` or the ontology and run
-`uv run python -m oag_semantic.platform_knowledge <default-config dataset>` (`--check` reports drift;
-`tests/test_platform_knowledge.py` fails on it). The generated logic is tested in DuckDB; it has not
-been run on Snowflake yet. To deploy it, after the knowledge layer:
+`sql/11_ontology_knowledge.sql` and `sql/12_ontology_identity.sql` are generated from the ontology, as is
+the vocabulary block in `sql/04_knowledge_layer.sql`. Don't edit them: change `knowledge/vocabulary.yaml`
+or the ontology and run `uv run python -m oag_semantic.platform_knowledge data/frozen` (`--check` reports
+drift; `tests/test_platform_knowledge.py` fails on it). Deployed and verified on 2026-11-14 (and the agent
+still scores 6/6):
 
 ```bash
-snow sql -c $CONN -f sql/11_ontology_knowledge.sql   # product tables; entity, asset, part_of_edge, part_of views
-snow sql -c $CONN -f sql/12_ontology_identity.sql  # same_as view: first stage the OSDU well/facility records as canonical.osdu_well / osdu_facility
+# OSDU well/facility records for the identity view, staged next to the canonical Parquet
+(cd ../.. && uv run python -m oag_semantic.platform_knowledge --export-osdu data/frozen data/frozen/osdu_flat)
+for f in "$FROZEN"/osdu_flat/*.parquet; do
+  snow sql -c $CONN -q "PUT 'file://$f' @OAG_FABLE.CANONICAL._STAGING AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
+done
+snow sql -c $CONN -f sql/02b_load_osdu_records.sql   # ends with row counts: 18, 6
+snow sql -c $CONN -f sql/11_ontology_knowledge.sql   # product tables; ENTITY, ASSET, PART_OF_EDGE, PART_OF views
+snow sql -c $CONN -f sql/12_ontology_identity.sql    # SAME_AS view
+(cd ../.. && uv run python platforms/snowflake/verify_ontology_knowledge.py)   # MATCH
 ```
+
+Re-running `sql/04_knowledge_layer.sql` recreates `VOCABULARY_TERM` and `FIELD_SYNONYM`, which drops
+`OAG_ANALYST`'s SELECT on them (there is no future-tables grant in `KNOWLEDGE`). Re-run the `SYSADMIN`
+grants in `sql/06_governance.sql` (sections 3-5) afterwards. The agent is unaffected: it calls the
+owner-rights functions, whose grants survive.

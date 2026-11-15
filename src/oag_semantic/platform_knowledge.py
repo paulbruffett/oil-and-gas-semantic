@@ -17,7 +17,7 @@ platform's knowledge SQL in its dialect:
   ``osdu_facility`` first, so it is its own deploy step.
 
 ``python -m oag_semantic.platform_knowledge <dataset_dir>`` rewrites the files from the platforms'
-dataset (the default config); ``--check`` reports drift instead. The ``duckdb`` dialect is the same
+dataset (``configs/reference.yaml``, ``data/frozen``); ``--check`` reports drift instead. The ``duckdb`` dialect is the same
 SQL for the engineering tests, which run it and compare its answers with the ontology's.
 """
 
@@ -29,12 +29,26 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
+
+import duckdb
 
 from rdflib import Graph, Namespace, URIRef
 from rdflib.collection import Collection
 from rdflib.namespace import OWL, RDF, RDFS, SKOS, XSD
 
-from oag_semantic.ontology import ID, MAPPING_PATH, OAG, TBOX_PATH, OntologyGraph, _norm, load_ontology
+from oag_semantic.ontology import (
+    ID,
+    MAPPING_PATH,
+    OAG,
+    OSDU_RECORD,
+    TBOX_PATH,
+    OntologyGraph,
+    _norm,
+    _sql_path,
+    create_views,
+    load_ontology,
+)
 
 RR = Namespace("http://www.w3.org/ns/r2rml#")
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -353,6 +367,88 @@ def identity_sql(d: Dialect) -> str:
             + d.view("same_as", "\nUNION ALL\n".join(selects)))
 
 
+# --- checking a deployed knowledge layer -------------------------------------------------------------
+
+
+def knowledge_checks(query: Callable[[str], list[tuple]], d: Dialect, onto: OntologyGraph,
+                     identity: bool = True) -> list[str]:
+    """Compare a deployed knowledge layer with the ontology; return the differences (empty = agrees).
+
+    ``query`` runs one SELECT on the platform and returns its rows. Each check reads a whole view or
+    table (no bind parameters, which differ by dialect) and compares in Python, so the same checks run
+    on DuckDB in the tests and on each platform after a deploy.
+    """
+    k, problems = d.knowledge, []
+
+    def differ(what, got, want):
+        if sorted(got) != sorted(want):
+            problems.append(f"{what}: got {sorted(got)[:5]}..., want {sorted(want)[:5]}...")
+
+    typed = defaultdict(list)
+    for iri, cls in query(f"SELECT iri, class_name FROM {k}.entity"):
+        typed[cls].append(iri)
+    for cls in ("Well", "Facility", "Field"):
+        differ(f"entity {cls}", typed[cls], onto._iris(f"SELECT ?x WHERE {{ ?x a oag:{cls} }}"))
+
+    parts = defaultdict(list)
+    for part, whole, cls in query(f"SELECT p.part, p.whole, a.class_name FROM {k}.part_of p "
+                                  f"JOIN {k}.asset a ON a.iri = p.part"):
+        parts[whole].append((part, cls))
+    for f in onto._ids("SELECT ?id WHERE { ?x a oag:Field ; oag:fieldId ?id }"):
+        found = parts[f"{ID}field/{f}"]
+        differ(f"assets in field {f}", [p for p, _ in found], onto.assets_in_field(f))
+        differ(f"wells in field {f}", [p for p, c in found if c == "Well"],
+               [f"{ID}well/{w}" for w in onto.wells_in_field(f)])
+
+    metrics_of = defaultdict(list)
+    for key, metric in query(f"SELECT product_key, metric FROM {k}.product_metric"):
+        metrics_of[key].append(metric)
+    # From the synonym list, so a product that lost every metric still shows up.
+    for phrase, key in query(f"SELECT synonym, product_key FROM {k}.product_synonym"):
+        differ(f"product {phrase!r}", metrics_of[key], onto.resolve_product(phrase) or [])
+
+    terms = "SELECT phrase, metric FROM knowledge.business_term" if d.name == "fabric" else \
+        f"SELECT synonym, metric FROM {k}.vocabulary_term"
+    for phrase, metric in query(terms):
+        if metric != (onto.resolve_term(phrase) or {}).get("metric"):
+            problems.append(f"term {phrase!r} -> {metric}")
+    if d.name == "fabric":
+        synonyms = [(a, int(f)) for a, f in query("SELECT alias, field_id FROM knowledge.field_alias WHERE source = 'synonym'")]
+    else:
+        synonyms = [(a, onto.resolve_field(n)) for a, n in query(f"SELECT synonym, canonical_field_name FROM {k}.field_synonym")]
+    differ("field synonyms", [(a, f) for a, f in synonyms], [(a, onto.resolve_field(a)) for a, _ in synonyms])
+    differ("field synonym count", [a for a, _ in synonyms], [r[0] for r in field_synonym_rows(onto)])
+
+    if identity:
+        same = defaultdict(list)
+        for iri, alias, record in query(f"SELECT iri, alias_iri, record_id FROM {k}.same_as"):
+            same[iri].append((alias, record))
+        for iri in onto._iris("SELECT ?x WHERE { { ?x a oag:Well } UNION { ?x a oag:Facility } }"):
+            aliases = [str(r[0]) for r in onto._select(
+                f'SELECT DISTINCT ?r WHERE {{ ?e owl:sameAs ?r . FILTER(STRSTARTS(STR(?r), "{OSDU_RECORD}")) }}',
+                e=URIRef(iri))]
+            differ(f"same_as {iri}", same[iri], list(zip(sorted(aliases), onto.osdu_record_ids(iri))))
+    return problems
+
+
+def export_osdu(dataset_dir: str | Path, out_dir: str | Path) -> list[Path]:
+    """Write the OSDU record views the identity mapping reads (osdu_well, osdu_facility: RECORD_ID + key
+    columns) as Parquet, for staging on a platform next to the canonical tables."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    con = duckdb.connect()
+    try:
+        create_views(con, dataset_dir, ())
+        paths = []
+        for view in ("osdu_well", "osdu_facility"):
+            path = out_dir / f"{view}.parquet"
+            con.execute(f"COPY (SELECT * FROM {view} ORDER BY RECORD_ID) TO '{_sql_path(path)}' (FORMAT parquet)")
+            paths.append(path)
+        return paths
+    finally:
+        con.close()
+
+
 # --- writing the platform files ----------------------------------------------------------------------
 
 _BEGIN = f"-- BEGIN GENERATED vocabulary ({GENERATOR}; do not edit)\n"
@@ -378,10 +474,14 @@ def render(onto: OntologyGraph) -> dict[Path, str]:
 
 
 def main(argv: list[str]) -> int:  # pragma: no cover -- exercised through render() in the tests
+    if argv[:1] == ["--export-osdu"] and len(argv) == 3:
+        for path in export_osdu(argv[1], argv[2]):
+            print(f"wrote {path}")
+        return 0
     check = "--check" in argv
     args = [a for a in argv if a != "--check"]
     if len(args) != 1:
-        print(f"usage: {GENERATOR} [--check] <dataset_dir>", file=sys.stderr)
+        print(f"usage: {GENERATOR} [--check] <dataset_dir> | --export-osdu <dataset_dir> <out_dir>", file=sys.stderr)
         return 2
     drift = []
     for path, content in render(load_ontology(args[0])).items():

@@ -38,3 +38,6 @@ platforms/databricks/agent/mlruns/
 knowledge/graphdb/lib/
 knowledge/graphdb/data/
 knowledge/graphdb/graphdb.license
+
+# The frozen reference dataset (uv run oag-generate --config configs/reference.yaml --out data/frozen)
+data/frozen/

@@ -369,18 +369,25 @@ $RUN deploy.py ontology                     # creates or updates oag_reference_o
 
 `verify_knowledge.py` should print `MATCH` for all seven checks.
 
-### Ontology knowledge (generated, not yet deployed)
+### Ontology knowledge (generated from the ontology, ADR 0047)
 
-`sql/06_ontology_knowledge.sql` and `sql/07_ontology_identity.sql` are generated from the ontology (ADR 0047), as is the vocabulary block in
-`sql/04_knowledge_tables.sql`. Don't edit them: change `knowledge/vocabulary.yaml` or the ontology and run
-`uv run python -m oag_semantic.platform_knowledge <default-config dataset>` (`--check` reports drift;
-`tests/test_platform_knowledge.py` fails on it). The generated logic is tested in DuckDB; it has not
-been run on Fabric yet. To deploy it, after the knowledge layer:
+`sql/06_ontology_knowledge.sql` and `sql/07_ontology_identity.sql` are generated from the ontology, as is
+the vocabulary block in `sql/04_knowledge_tables.sql`. Don't edit them: change `knowledge/vocabulary.yaml`
+or the ontology and run `uv run python -m oag_semantic.platform_knowledge data/frozen` (`--check` reports
+drift; `tests/test_platform_knowledge.py` fails on it). Deployed and verified on 2026-11-14:
 
 ```bash
-$RUN run_sql.py sql/06_ontology_knowledge.sql   # product tables; entity, asset, part_of_edge, part_of views
-$RUN run_sql.py sql/07_ontology_identity.sql  # same_as view: first stage the OSDU well/facility records as canonical.osdu_well / osdu_facility
+# OSDU well/facility records for the identity view, staged next to the canonical Parquet
+(cd ../.. && uv run python -m oag_semantic.platform_knowledge --export-osdu data/frozen data/frozen/osdu_flat)
+$RUN stage.py ../../data/frozen/osdu_flat
+$RUN run_sql.py sql/02b_load_osdu_records.sql   # ends with row counts: 18, 6
+$RUN run_sql.py sql/06_ontology_knowledge.sql    # product tables; entity, asset, part_of_edge, part_of views
+$RUN run_sql.py sql/07_ontology_identity.sql     # same_as view
+(cd ../.. && uv run --with mssql-python python platforms/fabric/verify_ontology_knowledge.py)   # MATCH
 ```
+
+On macOS, `mssql-python` may fail with "OpenSSL library could not be loaded"; run with
+`DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib`.
 
 ```bash
 # 5. Agents. The custom agent needs a Foundry deployment (gpt-6-luna) and keyless access to it
