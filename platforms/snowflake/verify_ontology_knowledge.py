@@ -22,9 +22,11 @@ connection = os.environ.get("OAG_SNOW_CONNECTION", "proton")
 
 
 def query(sql: str) -> list[tuple]:
-    out = subprocess.run(["snow", "sql", "-c", connection, "-q", sql, "--format", "json"],
-                         capture_output=True, text=True, check=True).stdout
-    return [tuple(row.values()) for row in json.loads(out)]
+    run = subprocess.run(["snow", "sql", "-c", connection, "-q", sql, "--format", "json"],
+                         capture_output=True, text=True)
+    if run.returncode:
+        sys.exit(f"snow sql failed:\n{run.stderr or run.stdout}")
+    return [tuple(row.values()) for row in json.loads(run.stdout)]
 
 
 problems = knowledge_checks(query, DIALECTS["snowflake"], load_ontology(os.environ.get("OAG_FROZEN", "data/frozen")))

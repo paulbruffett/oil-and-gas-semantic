@@ -404,12 +404,16 @@ def knowledge_checks(query: Callable[[str], list[tuple]], d: Dialect, onto: Onto
     for key, metric in query(f"SELECT product_key, metric FROM {k}.product_metric"):
         metrics_of[key].append(metric)
     # From the synonym list, so a product that lost every metric still shows up.
-    for phrase, key in query(f"SELECT synonym, product_key FROM {k}.product_synonym"):
+    product_synonyms = query(f"SELECT synonym, product_key FROM {k}.product_synonym")
+    differ("product synonyms", product_synonyms, product_rows(onto)[1])
+    for phrase, key in product_synonyms:
         differ(f"product {phrase!r}", metrics_of[key], onto.resolve_product(phrase) or [])
 
     terms = "SELECT phrase, metric FROM knowledge.business_term" if d.name == "fabric" else \
         f"SELECT synonym, metric FROM {k}.vocabulary_term"
-    for phrase, metric in query(terms):
+    term_phrases = query(terms)
+    differ("term phrases", [p for p, _ in term_phrases], [r[0] for r in term_rows(onto)])
+    for phrase, metric in term_phrases:
         if metric != (onto.resolve_term(phrase) or {}).get("metric"):
             problems.append(f"term {phrase!r} -> {metric}")
     if d.name == "fabric":
@@ -417,17 +421,21 @@ def knowledge_checks(query: Callable[[str], list[tuple]], d: Dialect, onto: Onto
     else:
         synonyms = [(a, onto.resolve_field(n)) for a, n in query(f"SELECT synonym, canonical_field_name FROM {k}.field_synonym")]
     differ("field synonyms", [(a, f) for a, f in synonyms], [(a, onto.resolve_field(a)) for a, _ in synonyms])
-    differ("field synonym count", [a for a, _ in synonyms], [r[0] for r in field_synonym_rows(onto)])
+    differ("field synonym list", [a for a, _ in synonyms], [r[0] for r in field_synonym_rows(onto)])
 
     if identity:
         same = defaultdict(list)
         for iri, alias, record in query(f"SELECT iri, alias_iri, record_id FROM {k}.same_as"):
             same[iri].append((alias, record))
-        for iri in onto._iris("SELECT ?x WHERE { { ?x a oag:Well } UNION { ?x a oag:Facility } }"):
+        entities = onto._iris("SELECT ?x WHERE { { ?x a oag:Well } UNION { ?x a oag:Facility } }")
+        differ("same_as entities", list(same), entities)
+        for iri in entities:
             aliases = [str(r[0]) for r in onto._select(
                 f'SELECT DISTINCT ?r WHERE {{ ?e owl:sameAs ?r . FILTER(STRSTARTS(STR(?r), "{OSDU_RECORD}")) }}',
                 e=URIRef(iri))]
-            differ(f"same_as {iri}", same[iri], list(zip(sorted(aliases), onto.osdu_record_ids(iri))))
+            # Aliases and record ids separately: sorting a percent-encoded IRI can reorder it.
+            differ(f"same_as aliases {iri}", [a for a, _ in same[iri]], aliases)
+            differ(f"same_as records {iri}", [r for _, r in same[iri]], onto.osdu_record_ids(iri))
     return problems
 
 

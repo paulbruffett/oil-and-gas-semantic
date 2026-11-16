@@ -66,7 +66,7 @@ def test_generated_sql_gives_the_ontologys_answers(sql, onto):
     assert knowledge_checks(lambda q: sql.execute(q).fetchall(), DIALECTS["duckdb"], onto) == []
 
 
-def test_exported_osdu_records_load_as_the_identity_tables(platform_dataset, onto, tmp_path):
+def test_exported_osdu_records_load_as_the_identity_tables(platform_dataset, tmp_path):
     """The Parquet staged on the platforms holds exactly the OSDU record views the identity view reads."""
     con = duckdb.connect()
     create_views(con, platform_dataset)
