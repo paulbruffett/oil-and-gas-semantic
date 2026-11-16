@@ -230,7 +230,7 @@ connection reads `~/.ssh` + `config.toml` — nothing secret is committed).
 | Role | Purpose | Grants |
 |---|---|---|
 | `OAG_OWNER` | administers the port (UC catalog-owner analogue) | rolls up to `SYSADMIN`; parent of the two consumer roles |
-| `OAG_ANALYST` | read-only BI consumer | `USAGE` on DB + all three schemas; `SELECT` on canonical tables, semantic views, knowledge tables; `USAGE` (EXECUTE) on knowledge functions; `USAGE` on `COMPUTE_WH` — current **and** future objects |
+| `OAG_ANALYST` | read-only BI consumer | `USAGE` on DB + all three schemas; `SELECT` on canonical tables, semantic views, knowledge tables and views; `USAGE` (EXECUTE) on knowledge functions; `USAGE` on `COMPUTE_WH` — current **and** future objects |
 | `OAG_AGENT` | agent service role | `USAGE`/EXECUTE on the `KNOWLEDGE.*` tool functions + `SNOWFLAKE.CORTEX_USER` + `COMPUTE_WH` only — **no** direct table/view access |
 
 Feature mapping (comparison deliverable #2):
@@ -309,7 +309,7 @@ snow sql -c $CONN -f sql/12_ontology_identity.sql    # SAME_AS view
 (cd ../.. && uv run python platforms/snowflake/verify_ontology_knowledge.py)   # MATCH
 ```
 
-Re-running `sql/04_knowledge_layer.sql` recreates `VOCABULARY_TERM` and `FIELD_SYNONYM`, which drops
-`OAG_ANALYST`'s SELECT on them (there is no future-tables grant in `KNOWLEDGE`). Re-run the `SYSADMIN`
-grants in `sql/06_governance.sql` (sections 3-5) afterwards. The agent is unaffected: it calls the
-owner-rights functions, whose grants survive.
+`OAG_ANALYST` reads the generated tables and views in `KNOWLEDGE` through the future grants in
+`sql/06_governance.sql`, so recreating them (re-running `04`, `11` or `12`) keeps the analyst's access.
+Run the `SYSADMIN` grants there (sections 3-5) once after the first deploy. The agent is unaffected: it
+calls the owner-rights functions, whose grants survive.
