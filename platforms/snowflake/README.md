@@ -230,7 +230,7 @@ connection reads `~/.ssh` + `config.toml` — nothing secret is committed).
 | Role | Purpose | Grants |
 |---|---|---|
 | `OAG_OWNER` | administers the port (UC catalog-owner analogue) | rolls up to `SYSADMIN`; parent of the two consumer roles |
-| `OAG_ANALYST` | read-only BI consumer | `USAGE` on DB + all three schemas; `SELECT` on canonical tables, semantic views, knowledge tables; `USAGE` (EXECUTE) on knowledge functions; `USAGE` on `COMPUTE_WH` — current **and** future objects |
+| `OAG_ANALYST` | read-only BI consumer | `USAGE` on DB + all three schemas; `SELECT` on canonical tables, semantic views, knowledge tables and views; `USAGE` (EXECUTE) on knowledge functions; `USAGE` on `COMPUTE_WH` — current **and** future objects |
 | `OAG_AGENT` | agent service role | `USAGE`/EXECUTE on the `KNOWLEDGE.*` tool functions + `SNOWFLAKE.CORTEX_USER` + `COMPUTE_WH` only — **no** direct table/view access |
 
 Feature mapping (comparison deliverable #2):

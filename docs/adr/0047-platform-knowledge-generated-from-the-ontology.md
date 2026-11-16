@@ -63,8 +63,9 @@ these ✗ or ? for every platform.
     synonyms and the identity crosswalk, down to the percent-encoded record IRIs.
   - Snowflake's agent still scores 6/6, and Fabric's own ontology checks (`verify_knowledge.py`) still
     match. Fabric's agent wasn't rerun: its model endpoint wasn't configured on the deploying machine.
-  - Rerunning Snowflake's `04` recreates two tables, which drops `OAG_ANALYST`'s SELECT on them. The
-    `SYSADMIN` grants in `06_governance.sql` have to be rerun; the agent's function grants survive.
+  - Rerunning Snowflake's `04` recreates two tables, which dropped `OAG_ANALYST`'s SELECT on them.
+    `06_governance.sql` now grants the analyst future tables and views in `KNOWLEDGE` (and the
+    generated views), so a redeploy keeps that access; the agent's function grants always survived.
   - Databricks isn't deployed: no CLI login on the deploying machine. Its dialect (`CAST ... AS
     STRING`, `INSERT OVERWRITE`) is unverified.
 - The identity views need the OSDU records staged first. `--export-osdu` writes them as Parquet, and
