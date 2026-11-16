@@ -309,7 +309,7 @@ snow sql -c $CONN -f sql/12_ontology_identity.sql    # SAME_AS view
 (cd ../.. && uv run python platforms/snowflake/verify_ontology_knowledge.py)   # MATCH
 ```
 
-Re-running `sql/04_knowledge_layer.sql` recreates `VOCABULARY_TERM` and `FIELD_SYNONYM`, which drops
-`OAG_ANALYST`'s SELECT on them (there is no future-tables grant in `KNOWLEDGE`). Re-run the `SYSADMIN`
-grants in `sql/06_governance.sql` (sections 3-5) afterwards. The agent is unaffected: it calls the
-owner-rights functions, whose grants survive.
+`OAG_ANALYST` reads the generated tables and views in `KNOWLEDGE` through the future grants in
+`sql/06_governance.sql`, so recreating them (re-running `04`, `11` or `12`) keeps the analyst's access.
+Run the `SYSADMIN` grants there (sections 3-5) once after the first deploy. The agent is unaffected: it
+calls the owner-rights functions, whose grants survive.
