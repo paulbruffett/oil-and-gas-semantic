@@ -90,13 +90,18 @@ done
 
 `sql/06_ontology_knowledge.sql` and `sql/07_ontology_identity.sql` are generated from the ontology (ADR 0047), as is the vocabulary block in
 `sql/04_knowledge_layer.sql`. Don't edit them: change `knowledge/vocabulary.yaml` or the ontology and run
-`uv run python -m oag_semantic.platform_knowledge <default-config dataset>` (`--check` reports drift;
+`uv run python -m oag_semantic.platform_knowledge data/frozen` (`--check` reports drift;
 `tests/test_platform_knowledge.py` fails on it). The generated logic is tested in DuckDB; it has not
 been run on Databricks yet. To deploy it, after the knowledge layer:
 
 ```bash
 ./run-sql.sh sql/06_ontology_knowledge.sql   # product tables; entity, asset, part_of_edge, part_of views
-./run-sql.sh sql/07_ontology_identity.sql  # same_as view: first stage the OSDU well/facility records as canonical.osdu_well / osdu_facility
+(cd ../.. && uv run python -m oag_semantic.platform_knowledge --export-osdu data/frozen data/frozen/osdu_flat)
+for f in ../../data/frozen/osdu_flat/*.parquet; do
+  databricks fs cp "$f" "dbfs:/Volumes/oag_fable/canonical/_staging/$(basename "$f")" --overwrite
+done
+./run-sql.sh sql/02b_load_osdu_records.sql
+./run-sql.sh sql/07_ontology_identity.sql  # same_as view over the staged OSDU records
 ```
 
 `run-sql.sh` needs a SQL warehouse id: `export DATABRICKS_WAREHOUSE_ID=<id>` (from

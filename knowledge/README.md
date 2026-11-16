@@ -54,7 +54,7 @@ oag_semantic.ontology_agent <dataset_dir>` runs the live check against gold and 
 `oag_semantic.platform_knowledge` writes each platform's knowledge SQL from the ontology: the
 vocabulary block in its knowledge file, plus products, inheritance (`asset`), the part-of closure and
 the OSDU identity crosswalk as tables and views. Regenerate with
-`uv run python -m oag_semantic.platform_knowledge <default-config dataset>`; `tests/test_platform_knowledge.py`
+`uv run python -m oag_semantic.platform_knowledge data/frozen`; `tests/test_platform_knowledge.py`
 fails on drift and runs the same SQL in DuckDB against the ontology's answers.
 
 ### GraphDB runtime (ADR 0046)
