@@ -160,7 +160,8 @@ snow sql -c $CONN -f sql/09_cortex_analyst.sql
 snow sql -c $CONN -f sql/10_service_users.sql
 
 # Then sql/02b_load_osdu_records.sql, sql/11_ontology_knowledge.sql and sql/12_ontology_identity.sql,
-# generated from the ontology (ADR 0047): see "Ontology knowledge" below.
+# generated from the ontology (ADR 0047), and sql/13_knowledge_tools.sql with sql/07 rerun after it
+# (ADR 0049): see "Ontology knowledge" below.
 
 # 11. (optional) run the Cortex-routed agent end-to-end and grade all six themes vs gold
 (cd agent && pip install -r requirements.txt && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py)
@@ -307,6 +308,11 @@ snow sql -c $CONN -f sql/02b_load_osdu_records.sql   # ends with row counts: 18,
 snow sql -c $CONN -f sql/11_ontology_knowledge.sql   # product tables; ENTITY, ASSET, PART_OF_EDGE, PART_OF views
 snow sql -c $CONN -f sql/12_ontology_identity.sql    # SAME_AS view
 (cd ../.. && uv run python platforms/snowflake/verify_ontology_knowledge.py)   # MATCH
+# Agent tools over those views (hand-written, ADR 0049), then recreate the Cortex Agent with them
+snow sql -c $CONN -f sql/13_knowledge_tools.sql      # ends with row counts: 24, 3, 24
+snow sql -c $CONN -f sql/07_agent.sql
+(cd agent && OAG_GOLD_DIR="$FROZEN/gold" python test_local.py knowledge)       # 3/3
+(cd agent && OAG_GOLD_DIR="$FROZEN/gold" python test_agent_rest.py knowledge)  # 3/3 over :run
 ```
 
 `OAG_ANALYST` reads the generated tables and views in `KNOWLEDGE` through the future grants in

@@ -1,6 +1,7 @@
 -- Cortex Agent object: the delegated NL entry point for external orchestrators (DESIGN §4 layer 5).
--- Tools: all six use-case themes (governed answers over the sql/04+05 UDTFs) + the four
--- knowledge-graph traversal tools (sql/08) for entity resolution and relationship navigation.
+-- Tools: all six use-case themes (governed answers over the sql/04+05 UDTFs), the four
+-- knowledge-graph traversal tools (sql/08) for entity resolution and relationship navigation, and the
+-- three asset-knowledge tools over the views generated from the ontology (sql/13, ADR 0049).
 --
 -- Same deterministic-answer / LLM-reasoning split as platforms/snowflake/agent/agent.py, moved server-side:
 -- the agent plans and narrates, but its tools are the governed owner's-rights KNOWLEDGE functions —
@@ -20,6 +21,8 @@
 --   POST https://<account>.snowflakecomputing.com/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run
 --
 -- Run as SYSADMIN (owner of OAG_FABLE, sql/01), after sql/08 (the KG_*_ROWS tool wrappers live there).
+-- The asset-knowledge tools' *_ROWS wrappers live in sql/13 (after the generated sql/11-12): rerun this
+-- file after sql/13 so the agent is created with every tool resource in place.
 
 -- The generic-tool runner invokes a function scalar-style, so a UDTF cannot be attached directly
 -- ("Unknown user-defined function"). This scalar wrapper returns the governed theme-1 rows as an
@@ -143,7 +146,7 @@ CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.ROLLUP_BY_FACILITY_ROWS()
   $$;
 
 CREATE OR REPLACE AGENT OAG_FABLE.KNOWLEDGE.PRODUCTION_AGENT
-  COMMENT = 'Delegated production-analytics agent over the governed KNOWLEDGE tools: all six use-case themes + knowledge-graph navigation.'
+  COMMENT = 'Delegated production-analytics agent over the governed KNOWLEDGE tools: all six use-case themes, knowledge-graph navigation and the asset-knowledge tools.'
 FROM SPECIFICATION $$
 instructions:
   orchestration: |
@@ -163,6 +166,12 @@ instructions:
     - rollup_by_field: oil/gas/water by field this month vs last with biggest movers (theme 6);
       also call rollup_by_operator (and rollup_by_facility if asked) when the user wants the
       operator or facility groupings.
+
+    Asset knowledge — answered from the views generated from the ontology:
+    - asset_hierarchy: every well and facility with the field it belongs to ("assets by field").
+    - product_volume_by_field: this month's volume of a product by field. Pass the product as the
+      user wrote it in arg_product (e.g. "gross liquids", which is oil + water); the tool resolves it.
+    - osdu_crosswalk: which canonical well or facility each OSDU record identifies.
 
     Knowledge graph: entities are wells, facilities, fields, operators, and reporting entities,
     with node ids like 'well:12', 'field:1', 'operator:Equinor'. When the user names an entity,
@@ -280,6 +289,40 @@ tools:
       name: rollup_by_facility
       description: >
         Oil/gas/water by facility, this month vs last, with delta and contribution % (theme 6). No arguments.
+      input_schema:
+        type: object
+        properties: {}
+
+  - tool_spec:
+      type: generic
+      name: asset_hierarchy
+      description: >
+        Every well and facility, with the field each belongs to (class inheritance and the transitive
+        part-of hierarchy, from the ontology). Answers "list the assets in each field". No arguments.
+      input_schema:
+        type: object
+        properties: {}
+
+  - tool_spec:
+      type: generic
+      name: product_volume_by_field
+      description: >
+        This month's volume of a product by field. The product phrase resolves through the ontology's
+        product hierarchy (e.g. gross liquids = oil + water) and the governed volumes are summed.
+      input_schema:
+        type: object
+        properties:
+          arg_product:
+            type: string
+            description: "The product as the user wrote it, e.g. 'gross liquids', 'oil', 'gas'."
+        required: ["arg_product"]
+
+  - tool_spec:
+      type: generic
+      name: osdu_crosswalk
+      description: >
+        Every OSDU well and facility record with the canonical well or facility it identifies
+        (identity by the ontology's keys). No arguments.
       input_schema:
         type: object
         properties: {}
@@ -410,6 +453,27 @@ tool_resources:
   rollup_by_facility:
     type: function
     identifier: OAG_FABLE.KNOWLEDGE.ROLLUP_BY_FACILITY_ROWS
+    execution_environment:
+      type: warehouse
+      warehouse: COMPUTE_WH
+      query_timeout: 60
+  asset_hierarchy:
+    type: function
+    identifier: OAG_FABLE.KNOWLEDGE.ASSET_HIERARCHY_ROWS
+    execution_environment:
+      type: warehouse
+      warehouse: COMPUTE_WH
+      query_timeout: 60
+  product_volume_by_field:
+    type: function
+    identifier: OAG_FABLE.KNOWLEDGE.PRODUCT_VOLUME_BY_FIELD_ROWS
+    execution_environment:
+      type: warehouse
+      warehouse: COMPUTE_WH
+      query_timeout: 60
+  osdu_crosswalk:
+    type: function
+    identifier: OAG_FABLE.KNOWLEDGE.OSDU_CROSSWALK_ROWS
     execution_environment:
       type: warehouse
       warehouse: COMPUTE_WH

@@ -406,6 +406,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0046 — GraphDB runtime: the same files on a second engine, with Ontop serving daily volumes live from DuckDB (extends 0041–0045)](docs/adr/0046-graphdb-runtime-ontop-over-duckdb.md)
 - [0047 — Platform knowledge generated from the ontology: vocabulary, products, inheritance, part-of and identity as SQL (extends 0041–0046)](docs/adr/0047-platform-knowledge-generated-from-the-ontology.md)
 - [0048 — Asset-knowledge questions in the catalog: theme 8, graded apart from the six use cases (extends 0040, 0045, 0047)](docs/adr/0048-asset-knowledge-questions-in-the-catalog.md)
+- [0049 — Snowflake agent tools over the generated ontology knowledge (extends 0047, 0048)](docs/adr/0049-snowflake-agent-tools-over-generated-knowledge.md)
 
 ---
 
