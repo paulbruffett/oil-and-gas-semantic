@@ -24,11 +24,11 @@ from __future__ import annotations
 
 import json
 import os
-from urllib.parse import unquote
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import unquote
 
 import pyarrow.parquet as pq
 from rdflib import URIRef
@@ -37,12 +37,13 @@ from rdflib.plugins.sparql import prepareQuery
 from rdflib.plugins.sparql.algebra import traverse
 
 from oag_generator import canonical_table_paths, osdu_manifest_paths
-from oag_semantic import compile as reference
 from oag_generator.questions import (
     KNOWLEDGE_ASSETS_QUESTION_ID,
     KNOWLEDGE_IDENTITY_QUESTION_ID,
     KNOWLEDGE_LIQUIDS_QUESTION_ID,
 )
+from oag_generator.schema import GAS_UOM, OIL_UOM
+from oag_semantic import compile as reference
 from oag_semantic.grading import SPECS
 from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 from oag_semantic.ontology import ID, OAG, PREFIXES, PRODUCT, OntologyGraph, load_ontology
@@ -118,8 +119,9 @@ KNOWLEDGE_ANSWERS: dict[str, KnowledgeAnswer] = {
         "Every OSDU well and facility record with the canonical entity it is (owl:sameAs)."),
 }
 
-# A product's governed metric -> the rollup's current-month column that sums it.
-_ROLLUP_COLUMN = {"actual_oil": "oil_curr", "actual_gas": "gas_curr", "actual_water": "water_curr"}
+# A product's governed metric -> the rollup's current-month column that sums it, and its unit.
+_ROLLUP_COLUMN = {"actual_oil": ("oil_curr", OIL_UOM), "actual_gas": ("gas_curr", GAS_UOM),
+                  "actual_water": ("water_curr", OIL_UOM)}
 
 
 def asset_id(iri: str) -> str:
@@ -133,8 +135,8 @@ the tools provided; never invent numbers or entities.
 
 Two kinds of tools:
 - Metric tools (surveillance_below_expected, deferment_by_cause, decline_wells_faster, welltest_flags,
-  watchlist_flags, rollup_by_field_and_operator, product_volume_by_field) return governed numbers. For a numeric question call
-  the one that matches. Their rows are returned to the user separately, so summarise them: counts and
+  watchlist_flags, rollup_by_field_and_operator, product_volume_by_field) return governed numbers.
+  For a numeric question call the one that matches. Their rows are returned to the user separately, so summarise them: counts and
   the single biggest item, not every row.
 - Knowledge tools answer from the ontology (OWL/SKOS master graph of fields, facilities, wells,
   operators, business terms, products and OSDU record identity; no volumes). When a question names a
@@ -299,8 +301,9 @@ class OntologyAgent:
 
     # --- knowledge answers (theme 8) -------------------------------------------------------------
 
-    def _knowledge(self, name: str, args: dict) -> dict:
-        """An asset-knowledge answer tool: the graded key_values, built in code from the graph."""
+    def _knowledge(self, name: str, args: dict) -> tuple[dict, list[str]]:
+        """An asset-knowledge answer tool: the graded key_values, built in code from the graph, and
+        the governed metrics they read (for provenance)."""
         o = self.onto
         # owl:sameAs gives each OSDU record its entity's types: keep canonical IRIs only.
         if name == "asset_hierarchy":
@@ -309,23 +312,27 @@ class OntologyAgent:
                      ?a a oag:Asset ; oag:partOf ?f . ?f a oag:Field ; oag:fieldId ?fid .
                      FILTER NOT EXISTS { ?a a oag:Field }
                      FILTER(STRSTARTS(STR(?a), STR(?canonical))) }""", canonical=ID[""])]
-            return {"assets": sorted(rows, key=lambda r: r["asset_id"])}
+            return {"assets": sorted(rows, key=lambda r: r["asset_id"])}, []
         if name == "product_volume_by_field":
             product = o.product_iri(args["product"])
             if product is None:
                 raise ValueError(f"unknown product {args['product']!r}")
-            columns = [_ROLLUP_COLUMN[m] for m in o.product_metrics(product)]
-            key = f"{asset_id(product).removeprefix('product/')}_bbl"
+            metrics = o.product_metrics(product)
+            columns = [_ROLLUP_COLUMN[m][0] for m in metrics]
+            units = {_ROLLUP_COLUMN[m][1] for m in metrics}
+            if len(units) != 1:  # e.g. a grouping of gas (Mscf) and oil (bbl) has no single volume
+                raise ValueError(f"{args['product']!r} mixes units {sorted(units)}")
+            key = f"{asset_id(product).removeprefix('product/')}_{units.pop().lower()}"
             rollup = reference.compute_rollup(self.dataset_dir, self.layer)
             return {"by_field": [{"field_id": r["field_id"], key: sum(r[c] for c in columns)}
-                                 for r in sorted(rollup.by_field, key=lambda r: r["field_id"])]}
+                                 for r in sorted(rollup.by_field, key=lambda r: r["field_id"])]}, metrics
         if name == "osdu_crosswalk":
             rows = [{"record_id": str(rid), "asset_id": asset_id(e)} for e, rid in o._select(
                 """SELECT DISTINCT ?e ?rid WHERE {
                      { ?e a oag:Well } UNION { ?e a oag:Facility }
                      ?e owl:sameAs ?r . ?r oag:osduRecordId ?rid
                      FILTER(STRSTARTS(STR(?e), STR(?canonical))) }""", canonical=ID[""])]
-            return {"records": sorted(rows, key=lambda r: r["record_id"])}
+            return {"records": sorted(rows, key=lambda r: r["record_id"])}, []
         raise KeyError(name)
 
     # --- metric tools ----------------------------------------------------------------------------
@@ -375,8 +382,8 @@ class OntologyAgent:
             run.entities = sorted(set(args["iris"]))
             return {"reported": len(run.entities)}
         if name in KNOWLEDGE_ANSWERS:
-            key_values = self._knowledge(name, args)
-            state["theme"] = (name, 0, key_values)
+            key_values, metrics = self._knowledge(name, args)
+            state["theme"], state["metrics"] = (name, 0, key_values), metrics
             return key_values
         if name in THEMES:
             field_id = 0
@@ -434,7 +441,7 @@ class OntologyAgent:
             question_id = KNOWLEDGE_ANSWERS[name].question_id
             return {"question_id": question_id, "behavior": "answered",
                     "answer": run.text or f"{question_id}: see key_values.", "key_values": key_values,
-                    "provenance": {"metrics": [], "dimensions": [], "filters": [],
+                    "provenance": {"metrics": state.get("metrics", []), "dimensions": [], "filters": [],
                                    "entities": sorted(set(state["entities"]))}}
         theme = THEMES[name]
         provenance = {"metrics": list(theme.metrics), "dimensions": [], "filters": [],

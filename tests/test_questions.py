@@ -252,3 +252,20 @@ def test_scenario_must_be_a_block_dropped_when_off(tmp_path):
     bad.write_text(yaml.safe_dump(raw))
     with pytest.raises(RuntimeError, match="breakthrough"):
         load_catalog(bad)
+
+
+def test_snowflake_harness_asks_the_catalog_knowledge_questions(catalog):
+    """platforms/snowflake/agent/test_local.py copies the theme-8 questions (it runs without the
+    foundation installed); they must stay the catalog's text, id and grading shape (ADR 0048)."""
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[1] / "platforms" / "snowflake" / "agent" / "test_local.py"
+    tree = ast.parse(source.read_text())
+    (node,) = [n.value for n in tree.body if isinstance(n, ast.Assign)
+               and any(getattr(t, "id", None) == "KNOWLEDGE" for t in n.targets)]
+    harness = {qid: (text, set_key, id_key, list(values))
+               for text, _, set_key, id_key, values, qid in ast.literal_eval(node).values()}
+    (theme,) = [t for t in catalog.themes if t.status == "knowledge"]
+    assert harness == {q.id: (" ".join(q.text.split()), q.grading.set_key, q.grading.id_key,
+                              list(q.grading.value_keys)) for q in theme.questions}

@@ -93,6 +93,16 @@ def test_each_answer_tool_answers_its_knowledge_question_to_gold(dataset_dir, on
         [g.summary() for g in knowledge]
 
 
+def test_product_volumes_carry_their_unit_and_metrics(dataset_dir, onto):
+    """Gas is in Mscf, not bbl, and the answer names the governed metrics it summed."""
+    agent, _ = _agent(dataset_dir, onto, [("product_volume_by_field", {"product": "gas"})], "Gas.")
+    run = agent.ask("How much gas did each field produce this month?")
+    assert all("gas_mscf" in r for r in run.submission["key_values"]["by_field"])
+    agent, _ = _agent(dataset_dir, onto, [("product_volume_by_field", {"product": "total liquids"})], "Liquids.")
+    run = agent.ask("How much gross liquids did each field produce this month?")
+    assert run.submission["provenance"]["metrics"] == ["actual_oil", "actual_water"]
+
+
 def test_an_unknown_product_goes_back_to_the_model(dataset_dir, onto):
     agent, model = _agent(dataset_dir, onto, [("product_volume_by_field", {"product": "unobtainium"})], "Unknown.")
     run = agent.ask("How much unobtainium did each field produce?")
