@@ -6,6 +6,7 @@ emitted answer-submission against the shell grading contract (set_key + id_key +
 1e-6). Auth reuses the `snow` CLI connection (default `proton`, key-pair) via agent.py.
 
     python test_local.py [theme ...]
+    python test_local.py knowledge                           # the asset-knowledge questions (ADR 0048)
     OAG_GOLD_DIR=/path/to/gold python test_local.py            # gold dir (default ../../../data/frozen/gold)
 
 The frozen gold is regenerated, not vendored (docs/porting.md): if data/frozen/gold is absent, run
@@ -46,6 +47,19 @@ THEMES = {
                 ["oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"]),
 }
 
+# Asset-knowledge questions (catalog theme 8, ADR 0048): not use cases, asked as-is. The agent has no
+# tool for them, so it is also graded on answering the question asked (its question_id).
+# theme -> (question, gold file, set_key, id_key, value_keys, question_id)
+KNOWLEDGE = {
+    "assets": ("List every asset in each field, wells and facilities alike, with the field it belongs to.",
+               "knowledge_assets", "assets", "asset_id", ["field_id"], "knowledge-assets-by-field"),
+    "liquids": ("How much gross liquids did each field produce this month?",
+                "knowledge_liquids", "by_field", "field_id", ["gross_liquids_bbl"],
+                "knowledge-gross-liquids-by-field"),
+    "identity": ("Which canonical well or facility does each OSDU well and facility record identify?",
+                 "knowledge_identity", "records", "record_id", ["asset_id"], "knowledge-osdu-record-identity"),
+}
+
 
 def close(a, b):
     try:
@@ -63,14 +77,21 @@ def grade(sub_kv, gold, set_key, id_key, value_keys):
 
 
 def main() -> int:
-    which = [a for a in sys.argv[1:] if a in THEMES] or list(THEMES)
+    args = sys.argv[1:]
+    which = [a for a in args if a in THEMES or a in KNOWLEDGE]
+    which += list(KNOWLEDGE) if "knowledge" in args else []
+    which = which or list(THEMES)
     agent = ProductionAgent()
     all_ok = True
     for theme in which:
-        q, goldfile, set_key, id_key, value_keys = THEMES[theme]
+        if theme in KNOWLEDGE:
+            q, goldfile, set_key, id_key, value_keys, qid = KNOWLEDGE[theme]
+        else:
+            (q, goldfile, set_key, id_key, value_keys), qid = THEMES[theme], None
         sub = agent.answer(q)
         gold = json.loads((GOLD_DIR / f"{goldfile}.json").read_text())
         ok, missing, extra, mism = grade(sub["key_values"], gold, set_key, id_key, value_keys)
+        ok &= qid is None or sub["question_id"] == qid
         all_ok &= ok
         n = len(sub["key_values"].get(set_key, []))
         print(f"{'PASS' if ok else 'FAIL'}  {theme:12s} qid={sub['question_id']:40s} {set_key}={n}/{len(gold[set_key])}"

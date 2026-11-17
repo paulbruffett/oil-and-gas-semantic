@@ -58,7 +58,7 @@ def test_every_gradable_question_has_a_committed_example(example_datasets):
             f"`python -m oag_semantic.examples`"
         )
         checked += 1
-    assert checked == 7  # the six use cases + the data-quality scenario question
+    assert checked == 10  # the six use cases, the data-quality scenario and the three knowledge questions
 
 
 def test_no_orphan_examples():
@@ -75,7 +75,7 @@ def test_write_examples_is_deterministic(example_datasets, tmp_path):
         for config, dataset in example_datasets.items()
         for path in write_examples(dataset, tmp_path, example_config=config)
     ]
-    assert len(written) == 7
+    assert len(written) == 10
     for path in written:
         committed = EXAMPLES_DIR / path.name
         assert committed.read_text() == path.read_text(), f"{path.name} differs from committed copy"

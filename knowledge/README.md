@@ -47,7 +47,8 @@ surveillance gold.
 `oag_semantic.ontology_agent.OntologyAgent(dataset_dir).ask(question)` answers with Claude over knowledge
 tools (SPARQL over the master graph, including a read-only `sparql_query`) and the governed metric tools
 (ADR 0045). `tests/test_ontology_agent.py` drives it with a scripted model; `python -m
-oag_semantic.ontology_agent <dataset_dir>` runs the live check against gold and the reasoning checks.
+oag_semantic.ontology_agent <dataset_dir>` runs the live check against gold (the six use cases and the
+three asset-knowledge questions, ADR 0048) and the reasoning checks.
 
 ### Platform knowledge (ADR 0047)
 

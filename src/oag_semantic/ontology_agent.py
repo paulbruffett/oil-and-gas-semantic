@@ -15,14 +15,16 @@ differs is the knowledge layer:
 ``OntologyAgent(dataset_dir).ask(question)`` returns an :class:`AgentRun`. The model client is
 injectable, so the engineering tests drive the loop with a scripted stand-in and need no API key.
 ``python -m oag_semantic.ontology_agent <dataset_dir>`` runs the live check: the six catalog
-questions graded against gold, a field-scoped and an unknown-field question, and the reasoning checks
-graded against the canonical tables.
+questions and the three asset-knowledge questions (theme 8, ADR 0048) graded against gold, a
+field-scoped and an unknown-field question, and the reasoning checks graded against the canonical
+tables.
 """
 
 from __future__ import annotations
 
 import json
 import os
+from urllib.parse import unquote
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +38,11 @@ from rdflib.plugins.sparql.algebra import traverse
 
 from oag_generator import canonical_table_paths, osdu_manifest_paths
 from oag_semantic import compile as reference
+from oag_generator.questions import (
+    KNOWLEDGE_ASSETS_QUESTION_ID,
+    KNOWLEDGE_IDENTITY_QUESTION_ID,
+    KNOWLEDGE_LIQUIDS_QUESTION_ID,
+)
 from oag_semantic.grading import SPECS
 from oag_semantic.manifest import SemanticLayer, load_semantic_layer
 from oag_semantic.ontology import ID, OAG, PREFIXES, PRODUCT, OntologyGraph, load_ontology
@@ -86,13 +93,47 @@ THEMES: dict[str, Theme] = {
         "Oil, gas and water by field and by operator this month vs last, with deltas and contribution."),
 }
 
+@dataclass(frozen=True)
+class KnowledgeAnswer:
+    """An asset-knowledge question (theme 8, ADR 0048): its answer tool, built in code from the graph."""
+
+    question_id: str
+    description: str
+    properties: dict | None = None
+    required: tuple = ()
+
+
+KNOWLEDGE_ANSWERS: dict[str, KnowledgeAnswer] = {
+    "asset_hierarchy": KnowledgeAnswer(
+        KNOWLEDGE_ASSETS_QUESTION_ID,
+        "Every well and facility, of any field, with the field it belongs to (class inheritance and the "
+        "part-of hierarchy). The answer to listing assets by field."),
+    "product_volume_by_field": KnowledgeAnswer(
+        KNOWLEDGE_LIQUIDS_QUESTION_ID,
+        "Volume of a product (e.g. 'oil', 'gross liquids') by field this month: the product resolves "
+        "through the ontology to the products under it, and their governed volumes are summed.",
+        {"product": {"type": "string"}}, ("product",)),
+    "osdu_crosswalk": KnowledgeAnswer(
+        KNOWLEDGE_IDENTITY_QUESTION_ID,
+        "Every OSDU well and facility record with the canonical entity it is (owl:sameAs)."),
+}
+
+# A product's governed metric -> the rollup's current-month column that sums it.
+_ROLLUP_COLUMN = {"actual_oil": "oil_curr", "actual_gas": "gas_curr", "actual_water": "water_curr"}
+
+
+def asset_id(iri: str) -> str:
+    """The neutral asset id of a canonical IRI (its path, e.g. well/7 or facility/1/Battery)."""
+    return unquote(str(iri).removeprefix(str(ID)))
+
+
 SYSTEM_PROMPT = """\
 You are the production-analytics agent for an oil and gas operator. You answer business questions with
 the tools provided; never invent numbers or entities.
 
 Two kinds of tools:
 - Metric tools (surveillance_below_expected, deferment_by_cause, decline_wells_faster, welltest_flags,
-  watchlist_flags, rollup_by_field_and_operator) return governed numbers. For a numeric question call
+  watchlist_flags, rollup_by_field_and_operator, product_volume_by_field) return governed numbers. For a numeric question call
   the one that matches. Their rows are returned to the user separately, so summarise them: counts and
   the single biggest item, not every row.
 - Knowledge tools answer from the ontology (OWL/SKOS master graph of fields, facilities, wells,
@@ -102,8 +143,11 @@ Two kinds of tools:
   "Field X" in a decline question is not a name: it means the field with the largest cumulative oil,
   which decline_wells_faster selects itself.
 
-For a question whose answer is a set of entities (wells, facilities, fields, operators, products),
-find them with the knowledge tools, then call report_entities with exactly the IRIs that answer it.
+Answer tools (asset_hierarchy, product_volume_by_field, osdu_crosswalk) answer a whole question about
+assets by field, a product's volume by field, or which entity each OSDU record is: call the one that
+matches, like a metric tool. For any other question whose answer is a set of entities (wells,
+facilities, fields, operators, products), find them with the knowledge tools, then call
+report_entities with exactly the IRIs that answer it.
 sparql_query runs a read-only SELECT or ASK over the master graph when no named tool fits.
 
 Ontology (prefixes oag: <https://example.org/oag/ontology#>, skos:, owl:, rdf:):
@@ -148,6 +192,7 @@ TOOLS = [
           "are predeclared.", {"query": {"type": "string"}}, ("query",)),
     _tool("report_entities", "Report the entities that answer an entity question, as canonical IRIs.",
           {"iris": {"type": "array", "items": {"type": "string"}}}, ("iris",)),
+    *(_tool(name, a.description, a.properties, a.required) for name, a in KNOWLEDGE_ANSWERS.items()),
     *(_tool(name, theme.description,
             {"field": {"type": "string", "description": "Field name or synonym"}}
             if name == "surveillance_below_expected" else None)
@@ -252,6 +297,37 @@ class OntologyAgent:
         return {"columns": names, "rows": rows[:SPARQL_ROW_LIMIT],
                 "truncated": len(rows) > SPARQL_ROW_LIMIT}
 
+    # --- knowledge answers (theme 8) -------------------------------------------------------------
+
+    def _knowledge(self, name: str, args: dict) -> dict:
+        """An asset-knowledge answer tool: the graded key_values, built in code from the graph."""
+        o = self.onto
+        # owl:sameAs gives each OSDU record its entity's types: keep canonical IRIs only.
+        if name == "asset_hierarchy":
+            rows = [{"asset_id": asset_id(a), "field_id": int(f)} for a, f in o._select(
+                """SELECT DISTINCT ?a ?fid WHERE {
+                     ?a a oag:Asset ; oag:partOf ?f . ?f a oag:Field ; oag:fieldId ?fid .
+                     FILTER NOT EXISTS { ?a a oag:Field }
+                     FILTER(STRSTARTS(STR(?a), STR(?canonical))) }""", canonical=ID[""])]
+            return {"assets": sorted(rows, key=lambda r: r["asset_id"])}
+        if name == "product_volume_by_field":
+            product = o.product_iri(args["product"])
+            if product is None:
+                raise ValueError(f"unknown product {args['product']!r}")
+            columns = [_ROLLUP_COLUMN[m] for m in o.product_metrics(product)]
+            key = f"{asset_id(product).removeprefix('product/')}_bbl"
+            rollup = reference.compute_rollup(self.dataset_dir, self.layer)
+            return {"by_field": [{"field_id": r["field_id"], key: sum(r[c] for c in columns)}
+                                 for r in sorted(rollup.by_field, key=lambda r: r["field_id"])]}
+        if name == "osdu_crosswalk":
+            rows = [{"record_id": str(rid), "asset_id": asset_id(e)} for e, rid in o._select(
+                """SELECT DISTINCT ?e ?rid WHERE {
+                     { ?e a oag:Well } UNION { ?e a oag:Facility }
+                     ?e owl:sameAs ?r . ?r oag:osduRecordId ?rid
+                     FILTER(STRSTARTS(STR(?e), STR(?canonical))) }""", canonical=ID[""])]
+            return {"records": sorted(rows, key=lambda r: r["record_id"])}
+        raise KeyError(name)
+
     # --- metric tools ----------------------------------------------------------------------------
 
     def _metric(self, name: str, field_id: int | None) -> tuple[dict, dict]:
@@ -298,6 +374,10 @@ class OntologyAgent:
         if name == "report_entities":
             run.entities = sorted(set(args["iris"]))
             return {"reported": len(run.entities)}
+        if name in KNOWLEDGE_ANSWERS:
+            key_values = self._knowledge(name, args)
+            state["theme"] = (name, 0, key_values)
+            return key_values
         if name in THEMES:
             field_id = 0
             if args.get("field"):  # resolved here, in code, so an unknown name can never mean the fleet
@@ -350,6 +430,12 @@ class OntologyAgent:
         if state["theme"] is None or run.stopped is not None:
             return None
         name, field_id, key_values = state["theme"]
+        if name in KNOWLEDGE_ANSWERS:
+            question_id = KNOWLEDGE_ANSWERS[name].question_id
+            return {"question_id": question_id, "behavior": "answered",
+                    "answer": run.text or f"{question_id}: see key_values.", "key_values": key_values,
+                    "provenance": {"metrics": [], "dimensions": [], "filters": [],
+                                   "entities": sorted(set(state["entities"]))}}
         theme = THEMES[name]
         provenance = {"metrics": list(theme.metrics), "dimensions": [], "filters": [],
                       "entities": sorted(set(state["entities"]))}
@@ -415,16 +501,18 @@ def main(argv: list[str]) -> int:  # pragma: no cover -- needs a live model
     dataset_dir = Path(argv[0])
     agent = OntologyAgent(dataset_dir)
     submissions = {}
+    knowledge = {a.question_id for a in KNOWLEDGE_ANSWERS.values()}
     for q in load_catalog().questions():
-        if q.id in {t.question_id for t in THEMES.values()}:
+        if q.id in {t.question_id for t in THEMES.values()} | knowledge:
             run = agent.ask(q.text)
             if run.submission:
                 submissions[run.submission["question_id"]] = run.submission
             print(f"asked {q.id}: tools {[n for n, _ in run.tool_calls]}")
     six = {t.question_id for t in THEMES.values()}
-    report = score_submissions(submissions, dataset_dir)
+    report = score_submissions(submissions, dataset_dir, knowledge=True)
     grades = [g for g in report.grades if g.question_id in six]  # not the scenario question
-    for g in grades:
+    known = [g for g in report.grades if g.question_id in knowledge]
+    for g in grades + known:
         print(f"{'PASS' if g.correct else 'FAIL'}  {g.question_id}  {g.note or ''}")
 
     # A field-scoped question: the field resolves through the ontology, and the flagged wells must be
@@ -451,6 +539,7 @@ def main(argv: list[str]) -> int:  # pragma: no cover -- needs a live model
         passed += ok
         print(f"{'PASS' if ok else 'FAIL'}  {question}  ({len(run.entities or [])}/{len(expected)})")
     print(f"gold check {sum(g.correct for g in grades)}/{len(THEMES)}; "
+          f"asset knowledge {sum(g.correct for g in known)}/{len(knowledge)}; "
           f"reasoning checks {passed}/{len(checks)}")
     return 0
 

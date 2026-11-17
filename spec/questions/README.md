@@ -17,6 +17,10 @@ platform reference build (`platforms/<stack>/`) consumes them directly.
   means the generator co-emits that theme's gold (all six themes today). `status: scenario` (theme 7,
   data quality, ADR 0040) means gold exists only on a dataset generated with that scenario knob on;
   its question names the knob under `scenario:` and its example's dataset under `example_config:`.
+  `status: knowledge` (theme 8, asset knowledge, ADR 0048) means gold is always generated but the
+  gold check grades it only on request (`score_submissions(..., knowledge=True)`); its answers key
+  wells and facilities by asset id (`well/<WELL_ID>`, `facility/<FACILITY_ID>/<FACILITY_TYPE>`), and
+  a text value such as an asset id must match exactly.
 - **`answer_submission.schema.json`** — JSON Schema (Draft 2020-12) for a single answer submission:
   natural-language `answer` + `key_values` (checked against gold) + optional `provenance` + optional
   `behavior`. Enforced when a submission set is scored: a submission the schema rejects grades
@@ -33,7 +37,8 @@ platform reference build (`platforms/<stack>/`) consumes them directly.
 Every question with gold is checked: an unanswered one grades *incorrect* (`not submitted`), as does
 one the schema rejects (`schema-invalid`). A question is *skipped* only when it has no `grading` block
 or no gold artifact. A scenario question on a dataset with its scenario off is *not applicable*: it is
-neither graded nor skipped, so the reference dataset still passes 6/6 (ADR 0040).
+neither graded nor skipped, so the reference dataset still passes 6/6 (ADR 0040). The knowledge
+questions are graded only when asked for, so they don't change that 6/6 either (ADR 0048).
 
 ## No drift between questions and gold
 

@@ -154,6 +154,11 @@ collateral" or "shell". **Platform build**: one platform's implementation of the
 **Data-quality scenario well**: well 1 (`NO 15/9-F-1`), whose only well test predates the data, so its
 allocation rests on an untrustworthy test; it is also pinned to underperform and be misallocated
 (ADR 0024/0036). _Avoid_: "trap well".
+**Asset id**: the neutral key of a well or facility in an answer, the path of its canonical IRI:
+`well/<WELL_ID>`, `facility/<FACILITY_ID>/<FACILITY_TYPE>` (ADR 0048). **Knowledge theme**: catalog
+theme 8, *Asset knowledge*: questions about the knowledge layer's structure, graded apart from the six
+use cases (ADR 0048). _Avoid_: "reasoning checks" for these (that names the ontology agent's own
+checks, ADR 0045).
 **Data-quality knob**: the opt-in `data_quality` config block that injects counted defects
 (duplicate, late correction, flatline, unit error) into WELL_VOL_DAILY; off by default, and then
 absent from `config_hash` (ADR 0040). _Avoid_: "noise", "dirty mode".
@@ -283,6 +288,11 @@ A seventh, **scenario** theme, *Data quality* ("Which daily well-volume records 
 problems, and what does the cleaning policy do with each?"), has gold only on a dataset generated with
 the data-quality knob on; elsewhere the gold check treats it as not applicable (ADR 0040).
 
+An eighth, **knowledge** theme, *Asset knowledge*, asks three questions that depend on the knowledge
+layer's structure: assets by field (inheritance and the part-of hierarchy), gross liquids by field (a
+broader product), and which canonical entity each OSDU record is (identity). Its gold is always
+generated, and the gold check grades it only on request, so the use-case score stays the six (ADR 0048).
+
 ### 6.3 Canonical KPI definitions
 Volumes (oil/gas/water, Σ reported volume); **BOE** = oil + gas ÷ 6; rates = phase volume ÷ on-stream
 hours; **water cut** = water ÷ (oil + water); **GOR** = gas ÷ oil; **uptime %** = on-stream ÷ calendar
@@ -395,6 +405,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0045 — Ontology agent: Claude over SPARQL knowledge tools, a read-only SPARQL tool and governed metric tools; graded answers built in code (extends 0005, 0041)](docs/adr/0045-ontology-agent-sparql-and-metric-tools.md)
 - [0046 — GraphDB runtime: the same files on a second engine, with Ontop serving daily volumes live from DuckDB (extends 0041–0045)](docs/adr/0046-graphdb-runtime-ontop-over-duckdb.md)
 - [0047 — Platform knowledge generated from the ontology: vocabulary, products, inheritance, part-of and identity as SQL (extends 0041–0046)](docs/adr/0047-platform-knowledge-generated-from-the-ontology.md)
+- [0048 — Asset-knowledge questions in the catalog: theme 8, graded apart from the six use cases (extends 0040, 0045, 0047)](docs/adr/0048-asset-knowledge-questions-in-the-catalog.md)
 
 ---
 

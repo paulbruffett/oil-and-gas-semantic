@@ -176,3 +176,52 @@ themes:
         text: >-
           Which daily well-volume records have data-quality problems (duplicates, late
           corrections, stuck sensors, unit errors), and what does the cleaning policy do with each?
+
+  # Knowledge theme (ADR 0048): not one of the six use cases, and not a scenario. Questions whose
+  # answer depends on the knowledge layer's structure and reasoning (layers 3-4): class inheritance
+  # and the part-of hierarchy, a broader product, identity across systems. Gold is always generated.
+  # Entities are keyed by neutral asset ids, the path of the canonical IRI: "well/<WELL_ID>",
+  # "facility/<FACILITY_ID>/<FACILITY_TYPE>".
+  - id: asset-knowledge
+    number: 8
+    hero: false
+    title: Asset knowledge
+    status: knowledge          # gold always co-generated; graded apart from the six use cases
+    kpis: [part-of hierarchy, product grouping, record identity]
+    osdu_entities: [Well, Facility, Field]
+    questions:
+      - id: knowledge-assets-by-field
+        gold_id: knowledge-assets-by-field
+        gold_artifact: gold/knowledge_assets.json
+        tier: straight
+        expected_behavior: answered
+        grading:
+          set_key: assets
+          id_key: asset_id
+          value_keys: [field_id]
+        text: >-
+          List every asset in each field, wells and facilities alike, with the field it belongs to.
+
+      - id: knowledge-gross-liquids-by-field
+        gold_id: knowledge-gross-liquids-by-field
+        gold_artifact: gold/knowledge_liquids.json
+        tier: straight
+        expected_behavior: answered
+        grading:
+          set_key: by_field
+          id_key: field_id
+          value_keys: [gross_liquids_bbl]
+        text: >-
+          How much gross liquids did each field produce this month?
+
+      - id: knowledge-osdu-record-identity
+        gold_id: knowledge-osdu-record-identity
+        gold_artifact: gold/knowledge_identity.json
+        tier: straight
+        expected_behavior: answered
+        grading:
+          set_key: records
+          id_key: record_id
+          value_keys: [asset_id]
+        text: >-
+          Which canonical well or facility does each OSDU well and facility record identify?

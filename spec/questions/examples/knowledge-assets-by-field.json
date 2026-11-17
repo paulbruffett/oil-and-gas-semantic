@@ -1,0 +1,105 @@
+{
+  "question_id": "knowledge-assets-by-field",
+  "answer": "18 wells and 6 facilities across 3 fields.",
+  "key_values": {
+    "assets": [
+      {
+        "asset_id": "facility/1/Battery",
+        "field_id": 1
+      },
+      {
+        "asset_id": "facility/2/Battery",
+        "field_id": 1
+      },
+      {
+        "asset_id": "facility/3/Battery",
+        "field_id": 2
+      },
+      {
+        "asset_id": "facility/4/Battery",
+        "field_id": 2
+      },
+      {
+        "asset_id": "facility/5/Battery",
+        "field_id": 3
+      },
+      {
+        "asset_id": "facility/6/Battery",
+        "field_id": 3
+      },
+      {
+        "asset_id": "well/1",
+        "field_id": 1
+      },
+      {
+        "asset_id": "well/10",
+        "field_id": 2
+      },
+      {
+        "asset_id": "well/11",
+        "field_id": 2
+      },
+      {
+        "asset_id": "well/12",
+        "field_id": 2
+      },
+      {
+        "asset_id": "well/13",
+        "field_id": 3
+      },
+      {
+        "asset_id": "well/14",
+        "field_id": 3
+      },
+      {
+        "asset_id": "well/15",
+        "field_id": 3
+      },
+      {
+        "asset_id": "well/16",
+        "field_id": 3
+      },
+      {
+        "asset_id": "well/17",
+        "field_id": 3
+      },
+      {
+        "asset_id": "well/18",
+        "field_id": 3
+      },
+      {
+        "asset_id": "well/2",
+        "field_id": 1
+      },
+      {
+        "asset_id": "well/3",
+        "field_id": 1
+      },
+      {
+        "asset_id": "well/4",
+        "field_id": 1
+      },
+      {
+        "asset_id": "well/5",
+        "field_id": 1
+      },
+      {
+        "asset_id": "well/6",
+        "field_id": 1
+      },
+      {
+        "asset_id": "well/7",
+        "field_id": 2
+      },
+      {
+        "asset_id": "well/8",
+        "field_id": 2
+      },
+      {
+        "asset_id": "well/9",
+        "field_id": 2
+      }
+    ]
+  },
+  "behavior": "answered"
+}

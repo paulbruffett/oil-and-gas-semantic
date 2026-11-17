@@ -36,6 +36,9 @@ FROZEN_CONFIG_HASH = "12a110eecfe2"
 FROZEN_DATA_FINGERPRINTS = {
     "gold/decline": "1c767fbbee8b48e1",
     "gold/deferment": "89f7d9928c5ab44d",
+    "gold/knowledge_assets": "8a436dc07a82cce4",
+    "gold/knowledge_identity": "2f157e8d575e5ad4",
+    "gold/knowledge_liquids": "722970b52bf47719",
     "gold/rollups": "2a60b6afcc04b4b3",
     "gold/surveillance": "7e8f6620918be913",
     "gold/watchlist": "50d0f931df772788",

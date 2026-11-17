@@ -1,0 +1,105 @@
+{
+  "question_id": "knowledge-osdu-record-identity",
+  "answer": "24 OSDU records, each the same thing as one canonical well or facility.",
+  "key_values": {
+    "records": [
+      {
+        "record_id": "oag:FACILITY:1:Battery",
+        "asset_id": "facility/1/Battery"
+      },
+      {
+        "record_id": "oag:FACILITY:2:Battery",
+        "asset_id": "facility/2/Battery"
+      },
+      {
+        "record_id": "oag:FACILITY:3:Battery",
+        "asset_id": "facility/3/Battery"
+      },
+      {
+        "record_id": "oag:FACILITY:4:Battery",
+        "asset_id": "facility/4/Battery"
+      },
+      {
+        "record_id": "oag:FACILITY:5:Battery",
+        "asset_id": "facility/5/Battery"
+      },
+      {
+        "record_id": "oag:FACILITY:6:Battery",
+        "asset_id": "facility/6/Battery"
+      },
+      {
+        "record_id": "oag:WELL:1",
+        "asset_id": "well/1"
+      },
+      {
+        "record_id": "oag:WELL:10",
+        "asset_id": "well/10"
+      },
+      {
+        "record_id": "oag:WELL:11",
+        "asset_id": "well/11"
+      },
+      {
+        "record_id": "oag:WELL:12",
+        "asset_id": "well/12"
+      },
+      {
+        "record_id": "oag:WELL:13",
+        "asset_id": "well/13"
+      },
+      {
+        "record_id": "oag:WELL:14",
+        "asset_id": "well/14"
+      },
+      {
+        "record_id": "oag:WELL:15",
+        "asset_id": "well/15"
+      },
+      {
+        "record_id": "oag:WELL:16",
+        "asset_id": "well/16"
+      },
+      {
+        "record_id": "oag:WELL:17",
+        "asset_id": "well/17"
+      },
+      {
+        "record_id": "oag:WELL:18",
+        "asset_id": "well/18"
+      },
+      {
+        "record_id": "oag:WELL:2",
+        "asset_id": "well/2"
+      },
+      {
+        "record_id": "oag:WELL:3",
+        "asset_id": "well/3"
+      },
+      {
+        "record_id": "oag:WELL:4",
+        "asset_id": "well/4"
+      },
+      {
+        "record_id": "oag:WELL:5",
+        "asset_id": "well/5"
+      },
+      {
+        "record_id": "oag:WELL:6",
+        "asset_id": "well/6"
+      },
+      {
+        "record_id": "oag:WELL:7",
+        "asset_id": "well/7"
+      },
+      {
+        "record_id": "oag:WELL:8",
+        "asset_id": "well/8"
+      },
+      {
+        "record_id": "oag:WELL:9",
+        "asset_id": "well/9"
+      }
+    ]
+  },
+  "behavior": "answered"
+}

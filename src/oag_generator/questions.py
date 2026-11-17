@@ -79,6 +79,7 @@ class Theme:
     title: str
     hero: bool
     # "implemented" (gold co-generated) | "scenario" (gold only with a scenario knob on, ADR 0040)
+    # | "knowledge" (gold co-generated, graded apart from the six use cases, ADR 0048)
     # | "planned" (not built yet)
     status: str
     kpis: tuple[str, ...]
@@ -203,3 +204,8 @@ WATCHLIST_QUESTION_ID = question_id(5)
 ROLLUP_QUESTION_ID = question_id(6)
 # The data-quality findings question (scenario theme 7, ADR 0040); gold exists only with the knob on.
 DATA_QUALITY_QUESTION_ID = question_id(7)
+# The asset-knowledge questions (theme 8, ADR 0048): the part-of hierarchy, a broader product and record
+# identity. Not use cases; their gold is always co-generated.
+KNOWLEDGE_ASSETS_QUESTION_ID, KNOWLEDGE_LIQUIDS_QUESTION_ID, KNOWLEDGE_IDENTITY_QUESTION_ID = (
+    q.gold_id for q in next(t for t in _CATALOG.themes if t.number == 8).questions
+)

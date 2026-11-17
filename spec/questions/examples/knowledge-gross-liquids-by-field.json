@@ -1,0 +1,21 @@
+{
+  "question_id": "knowledge-gross-liquids-by-field",
+  "answer": "Gross liquids (oil + water) for 2024-06-01..2024-06-30: Sleipner produced the most, 3,316,367 bbl.",
+  "key_values": {
+    "by_field": [
+      {
+        "field_id": 1,
+        "gross_liquids_bbl": 2240040.9000000004
+      },
+      {
+        "field_id": 2,
+        "gross_liquids_bbl": 3316367.33
+      },
+      {
+        "field_id": 3,
+        "gross_liquids_bbl": 2881060.6699999995
+      }
+    ]
+  },
+  "behavior": "answered"
+}
