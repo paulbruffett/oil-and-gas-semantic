@@ -8,6 +8,9 @@ from oag_generator.questions import (
     DATA_QUALITY_QUESTION_ID,
     DECLINE_QUESTION_ID,
     DEFERMENT_QUESTION_ID,
+    KNOWLEDGE_ASSETS_QUESTION_ID,
+    KNOWLEDGE_IDENTITY_QUESTION_ID,
+    KNOWLEDGE_LIQUIDS_QUESTION_ID,
     ROLLUP_QUESTION_ID,
     SURVEILLANCE_QUESTION_ID,
     WATCHLIST_QUESTION_ID,
@@ -217,6 +220,9 @@ def test_specs_are_catalog_derived_and_match_the_pinned_shapes():
         DATA_QUALITY_QUESTION_ID: GradingSpec(
             "findings", "finding_id", ("n_days", "rows_removed", "oil_volume_kept")
         ),
+        KNOWLEDGE_ASSETS_QUESTION_ID: GradingSpec("assets", "asset_id", ("field_id",)),
+        KNOWLEDGE_LIQUIDS_QUESTION_ID: GradingSpec("by_field", "field_id", ("gross_liquids_bbl",)),
+        KNOWLEDGE_IDENTITY_QUESTION_ID: GradingSpec("records", "record_id", ("asset_id",)),
     }
     assert SPECS == pinned
 
@@ -243,9 +249,33 @@ def test_perfect_answers_validate_against_the_schema(dataset_dir, build_oracle_s
 
     validator = jsonschema.Draft202012Validator(load_submission_schema())
     subs = build_oracle_submissions(dataset_dir)
-    assert len(subs) == 6
+    assert len(subs) == 9  # the six use cases + the three knowledge questions
     for sub in subs.values():
         validator.validate(sub)  # raises on failure
+
+
+def test_knowledge_questions_are_graded_only_on_request(dataset_dir, build_oracle_submissions):
+    """Theme 8 (ADR 0048) doesn't change the use-case score: a build that answers the six still passes
+    6/6, and the knowledge questions are graded, all of them, when asked for."""
+    knowledge = {KNOWLEDGE_ASSETS_QUESTION_ID, KNOWLEDGE_LIQUIDS_QUESTION_ID, KNOWLEDGE_IDENTITY_QUESTION_ID}
+    subs = build_oracle_submissions(dataset_dir)
+    six = {q: s for q, s in subs.items() if q not in knowledge}
+    assert score_submissions(six, dataset_dir).passed
+    report = score_submissions(six, dataset_dir, knowledge=True)
+    assert sorted(g.question_id for g in report.grades if not g.correct) == sorted(knowledge)
+    assert score_submissions(subs, dataset_dir, knowledge=True).passed
+
+
+def test_a_text_value_must_match_exactly(dataset_dir, build_oracle_submissions):
+    """The identity answer's asset_id is text: a different asset is a mismatch, not a float error."""
+    sub = build_oracle_submissions(dataset_dir)[KNOWLEDGE_IDENTITY_QUESTION_ID]
+    first = sub["key_values"]["records"][0]
+    first["asset_id"] = "well/999"
+    grade = next(g for g in score_submissions({KNOWLEDGE_IDENTITY_QUESTION_ID: sub}, dataset_dir, knowledge=True).grades
+                 if g.question_id == KNOWLEDGE_IDENTITY_QUESTION_ID)
+    assert not grade.correct
+    assert grade.value_mismatches == [{"id": first["record_id"], "key": "asset_id", "submitted": "well/999",
+                                       "gold": grade.value_mismatches[0]["gold"]}]
 
 
 def test_report_passes_only_when_everything_was_graded_and_correct(dataset_dir, build_oracle_submissions, tmp_path):

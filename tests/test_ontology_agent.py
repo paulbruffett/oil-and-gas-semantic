@@ -18,6 +18,7 @@ import pytest
 from oag_semantic.grading import score_submissions
 from oag_semantic.ontology import ID, OAG, load_ontology
 from oag_semantic.ontology_agent import (
+    KNOWLEDGE_ANSWERS,
     THEMES,
     OntologyAgent,
     SparqlRejected,
@@ -75,6 +76,37 @@ def test_each_metric_tool_answers_its_question_to_gold(dataset_dir, onto):
     report = score_submissions(submissions, dataset_dir)
     assert [g.question_id for g in report.grades if not g.correct] == []
     assert len([g for g in report.grades if g.correct]) == len(THEMES)
+
+
+def test_each_answer_tool_answers_its_knowledge_question_to_gold(dataset_dir, onto):
+    """The asset-knowledge questions (theme 8, ADR 0048), answered from the graph: the part-of hierarchy
+    by inheritance, gross liquids through the product hierarchy, and record identity by owl:sameAs."""
+    submissions = {}
+    for name in KNOWLEDGE_ANSWERS:
+        args = {"product": "total liquids"} if name == "product_volume_by_field" else {}
+        agent, _ = _agent(dataset_dir, onto, [(name, args)], "Summary.")
+        run = agent.ask(f"question for {name}")
+        submissions[run.submission["question_id"]] = run.submission
+    report = score_submissions(submissions, dataset_dir, knowledge=True)
+    knowledge = [g for g in report.grades if g.question_id in submissions]
+    assert len(knowledge) == len(KNOWLEDGE_ANSWERS) and all(g.correct for g in knowledge), \
+        [g.summary() for g in knowledge]
+
+
+def test_product_volumes_carry_their_unit_and_metrics(dataset_dir, onto):
+    """Gas is in Mscf, not bbl, and the answer names the governed metrics it summed."""
+    agent, _ = _agent(dataset_dir, onto, [("product_volume_by_field", {"product": "gas"})], "Gas.")
+    run = agent.ask("How much gas did each field produce this month?")
+    assert all("gas_mscf" in r for r in run.submission["key_values"]["by_field"])
+    agent, _ = _agent(dataset_dir, onto, [("product_volume_by_field", {"product": "total liquids"})], "Liquids.")
+    run = agent.ask("How much gross liquids did each field produce this month?")
+    assert run.submission["provenance"]["metrics"] == ["actual_oil", "actual_water"]
+
+
+def test_an_unknown_product_goes_back_to_the_model(dataset_dir, onto):
+    agent, model = _agent(dataset_dir, onto, [("product_volume_by_field", {"product": "unobtainium"})], "Unknown.")
+    run = agent.ask("How much unobtainium did each field produce?")
+    assert model.tool_results(1)[0]["is_error"] and run.submission is None
 
 
 def test_field_scoped_surveillance_resolves_through_the_ontology(dataset_dir, onto):

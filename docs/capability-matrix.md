@@ -82,6 +82,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Clarification on unknown entities | "Nonesuch field" → ask | don't guess | ● | ● enforced in code | ● | ? | ● custom agent |
 | Answer provenance | metric, filters, entities used | explain and check | ● answer schema | ● plus entity IRIs; entity answers as IRIs | ● | ● | ● |
 | Gold result, six use cases | | | ● | ● 6/6, plus 5/5 reasoning checks | ● 6/6 | ● 6/6 | ● 6/6 custom agent |
+| Gold result, asset knowledge (theme 8) | assets by field, gross liquids, OSDU record identity | layer 3–4 questions, graded apart from the six | ? not asked: the baseline answers surveillance | ● 3/3: one answer tool each, rows built from the graph (ADR 0048) | ? not asked: not deployed | ✗ 0/3: declines assets and identity; routes gross liquids to the oil/gas/water rollup. The generated views exist, but no tool reads them | ? not asked: model endpoint not configured |
 
 ## 6. Governance (cross-cutting)
 
@@ -113,8 +114,13 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   agents (governed tools, graded answers built in code) it scores 6/6, and it also answers questions
   that need reasoning: every asset in a field, by operator, total liquids, and which well an OSDU record
   is. The model reached for free SPARQL when no named tool fit (the OSDU lookup). That's safe because
-  the graph holds no numbers (ADR 0045). These reasoning checks aren't in the catalog yet, so the
-  platforms haven't been asked them.
+  the graph holds no numbers (ADR 0045).
+- **Asked the same knowledge questions, the agents part ways** (slice 9, ADR 0048): catalog theme 8
+  asks for assets by field, gross liquids by field and which entity each OSDU record is, graded apart
+  from the six. The ontology agent scores 3/3. Snowflake's agent scores 0/3, although its generated
+  views give the right answers (ADR 0047): its router has no tool that reads them, so it declines two
+  questions and answers gross liquids with the oil/gas/water rollup. Having the knowledge isn't the
+  same as an agent being able to use it.
 - **Portability holds where it was tested:** GraphDB gives the in-process answers on every knowledge
   check, and the same validation results, SPARQL constraints included. It also gets the key rule
   right without the workaround owlrl needs. The exception is SHACL rules (a W3C Note), which GraphDB

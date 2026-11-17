@@ -64,6 +64,7 @@ config_hash 12a110eecfe2 — the gold is regenerated, not vendored, per docs/por
 pip install -r requirements.txt
 python test_local.py                       # all six themes
 python test_local.py surveillance decline  # a subset
+python test_local.py knowledge             # the asset-knowledge questions (catalog theme 8, ADR 0048)
 OAG_GOLD_DIR=/path/to/gold python test_local.py     # point at an existing gold dir
 python agent.py "Which wells are watering out?"     # one-shot; prints the answer_submission JSON
 ```

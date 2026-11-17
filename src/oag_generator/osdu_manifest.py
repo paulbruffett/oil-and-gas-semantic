@@ -31,6 +31,11 @@ def _record_kind(spec: schema.TableSpec) -> str:
     return f"{KIND_AUTHORITY}:{KIND_SOURCE}:{spec.osdu_table}:{MANIFEST_VERSION}"
 
 
+def record_id(spec: schema.TableSpec, cols: dict[str, list], i: int) -> str:
+    """The OSDU record id of row ``i``: the table's primary key, e.g. ``oag:WELL:7``."""
+    return f"{KIND_AUTHORITY}:{spec.osdu_table}:" + ":".join(str(cols[c][i]) for c in spec.primary_key)
+
+
 def build_osdu_manifest(spec: schema.TableSpec, cols: dict[str, list], config_hash: str) -> dict:
     """Build one table's OSDU JSON manifest from its canonical column dict.
 
@@ -41,11 +46,10 @@ def build_osdu_manifest(spec: schema.TableSpec, cols: dict[str, list], config_ha
     """
     names = spec.column_names
     n = len(cols[names[0]]) if names else 0
-    pk_cols = spec.primary_key
     kind = _record_kind(spec)
     records = [
         {
-            "id": f"{KIND_AUTHORITY}:{spec.osdu_table}:" + ":".join(str(cols[c][i]) for c in pk_cols),
+            "id": record_id(spec, cols, i),
             "kind": kind,
             "data": {name: cols[name][i] for name in names},
         }

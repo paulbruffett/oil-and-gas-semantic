@@ -223,9 +223,7 @@ def _compiled_submission(result, spec, question_id) -> dict:
 
 def test_reference_compile_reproduces_gold_with_the_knob_on(dq_dataset):
     """The compile reads the cleaned well_vol_daily it builds in SQL and matches every theme's gold."""
-    for q in load_catalog().questions():
-        if q.scenario is not None:
-            continue
+    for q in (q for t in load_catalog().themes if t.status == "implemented" for q in t.questions):
         stem = Path(q.gold_artifact).stem
         spec = SPECS[q.gold_id]
         result = THEMES[stem][1](dq_dataset)

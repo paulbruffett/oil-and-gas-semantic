@@ -143,13 +143,18 @@ def _values_match(sub: dict[str, Any], gold: dict[str, Any], value_keys: tuple[s
     """Return the value keys that disagree between a submitted row and a gold row.
 
     ``None`` is a first-class value (e.g. an undefined allocation variance): two ``None``s match, a
-    ``None`` against a number does not. A non-numeric submitted value is a mismatch, never a crash.
+    ``None`` against a number does not. A text gold value (an asset id, ADR 0048) must match exactly.
+    A non-numeric submitted value against a numeric gold is a mismatch, never a crash.
     """
     bad = []
     for key in value_keys:
         s, g = sub.get(key), gold.get(key)
         if g is None or s is None:
             if s is not g:  # exactly one is None
+                bad.append(key)
+            continue
+        if isinstance(g, str):
+            if s != g:
                 bad.append(key)
             continue
         try:
@@ -245,6 +250,7 @@ def score_submissions(
     submissions: dict[str, dict[str, Any]],
     dataset_dir: str | Path,
     catalog: QuestionCatalog | None = None,
+    knowledge: bool = False,
 ) -> ScoreReport:
     """Check a whole submission set against a generated dataset's gold answers.
 
@@ -252,7 +258,8 @@ def score_submissions(
     dataset's ``gold/`` artifact named in the catalog. A question with no grading spec or no gold on
     disk is skipped; a question with gold but **no submission** grades incorrect, as does a
     submission the published schema rejects. A scenario question (ADR 0040) on a dataset generated
-    with its scenario off is not applicable: neither graded nor skipped.
+    with its scenario off is not applicable: neither graded nor skipped. The knowledge questions
+    (theme 8, ADR 0048) are graded only with ``knowledge=True``, so the use-case score stays the six.
     """
     catalog = catalog or load_catalog()
     dataset_dir = Path(dataset_dir)
@@ -260,24 +267,27 @@ def score_submissions(
     skipped: list[str] = []
     scenarios_on = _scenarios_on(dataset_dir)
 
-    for q in catalog.questions():
-        if q.scenario is not None and q.scenario not in scenarios_on:
+    for theme in catalog.themes:
+        if theme.status == "knowledge" and not knowledge:
             continue
-        spec = spec_for(q)  # from the catalog being scored, not the default one
-        gold_path = dataset_dir / q.gold_artifact
-        if spec is None or not gold_path.exists():
-            skipped.append(q.id)
-            continue
-        gold = json.loads(gold_path.read_text())
-        n_gold = len(gold.get(spec.set_key, []))
-        if q.id not in submissions:
-            grades.append(_structural_failure(q.id, n_gold, "not submitted"))
-            continue
-        error = _schema_error(submissions[q.id])
-        if error is not None:
-            grades.append(_structural_failure(q.id, n_gold, f"schema-invalid: {error}"))
-            continue
-        grades.append(grade_answer(submissions[q.id], gold, spec, q.expected_behavior))
+        for q in theme.questions:
+            if q.scenario is not None and q.scenario not in scenarios_on:
+                continue
+            spec = spec_for(q)  # from the catalog being scored, not the default one
+            gold_path = dataset_dir / q.gold_artifact
+            if spec is None or not gold_path.exists():
+                skipped.append(q.id)
+                continue
+            gold = json.loads(gold_path.read_text())
+            n_gold = len(gold.get(spec.set_key, []))
+            if q.id not in submissions:
+                grades.append(_structural_failure(q.id, n_gold, "not submitted"))
+                continue
+            error = _schema_error(submissions[q.id])
+            if error is not None:
+                grades.append(_structural_failure(q.id, n_gold, f"schema-invalid: {error}"))
+                continue
+            grades.append(grade_answer(submissions[q.id], gold, spec, q.expected_behavior))
 
     return ScoreReport(grades=grades, skipped=skipped)
 

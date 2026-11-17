@@ -41,6 +41,7 @@ from oag_generator.gold import (
     compute_watchlist_gold,
     compute_welltest_gold,
 )
+from oag_generator.knowledge_gold import compute_assets_gold, compute_identity_gold, compute_liquids_gold
 from oag_generator.osdu_manifest import write_osdu_manifests
 
 GENERATOR_VERSION = "0.1.0"
@@ -511,6 +512,10 @@ def generate_dataset(config: Config | dict[str, Any] | str | Path, output_dir: s
         "watchlist": compute_watchlist_gold(gold_cols, cfg),
         "rollups": compute_rollup_gold(gold_cols, cfg),
     }
+    # Asset knowledge (theme 8, ADR 0048): not a use case, always generated.
+    gold_answers["knowledge_assets"] = compute_assets_gold(gold_cols)
+    gold_answers["knowledge_liquids"] = compute_liquids_gold(gold_answers["rollups"])
+    gold_answers["knowledge_identity"] = compute_identity_gold(gold_cols)
     if cfg.data_quality_enabled:
         gold_answers["data_quality"] = compute_data_quality_gold(findings, cfg)
     gold_paths: dict[str, Path] = {}

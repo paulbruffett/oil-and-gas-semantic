@@ -35,13 +35,16 @@ def schema():
 
 
 def test_catalog_covers_the_six_themes(catalog):
-    use_cases = sorted(t.number for t in catalog.themes if t.status != "scenario")
+    use_cases = sorted(t.number for t in catalog.themes if t.status not in ("scenario", "knowledge"))
     assert use_cases == [1, 2, 3, 4, 5, 6]
     assert sum(1 for t in catalog.themes if t.hero) == 1  # exactly one hero (theme 1)
     # Plus the data-quality scenario theme (ADR 0040): gold only with its knob on.
     (scenario,) = [t for t in catalog.themes if t.status == "scenario"]
     assert scenario.number == 7
     assert all(q.scenario == "data_quality" and q.example_config for q in scenario.questions)
+    # And the asset-knowledge theme (ADR 0048): always generated, graded apart from the use cases.
+    (knowledge,) = [t for t in catalog.themes if t.status == "knowledge"]
+    assert knowledge.number == 8 and len(knowledge.questions) == 3
 
 
 def test_every_question_is_keyed_to_a_gold_id_and_a_known_behavior(catalog):
@@ -249,3 +252,20 @@ def test_scenario_must_be_a_block_dropped_when_off(tmp_path):
     bad.write_text(yaml.safe_dump(raw))
     with pytest.raises(RuntimeError, match="breakthrough"):
         load_catalog(bad)
+
+
+def test_snowflake_harness_asks_the_catalog_knowledge_questions(catalog):
+    """platforms/snowflake/agent/test_local.py copies the theme-8 questions (it runs without the
+    foundation installed); they must stay the catalog's text, id and grading shape (ADR 0048)."""
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[1] / "platforms" / "snowflake" / "agent" / "test_local.py"
+    tree = ast.parse(source.read_text())
+    (node,) = [n.value for n in tree.body if isinstance(n, ast.Assign)
+               and any(getattr(t, "id", None) == "KNOWLEDGE" for t in n.targets)]
+    harness = {qid: (text, set_key, id_key, list(values))
+               for text, _, set_key, id_key, values, qid in ast.literal_eval(node).values()}
+    (theme,) = [t for t in catalog.themes if t.status == "knowledge"]
+    assert harness == {q.id: (" ".join(q.text.split()), q.grading.set_key, q.grading.id_key,
+                              list(q.grading.value_keys)) for q in theme.questions}
