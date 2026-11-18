@@ -64,7 +64,7 @@ config_hash 12a110eecfe2 — the gold is regenerated, not vendored, per docs/por
 pip install -r requirements.txt
 python test_local.py                       # all six themes
 python test_local.py surveillance decline  # a subset
-python test_local.py knowledge             # the asset-knowledge questions (catalog theme 8, ADR 0048)
+python test_local.py knowledge             # the asset-knowledge questions (catalog theme 8, ADR 0048/0049)
 OAG_GOLD_DIR=/path/to/gold python test_local.py     # point at an existing gold dir
 python agent.py "Which wells are watering out?"     # one-shot; prints the answer_submission JSON
 ```
@@ -127,6 +127,15 @@ PASS  decline      qid=decline-12-month-field-oil               wells_declining_
 PASS  welltest     qid=welltest-stale-or-anomalous-allocation   flagged=8/8
 PASS  watchlist    qid=watchlist-down-watering-out-gor-change   flagged=11/11
 PASS  rollups      qid=rollup-oil-gas-water-by-field-operator   by_field=3/3
+```
+
+**The asset-knowledge questions** (catalog theme 8) pass over `:run` too, through the three tools over
+the views generated from the ontology (`sql/13`, ADR 0049): `python test_agent_rest.py knowledge`.
+
+```
+PASS  assets       qid=knowledge-assets-by-field                assets=24/24
+PASS  liquids      qid=knowledge-gross-liquids-by-field         by_field=3/3
+PASS  identity     qid=knowledge-osdu-record-identity           records=24/24
 ```
 
 **Knowledge-graph navigation, validated live over `:run`** — the agent composes the graph tools

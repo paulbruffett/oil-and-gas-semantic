@@ -1,4 +1,5 @@
-"""Production-analytics agent for all six use-case themes — Snowflake port (DESIGN §4 layer 5).
+"""Production-analytics agent for the six use-case themes and the asset-knowledge questions (catalog
+theme 8, ADR 0049) — Snowflake port (DESIGN §4 layer 5).
 
 Snowflake port of platforms/databricks/agent/agent.py (locus 3, docs/porting.md). Same contract, same theme routing,
 same deterministic assembler; the platform seam that moves is HOW tools are executed and which model
@@ -80,6 +81,23 @@ THEMES: dict[str, dict[str, Any]] = {
         "extra_sets": [("by_operator", "rollup_by_operator", "operator", False),
                        ("by_facility", "rollup_by_facility", "facility_id", True)],
     },
+    # Asset knowledge (catalog theme 8, ADR 0048/0049): tools over the views generated from the ontology
+    # (sql/11-13). `text_keys` stay text (asset ids); product_volume_by_field names its value per product.
+    "asset_hierarchy": {
+        "question_id": "knowledge-assets-by-field",
+        "set_key": "assets", "id_key": "asset_id", "id_int": False,
+        "value_keys": ["field_id"], "int_keys": ["field_id"], "metrics": [],
+    },
+    "product_volume_by_field": {
+        "question_id": "knowledge-gross-liquids-by-field",
+        "set_key": "by_field", "id_key": "field_id", "id_int": True,
+        "value_keys": [], "int_keys": [], "metrics": [],
+    },
+    "osdu_crosswalk": {
+        "question_id": "knowledge-osdu-record-identity",
+        "set_key": "records", "id_key": "record_id", "id_int": False,
+        "value_keys": ["asset_id"], "int_keys": [], "text_keys": ["asset_id"], "metrics": [],
+    },
 }
 
 # Any theme-related tool (primary or secondary) -> its primary theme key.
@@ -99,6 +117,9 @@ TOOL_CATALOG = {
     "welltest_flags":              "wells with a stale well test or anomalous allocation (theme 4)",
     "watchlist_flags":             "wells down, watering out, or with a GOR change (theme 5)",
     "rollup_by_field":             "oil/gas/water by field & operator vs last month, biggest movers (theme 6)",
+    "asset_hierarchy":             "every well and facility, with the field each belongs to (assets by field)",
+    "product_volume_by_field":     "this month's volume of a product by field, e.g. gross liquids (= oil + water); pass the product phrase",
+    "osdu_crosswalk":              "which canonical well or facility each OSDU record identifies",
 }
 
 ROUTER_PROMPT = """\
@@ -109,18 +130,19 @@ Tools:
 {tools}
 
 If a specific field is named (e.g. "Volve", "the Volve", "Sleipner"), return its name in "field";
-otherwise field is null (whole fleet). If no tool fits (the question is ambiguous or off-topic),
-return tool = null.
+otherwise field is null (whole fleet). For product_volume_by_field, return the product as the user
+wrote it (e.g. "gross liquids") in "product"; otherwise product is null. If no tool fits (the
+question is ambiguous or off-topic), return tool = null.
 
 Reply with ONLY a JSON object, no prose, no code fence:
-{{"tool": "<one tool name or null>", "field": "<field name or null>", "answer": "<one-sentence natural-language summary>"}}
+{{"tool": "<one tool name or null>", "field": "<field name or null>", "product": "<product or null>", "answer": "<one-sentence natural-language summary>"}}
 
 Question: {question}
 """
 
 
 class ProductionAgent:
-    """Deterministic-answer, Cortex-routed agent across all six use-case themes (Snowflake)."""
+    """Deterministic-answer, Cortex-routed agent across the six use-case themes and theme 8 (Snowflake)."""
 
     def __init__(self, connection_name: str = CONNECTION, model: str = LLM_MODEL) -> None:
         params = connection(connection_name)
@@ -142,10 +164,12 @@ class ProductionAgent:
     def _exec_tool(self, bare_name: str, args: dict[str, Any]) -> list[dict] | str | None:
         """Execute a governed KNOWLEDGE table function; return its rows as dicts (col->value), or an
         'ERROR: ...' string on a tool failure (surfaced upstream as a data-quality refusal)."""
-        arg_sql = str(int(args["arg_field_id"])) if "arg_field_id" in args else ""
+        arg_sql, params = (str(int(args["arg_field_id"])), ()) if "arg_field_id" in args else ("", ())
+        if "arg_product" in args:  # a user phrase: bound, never formatted into the SQL
+            arg_sql, params = "%s", (str(args["arg_product"]),)
         sql = f"SELECT * FROM TABLE({_fn(bare_name.upper())}({arg_sql}))"
         try:
-            cols, rows = self._query(sql)
+            cols, rows = self._query(sql, params)
         except snowflake.connector.errors.Error as e:  # transient/tool error -> surfaced upstream
             return f"ERROR: {e}"
         return [dict(zip(cols, r)) for r in rows]
@@ -168,14 +192,15 @@ class ProductionAgent:
             return None
         return int(float(v)) if as_int else float(v)
 
-    def _rows(self, result: list[dict] | str | None, id_key: str, id_int: bool, value_keys, int_keys) -> list[dict]:
+    def _rows(self, result: list[dict] | str | None, id_key: str, id_int: bool, value_keys, int_keys,
+              text_keys=()) -> list[dict]:
         if not isinstance(result, list):
             return []
         out = []
         for r in result:
             row = {id_key: (self._num(r.get(id_key), True) if id_int else r.get(id_key))}
             for vk in value_keys:
-                row[vk] = self._num(r.get(vk), vk in int_keys)
+                row[vk] = r.get(vk) if vk in text_keys else self._num(r.get(vk), vk in int_keys)
             out.append(row)
         return out
 
@@ -216,13 +241,16 @@ class ProductionAgent:
                     "provenance": {"metrics": THEMES[theme_key]["metrics"], "dimensions": [], "filters": [], "entities": []},
                 }
 
-        return self._build_submission(theme_key, field_arg, narrative)
+        return self._build_submission(theme_key, field_arg, narrative, route.get("product"))
 
-    def _build_submission(self, theme_key: str, field_arg: int, final_text: str) -> dict[str, Any]:
+    def _build_submission(self, theme_key: str, field_arg: int, final_text: str,
+                          product: str | None = None) -> dict[str, Any]:
         t = THEMES[theme_key]
         # Re-execute the primary tool for an authoritative, deterministic result set, so key_values does
         # not depend on the LLM and a transient tool ERROR is surfaced as a refusal, not an empty set.
         args = {"arg_field_id": field_arg} if theme_key == "surveillance_below_expected" else {}
+        if theme_key == "product_volume_by_field":
+            args = {"arg_product": product or ""}
         primary = self._exec_tool(theme_key, args)
         if primary is None or isinstance(primary, str):  # str == "ERROR: ..." (tool failure)
             return {
@@ -232,12 +260,22 @@ class ProductionAgent:
                 "provenance": {"metrics": t["metrics"], "dimensions": [], "filters": [], "entities": []},
             }
 
+        if theme_key == "product_volume_by_field":
+            return self._product_submission(t, primary, product, final_text)
         key_values: dict[str, Any] = {
-            t["set_key"]: self._rows(primary, t["id_key"], t["id_int"], t["value_keys"], t["int_keys"])
+            t["set_key"]: self._rows(primary, t["id_key"], t["id_int"], t["value_keys"], t["int_keys"],
+                                     t.get("text_keys", ()))
         }
         for set_key, tool, id_key, id_int in t.get("extra_sets", []):
             csv_text = self._exec_tool(tool, {})
             key_values[set_key] = self._rows(csv_text, id_key, id_int, list(t["value_keys"]), t["int_keys"])
+
+        if theme_key in ("asset_hierarchy", "osdu_crosswalk"):  # entity answers, no metrics
+            return {"question_id": t["question_id"],
+                    "answer": final_text or f"{len(key_values[t['set_key']])} {t['set_key']} returned.",
+                    "key_values": key_values, "behavior": "answered",
+                    "provenance": {"metrics": [], "dimensions": [], "filters": [],
+                                   "entities": ["Well", "Facility", "Field"]}}
 
         scoped = theme_key == "surveillance_below_expected" and field_arg > 0
         provenance = {
@@ -250,6 +288,30 @@ class ProductionAgent:
             "question_id": t["question_id"],
             "answer": final_text or f"{n} {t['set_key']} returned for {t['question_id']}.",
             "key_values": key_values, "behavior": "answered", "provenance": provenance,
+        }
+
+    def _product_submission(self, t: dict, rows: list[dict], product: str | None, final_text: str) -> dict:
+        """A product's volume by field: the value is named for the product and its unit (gross_liquids_bbl),
+        and a product with no rows (unknown) or mixing units (no single volume) is not answered."""
+        units = {r["unit"] for r in rows}
+        if len(units) != 1 or None in units:
+            reason = ("is not a known product" if not rows else
+                      "has no governed volume" if None in units else f"mixes units {sorted(units)}")
+            return {"question_id": t["question_id"], "answer": f"{product!r} {reason}; please clarify.",
+                    "key_values": {t["set_key"]: []}, "behavior": "clarification-requested",
+                    "provenance": {"metrics": [], "dimensions": [], "filters": [], "entities": []}}
+        key = f"{rows[0]['product_key']}_{units.pop().lower()}"
+        _, metric_rows = self._query(
+            f"SELECT metric FROM {_fn('PRODUCT_METRIC')} WHERE product_key = %s ORDER BY metric",
+            (rows[0]["product_key"],))
+        return {
+            "question_id": t["question_id"],
+            "answer": final_text or f"{rows[0]['product_key']} by field this month.",
+            "key_values": {t["set_key"]: [{"field_id": int(r["field_id"]), key: float(r["volume"])}
+                                          for r in sorted(rows, key=lambda r: r["field_id"])]},
+            "behavior": "answered",
+            "provenance": {"metrics": [m for (m,) in metric_rows], "dimensions": ["field"],
+                           "filters": [], "entities": ["Field"]},
         }
 
 

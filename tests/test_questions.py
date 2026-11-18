@@ -255,7 +255,7 @@ def test_scenario_must_be_a_block_dropped_when_off(tmp_path):
 
 
 def test_snowflake_harness_asks_the_catalog_knowledge_questions(catalog):
-    """platforms/snowflake/agent/test_local.py copies the theme-8 questions (it runs without the
+    """platforms/snowflake/agent/test_local.py and test_agent_rest.py copy the theme-8 questions (it runs without the
     foundation installed); they must stay the catalog's text, id and grading shape (ADR 0048)."""
     import ast
     from pathlib import Path
@@ -267,5 +267,13 @@ def test_snowflake_harness_asks_the_catalog_knowledge_questions(catalog):
     harness = {qid: (text, set_key, id_key, list(values))
                for text, _, set_key, id_key, values, qid in ast.literal_eval(node).values()}
     (theme,) = [t for t in catalog.themes if t.status == "knowledge"]
-    assert harness == {q.id: (" ".join(q.text.split()), q.grading.set_key, q.grading.id_key,
-                              list(q.grading.value_keys)) for q in theme.questions}
+    want = {q.id: (" ".join(q.text.split()), q.grading.set_key, q.grading.id_key, list(q.grading.value_keys))
+            for q in theme.questions}
+    assert harness == want
+    # The REST harness for the deployed Cortex Agent (test_agent_rest.py, ADR 0049) asks the same.
+    rest = source.with_name("test_agent_rest.py")
+    (node,) = [n.value for n in ast.parse(rest.read_text()).body if isinstance(n, ast.Assign)
+               and any(getattr(t, "id", None) == "KNOWLEDGE" for t in n.targets)]
+    asked = {t["question_id"]: (t["question"], t["set_key"], t["id_key"], t["value_keys"])
+             for t in ast.literal_eval(node).values()}
+    assert asked == want

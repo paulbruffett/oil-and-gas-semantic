@@ -16,6 +16,7 @@ from the same CLI connection agent.py uses (default `proton`); the host comes fr
 
     python test_agent_rest.py                       # all six themes
     python test_agent_rest.py surveillance rollups  # a subset
+    python test_agent_rest.py knowledge             # the asset-knowledge questions (theme 8, ADR 0049)
     OAG_GOLD_DIR=/path/to/gold OAG_SNOWFLAKE_CONNECTION=proton python test_agent_rest.py
 """
 
@@ -81,6 +82,30 @@ THEMES = {
     },
 }
 
+# Asset-knowledge questions (catalog theme 8, ADR 0048), answered by the tools over the generated
+# ontology views (sql/13, ADR 0049). Same shape as THEMES; `text_keys` stay text (asset ids), and
+# `product` builds the value key from the tool's product_key + unit (gross_liquids_bbl).
+KNOWLEDGE = {
+    "assets": {
+        "question": "List every asset in each field, wells and facilities alike, with the field it belongs to.",
+        "tool": "asset_hierarchy", "question_id": "knowledge-assets-by-field",
+        "gold": "knowledge_assets", "set_key": "assets", "id_key": "asset_id", "id_int": False,
+        "value_keys": ["field_id"], "int_keys": ["field_id"],
+    },
+    "liquids": {
+        "question": "How much gross liquids did each field produce this month?",
+        "tool": "product_volume_by_field", "question_id": "knowledge-gross-liquids-by-field",
+        "gold": "knowledge_liquids", "set_key": "by_field", "id_key": "field_id", "id_int": True,
+        "value_keys": ["gross_liquids_bbl"], "int_keys": [], "product": True,
+    },
+    "identity": {
+        "question": "Which canonical well or facility does each OSDU well and facility record identify?",
+        "tool": "osdu_crosswalk", "question_id": "knowledge-osdu-record-identity",
+        "gold": "knowledge_identity", "set_key": "records", "id_key": "record_id", "id_int": False,
+        "value_keys": ["asset_id"], "int_keys": [], "text_keys": ["asset_id"],
+    },
+}
+
 
 def _host() -> str:
     account = connection(CONNECTION)["account"]
@@ -140,8 +165,20 @@ def to_submission(response: dict, t: dict) -> dict:
         return {"question_id": "unresolved", "answer": answer,
                 "key_values": {}, "behavior": "clarification-requested"}
 
+    if t.get("product"):  # value named for the product and its unit; one unit or no answer
+        rows = rows or []
+        units = {r.get("unit") for r in rows}
+        if len(units) != 1 or None in units:  # unknown product, mixed units, or no governed volume
+            return {"question_id": t["question_id"], "answer": answer,
+                    "key_values": {t["set_key"]: []}, "behavior": "clarification-requested"}
+        key = f"{rows[0]['product_key']}_{units.pop().lower()}"
+        graded = [{t["id_key"]: _num(r[t["id_key"]], True), key: _num(r.get("volume"))} for r in rows]
+        return {"question_id": t["question_id"], "answer": answer,
+                "key_values": {t["set_key"]: graded}, "behavior": "answered"}
+    text_keys = t.get("text_keys", [])
     graded = [{t["id_key"]: (_num(r[t["id_key"]], True) if t["id_int"] else r[t["id_key"]]),
-               **{vk: _num(r.get(vk), vk in t["int_keys"]) for vk in t["value_keys"]}}
+               **{vk: (r.get(vk) if vk in text_keys else _num(r.get(vk), vk in t["int_keys"]))
+                  for vk in t["value_keys"]}}
               for r in (rows or [])]
     return {"question_id": t["question_id"], "answer": answer,
             "key_values": {t["set_key"]: graded}, "behavior": "answered"}
@@ -164,11 +201,14 @@ def grade(sub_kv, gold, set_key, id_key, value_keys):
 
 
 def main() -> int:
-    which = [a for a in sys.argv[1:] if a in THEMES] or list(THEMES)
+    args = sys.argv[1:]
+    which = [a for a in args if a in THEMES or a in KNOWLEDGE]
+    which += list(KNOWLEDGE) if "knowledge" in args else []
+    which = which or list(THEMES)
     jwt = _jwt()
     all_ok = True
     for theme in which:
-        t = THEMES[theme]
+        t = THEMES.get(theme) or KNOWLEDGE[theme]
         sub = to_submission(run_agent(t["question"], jwt), t)
         gold = json.loads((GOLD_DIR / f"{t['gold']}.json").read_text())
         ok, missing, extra, mism = grade(sub["key_values"], gold, t["set_key"], t["id_key"], t["value_keys"])

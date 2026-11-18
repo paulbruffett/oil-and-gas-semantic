@@ -48,7 +48,8 @@ its agent answers.
     It also scores 6/6 on the use cases, and 5/5 on its reasoning checks.
   - **Snowflake agent:** 0/3. Its router declines the assets and identity questions ("unresolved"),
     and routes gross liquids to the rollup, which returns oil, gas and water but not their sum. It
-    still scores 6/6 on the use cases.
+    still scores 6/6 on the use cases. (Slice 10 gave it tools over the generated views: 3/3,
+    ADR 0049.)
 - The matrix now compares layers 3–4 by answers, not only by capabilities. The difference is the
   knowledge layer's reach into the agent: Snowflake has the generated views, but its agent can't use
   them.
