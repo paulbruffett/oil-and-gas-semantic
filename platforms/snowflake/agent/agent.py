@@ -1,4 +1,5 @@
-"""Production-analytics agent for all six use-case themes — Snowflake port (DESIGN §4 layer 5).
+"""Production-analytics agent for the six use-case themes and the asset-knowledge questions (catalog
+theme 8, ADR 0049) — Snowflake port (DESIGN §4 layer 5).
 
 Snowflake port of platforms/databricks/agent/agent.py (locus 3, docs/porting.md). Same contract, same theme routing,
 same deterministic assembler; the platform seam that moves is HOW tools are executed and which model
@@ -141,7 +142,7 @@ Question: {question}
 
 
 class ProductionAgent:
-    """Deterministic-answer, Cortex-routed agent across all six use-case themes (Snowflake)."""
+    """Deterministic-answer, Cortex-routed agent across the six use-case themes and theme 8 (Snowflake)."""
 
     def __init__(self, connection_name: str = CONNECTION, model: str = LLM_MODEL) -> None:
         params = connection(connection_name)
@@ -293,8 +294,9 @@ class ProductionAgent:
         """A product's volume by field: the value is named for the product and its unit (gross_liquids_bbl),
         and a product with no rows (unknown) or mixing units (no single volume) is not answered."""
         units = {r["unit"] for r in rows}
-        if len(units) != 1:
-            reason = "is not a known product" if not rows else f"mixes units {sorted(units)}"
+        if len(units) != 1 or None in units:
+            reason = ("is not a known product" if not rows else
+                      "has no governed volume" if None in units else f"mixes units {sorted(units)}")
             return {"question_id": t["question_id"], "answer": f"{product!r} {reason}; please clarify.",
                     "key_values": {t["set_key"]: []}, "behavior": "clarification-requested",
                     "provenance": {"metrics": [], "dimensions": [], "filters": [], "entities": []}}

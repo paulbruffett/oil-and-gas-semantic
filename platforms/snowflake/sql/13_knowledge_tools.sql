@@ -31,7 +31,8 @@ CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.ASSET_HIERARCHY()
 -- A product's volume by field this month: the phrase resolves through PRODUCT_SYNONYM (exact, else the
 -- longest synonym the phrase contains, as the ontology's resolve_product), PRODUCT_METRIC gives the
 -- metrics under it, and the governed ROLLUP_BY_FIELD supplies their current-month volumes. One row per
--- field and unit: a product mixing units (gas in Mscf with liquids in bbl) comes back as two rows.
+-- field and unit: a product mixing units (gas in Mscf with liquids in bbl) comes back as two rows, and
+-- a metric with no governed volume here comes back with a NULL unit; the agents refuse both.
 CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.PRODUCT_VOLUME_BY_FIELD(arg_product STRING)
   RETURNS TABLE(field_id NUMBER, product_key STRING, unit STRING, volume FLOAT)
   COMMENT = 'A product (e.g. gross liquids) by field this month: the ontology product hierarchy over ROLLUP_BY_FIELD (theme 8).'
@@ -45,7 +46,8 @@ CREATE OR REPLACE FUNCTION OAG_FABLE.KNOWLEDGE.PRODUCT_VOLUME_BY_FIELD(arg_produ
     ),
     measures AS (
       SELECT p.product_key, m.metric,
-             CASE m.metric WHEN 'actual_gas' THEN 'Mscf' ELSE 'bbl' END AS unit
+             CASE m.metric WHEN 'actual_gas' THEN 'Mscf' WHEN 'actual_oil' THEN 'bbl'
+                           WHEN 'actual_water' THEN 'bbl' END AS unit  -- NULL: no governed volume
       FROM product p JOIN OAG_FABLE.KNOWLEDGE.product_metric m ON m.product_key = p.product_key
     )
     SELECT r.field_id, ms.product_key, ms.unit,

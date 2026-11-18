@@ -168,7 +168,7 @@ def to_submission(response: dict, t: dict) -> dict:
     if t.get("product"):  # value named for the product and its unit; one unit or no answer
         rows = rows or []
         units = {r.get("unit") for r in rows}
-        if len(units) != 1:
+        if len(units) != 1 or None in units:  # unknown product, mixed units, or no governed volume
             return {"question_id": t["question_id"], "answer": answer,
                     "key_values": {t["set_key"]: []}, "behavior": "clarification-requested"}
         key = f"{rows[0]['product_key']}_{units.pop().lower()}"
