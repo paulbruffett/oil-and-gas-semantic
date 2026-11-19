@@ -407,6 +407,7 @@ Engineering tests verify *our* base-collateral code (distinct from §6–§7 ass
 - [0047 — Platform knowledge generated from the ontology: vocabulary, products, inheritance, part-of and identity as SQL (extends 0041–0046)](docs/adr/0047-platform-knowledge-generated-from-the-ontology.md)
 - [0048 — Asset-knowledge questions in the catalog: theme 8, graded apart from the six use cases (extends 0040, 0045, 0047)](docs/adr/0048-asset-knowledge-questions-in-the-catalog.md)
 - [0049 — Snowflake agent tools over the generated ontology knowledge (extends 0047, 0048)](docs/adr/0049-snowflake-agent-tools-over-generated-knowledge.md)
+- [0050 — Fabric agent tools over the generated ontology knowledge, through the semantic model (extends 0039, 0047–0049)](docs/adr/0050-fabric-agent-tools-over-generated-knowledge.md)
 
 ---
 

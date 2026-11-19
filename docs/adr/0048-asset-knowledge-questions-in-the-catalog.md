@@ -53,7 +53,7 @@ its agent answers.
 - The matrix now compares layers 3–4 by answers, not only by capabilities. The difference is the
   knowledge layer's reach into the agent: Snowflake has the generated views, but its agent can't use
   them.
-- Fabric and Databricks haven't been asked. Fabric's agent needs its model endpoint configured, and
+- Fabric and Databricks haven't been asked (Fabric since has, 3/3: ADR 0050). Fabric's agent needs its model endpoint configured, and
   Databricks isn't deployed.
 - The reference dataset gains three gold files. The existing gold files and canonical tables are
   byte-identical, and `config_hash` is unchanged.

@@ -1,9 +1,10 @@
-"""Run the Fabric agent on all six catalog questions and grade the submissions with the gold check.
+"""Run the Fabric agent on every catalog question and grade the submissions with the gold check.
 
 Each catalog question (spec/questions/catalog.yaml) goes through the real loop: gpt-6-luna on Foundry
 picks a governed DAX tool, the semantic model answers, the agent assembles the answer submission. The six
 submissions are then graded by the foundation's gold check (oag_semantic.grading.score_submissions:
-schema, behavior, id set, values at relative tolerance 1e-6). One extra question names a field ("the
+schema, behavior, id set, values at relative tolerance 1e-6): the six use cases, and separately the three
+asset-knowledge questions (catalog theme 8, ADR 0048/0050). One extra question names a field ("the
 Volve"), which the catalog questions don't, so entity resolution through the ontology MCP endpoint is
 exercised too: it must resolve to field 1 and return exactly gold's flagged wells in that field.
 
@@ -45,6 +46,13 @@ for theme in catalog["themes"]:
 report = score_submissions(submissions, dataset_dir)
 print()
 print(report.summary())
+knowledge_ids = {q["id"] for t in catalog["themes"] if t["status"] == "knowledge" for q in t["questions"]}
+knowledge = [g for g in score_submissions(submissions, dataset_dir, knowledge=True).grades
+             if g.question_id in knowledge_ids]
+for g in knowledge:
+    print(f"  {g.summary()}")
+knowledge_ok = len(knowledge) == len(knowledge_ids) and all(g.correct for g in knowledge)  # none skipped
+print(f"asset knowledge: {sum(g.correct for g in knowledge)}/{len(knowledge)}")
 
 # Field-scoped question: resolution through the ontology, then the scoped DAX tool.
 scoped = agent.answer("Which wells in the Volve field produced below expected oil rate this week, and by how much?")
@@ -66,4 +74,4 @@ print(f"{'PASS' if op_ok else 'FAIL'}  rollup by operator vs gold by_operator ({
 if os.environ.get("OAG_SUBMISSIONS_OUT"):
     Path(os.environ["OAG_SUBMISSIONS_OUT"]).write_text(json.dumps(submissions, indent=2))
 
-sys.exit(0 if report.passed and scoped_ok and op_ok else 1)
+sys.exit(0 if report.passed and knowledge_ok and scoped_ok and op_ok else 1)
