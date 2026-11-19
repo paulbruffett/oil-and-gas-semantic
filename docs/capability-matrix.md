@@ -70,7 +70,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ● definition as data and a SHACL rule, both over governed metric values; dated flag records (ADR 0044). GraphDB doesn't run SHACL rules | ● SQL function | ● SQL function | ◐ natural-language rule |
 | Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ● SHACL shapes, incl. a well's field = its facility's and no shared keys; pySHACL and GraphDB agree | ○ constraints, expectations | ○ data metric functions | ? |
 | Graph query language | SPARQL, GQL, SQL | how tools query the graph | ● Python API | ● SPARQL | ◐ SQL | ◐ recursive SQL | ◐ GQL graph stays empty via the API; `ask_ontology` takes natural language |
-| Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines, checked: in-process and GraphDB agree (ADR 0046) | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
+| Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines, checked: in-process and GraphDB agree, and the agent scores the same on both (ADRs 0046, 0051) | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
 
 ## 5. Agent layer
 
@@ -129,7 +129,8 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   check, and the same validation results, SPARQL constraints included. It also gets the key rule
   right without the workaround owlrl needs. The exception is SHACL rules (a W3C Note), which GraphDB
   doesn't run. Ontop serves the daily volumes live from DuckDB, so facts are queried in place
-  (ADR 0046).
+  (ADR 0046). The agent is portable too: run on GraphDB, with the same tools and prompt, it scores
+  6/6, 3/3 on asset knowledge and 5/5 on its reasoning checks, free SPARQL included (ADR 0051).
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);
   validation as pipeline expectations (Databricks) or data metric functions (Snowflake); and generating

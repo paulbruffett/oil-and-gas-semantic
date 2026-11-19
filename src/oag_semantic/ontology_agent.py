@@ -14,7 +14,8 @@ differs is the knowledge layer:
 
 ``OntologyAgent(dataset_dir).ask(question)`` returns an :class:`AgentRun`. The model client is
 injectable, so the engineering tests drive the loop with a scripted stand-in and need no API key.
-``python -m oag_semantic.ontology_agent <dataset_dir>`` runs the live check: the six catalog
+``python -m oag_semantic.ontology_agent <dataset_dir> [--graphdb]`` runs the live check (with
+``--graphdb``, on GraphDB's master graph instead of the in-process one, ADR 0051): the six catalog
 questions and the three asset-knowledge questions (theme 8, ADR 0048) graded against gold, a
 field-scoped and an unknown-field question, and the reasoning checks graded against the canonical
 tables.
@@ -290,7 +291,8 @@ class OntologyAgent:
             raise SparqlRejected("FROM is not allowed: query the master graph only")
         if _uses_service(prepared.algebra):
             raise SparqlRejected("SERVICE is not allowed: query the master graph only")
-        result = self.onto.graph.query(prepared)
+        # Run the text just checked, not the parsed form: a remote store (GraphDB, ADR 0051) takes text only.
+        result = self.onto.graph.query(query, initNs=PREFIXES)
         if kind == "AskQuery":
             return {"ask": bool(result.askAnswer)}
         names = [str(v) for v in result.vars]
@@ -506,7 +508,13 @@ def main(argv: list[str]) -> int:  # pragma: no cover -- needs a live model
     from oag_semantic.grading import score_submissions
 
     dataset_dir = Path(argv[0])
-    agent = OntologyAgent(dataset_dir)
+    onto = None
+    if "--graphdb" in argv[1:]:  # the same agent, its knowledge served by GraphDB (ADR 0051)
+        from oag_semantic import graphdb
+
+        onto = graphdb.master_graph(graphdb.load(dataset_dir)["master"])
+        print(f"knowledge runtime: GraphDB {graphdb.version().get('productVersion', '?')}")
+    agent = OntologyAgent(dataset_dir, onto=onto)
     submissions = {}
     knowledge = {a.question_id for a in KNOWLEDGE_ANSWERS.values()}
     for q in load_catalog().questions():
