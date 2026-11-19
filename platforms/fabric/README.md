@@ -384,6 +384,11 @@ $RUN run_sql.py sql/02b_load_osdu_records.sql   # ends with row counts: 18, 6
 $RUN run_sql.py sql/06_ontology_knowledge.sql    # product tables; entity, asset, part_of_edge, part_of views
 $RUN run_sql.py sql/07_ontology_identity.sql     # same_as view
 (cd ../.. && uv run --with mssql-python python platforms/fabric/verify_ontology_knowledge.py)   # MATCH
+# The agent reads only the semantic model (Direct Lake: tables, not views), so copy the generated knowledge
+# into semantic.* tables for its asset-knowledge tools, then redeploy and refresh the model (ADR 0050).
+# Rerun after 06/07 and every canonical load.
+$RUN run_sql.py sql/08_knowledge_tools.sql       # ends with row counts: 24, 24, 12, 5
+$RUN deploy.py                                   # model with asset_hierarchy, osdu_crosswalk, product_* tables
 ```
 
 On macOS, `mssql-python` may fail with "OpenSSL library could not be loaded"; run with
@@ -401,8 +406,10 @@ $RUN governance_test.py                     # analyst vs agent SP; needs grants 
 (cd ../.. && uv run --with azure-identity python platforms/fabric/agent/eval_data_agent.py) # needs a paid F2+ capacity
 ```
 
-`test_local.py` should print `gold check: 6/6 (100%)` plus two `PASS` lines (field-scoped question,
-by-operator rollup). Set `OAG_SUBMISSIONS_OUT=platforms/fabric/agent/submissions.json` to save the
+`test_local.py` should print `gold check: 6/6 (100%)`, `asset knowledge: 3/3` (catalog theme 8, through
+the tools over `sql/08`, ADR 0050) and two `PASS` lines (field-scoped question, by-operator rollup).
+`OAG_FOUNDRY_ENDPOINT` must be a Foundry resource in the same Entra tenant as your `az login`; a resource
+in another tenant rejects the token. Set `OAG_SUBMISSIONS_OUT=platforms/fabric/agent/submissions.json` to save the
 submissions for `grade_submissions.py`. Don't edit the `lineageTag` lines in
 `ontology/`: the service keys state on them (see Findings above).
 

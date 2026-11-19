@@ -82,7 +82,7 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Clarification on unknown entities | "Nonesuch field" → ask | don't guess | ● | ● enforced in code | ● | ? | ● custom agent |
 | Answer provenance | metric, filters, entities used | explain and check | ● answer schema | ● plus entity IRIs; entity answers as IRIs | ● | ● | ● |
 | Gold result, six use cases | | | ● | ● 6/6, plus 5/5 reasoning checks | ● 6/6 | ● 6/6 | ● 6/6 custom agent |
-| Gold result, asset knowledge (theme 8) | assets by field, gross liquids, OSDU record identity | layer 3–4 questions, graded apart from the six | ? not asked: the baseline answers surveillance | ● 3/3: one answer tool each, rows built from the graph (ADR 0048) | ? not asked: not deployed | ● 3/3, local agent and the deployed Cortex Agent: governed functions over the generated views (ADR 0049); 0/3 before they existed | ? not asked: model endpoint not configured |
+| Gold result, asset knowledge (theme 8) | assets by field, gross liquids, OSDU record identity | layer 3–4 questions, graded apart from the six | ? not asked: the baseline answers surveillance | ● 3/3: one answer tool each, rows built from the graph (ADR 0048) | ? not asked: not deployed | ● 3/3, local agent and the deployed Cortex Agent: governed functions over the generated views (ADR 0049); 0/3 before they existed | ● 3/3 custom agent: DAX tools over the generated knowledge, materialized as model tables so the agent stays behind the semantic model (ADR 0050) |
 
 ## 6. Governance (cross-cutting)
 
@@ -120,7 +120,9 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   from the six. The ontology agent scores 3/3. Snowflake's agent first scored 0/3, although its
   generated views gave the right answers (ADR 0047): no tool read them, so it declined two questions
   and answered gross liquids with the oil/gas/water rollup. Three thin functions over those views
-  took it to 3/3, on both the local agent and the deployed Cortex Agent (ADR 0049). Having the knowledge
+  took it to 3/3, on both the local agent and the deployed Cortex Agent (ADR 0049). Fabric's custom agent
+  scores 3/3 too, once the views are copied into tables its semantic model can read: its governance
+  keeps the agent out of the Warehouse, so the knowledge has to come to the model (ADR 0050). Having the knowledge
   isn't the same as an agent being able to use it; generated knowledge plus a tool per question is
   enough for these, where the ontology agent reasons at query time and can also query freely.
 - **Portability holds where it was tested:** GraphDB gives the in-process answers on every knowledge

@@ -118,6 +118,20 @@ SUMMARIZECOLUMNS(well[operator],
 }
 
 
+# The generated ontology knowledge materialized for the model (sql/08, ADR 0050): read whole, no arguments,
+# so a user phrase never reaches a query.
+KNOWLEDGE_QUERIES = {
+    "asset_hierarchy": "EVALUATE SELECTCOLUMNS(asset_hierarchy, \"asset_id\", asset_hierarchy[asset_id], "
+                       "\"asset_class\", asset_hierarchy[asset_class], \"field_id\", asset_hierarchy[field_id])",
+    "osdu_crosswalk": "EVALUATE SELECTCOLUMNS(osdu_crosswalk, \"record_id\", osdu_crosswalk[record_id], "
+                      "\"asset_id\", osdu_crosswalk[asset_id])",
+    "product_synonym": "EVALUATE SELECTCOLUMNS(product_synonym, \"synonym\", product_synonym[synonym], "
+                       "\"product_key\", product_synonym[product_key])",
+    "product_metric": "EVALUATE SELECTCOLUMNS(product_metric, \"product_key\", product_metric[product_key], "
+                      "\"metric\", product_metric[metric])",
+}
+
+
 def theme_query(theme: str, field_id: int | None = None) -> str:
     field_filter = f", well[field_id] = {int(field_id)}" if field_id else ""
     return THEME_QUERIES[theme].replace("{field_filter}", field_filter)

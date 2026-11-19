@@ -1,0 +1,20 @@
+/// Generated ontology knowledge, materialized by sql/08_knowledge_tools.sql for the agent's asset-knowledge
+/// tools (catalog theme 8, ADR 0050). No relationships: the tools query it directly.
+table product_synonym
+
+	column synonym
+		dataType: string
+		summarizeBy: none
+		sourceColumn: synonym
+
+	column product_key
+		dataType: string
+		summarizeBy: none
+		sourceColumn: product_key
+
+	partition product_synonym = entity
+		mode: directLake
+		source
+			entityName: product_synonym
+			schemaName: semantic
+			expressionSource: DatabaseQuery

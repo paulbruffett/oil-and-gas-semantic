@@ -1,4 +1,5 @@
-"""Production-analytics agent for the six use cases -- Fabric build (DESIGN.md §4 layer 5).
+"""Production-analytics agent for the six use cases and the asset-knowledge questions (catalog theme 8,
+ADR 0050) -- Fabric build (DESIGN.md §4 layer 5).
 
 Same contract as platforms/databricks/agent and platforms/snowflake/agent: the model picks a governed
 tool, code executes it, and the graded `key_values` set is assembled deterministically from the tool
@@ -6,6 +7,8 @@ result, so the model never writes a query or a number that gets graded. What mov
 
   * Metrics tools are the governed DAX queries in fabric.THEME_QUERIES, run against the Direct Lake
     semantic model (executeQueries). They use only the model's measures.
+  * Asset-knowledge tools read the knowledge generated from the ontology (ADR 0047), materialized as model
+    tables (sql/08, ADR 0050): the asset hierarchy, the OSDU crosswalk and the product hierarchy.
   * Entity resolution goes through the Fabric IQ ontology's MCP endpoint (`ask_ontology`): a named field
     is resolved via the FieldAlias entity and its 'Alias Of Field' relationship.
   * The model is gpt-6-luna on Azure AI Foundry, with native function calling through the Responses API
@@ -26,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fabric import FabricError, Ontology, dax, item_id, request, theme_query  # noqa: E402
+from fabric import KNOWLEDGE_QUERIES, FabricError, Ontology, dax, item_id, request, theme_query  # noqa: E402
 
 FOUNDRY = os.environ["OAG_FOUNDRY_ENDPOINT"].rstrip("/")
 MODEL = os.environ.get("OAG_AGENT_LLM", "gpt-6-luna")
@@ -84,6 +87,30 @@ THEMES: dict[str, dict[str, Any]] = {
     },
 }
 
+# Asset-knowledge tools (catalog theme 8, ADR 0048/0050): the answer is built in code from the model's
+# knowledge tables. `text_keys` stay text (asset ids); product_volume_by_field names its value per product.
+KNOWLEDGE: dict[str, dict[str, Any]] = {
+    "asset_hierarchy": {
+        "question_id": "knowledge-assets-by-field", "set_key": "assets", "id_key": "asset_id",
+        "value_keys": ["field_id"], "int_keys": ["field_id"], "text_keys": [],
+        "description": "Every well and facility, with the field each belongs to (class inheritance and the part-of "
+                       "hierarchy, from the ontology). Answers listing the assets in each field.",
+    },
+    "product_volume_by_field": {
+        "question_id": "knowledge-gross-liquids-by-field", "set_key": "by_field", "id_key": "field_id",
+        "description": "This month's volume of a product by field. Pass the product as the user wrote it (e.g. "
+                       "'gross liquids', which is oil + water); it resolves through the ontology's product hierarchy.",
+    },
+    "osdu_crosswalk": {
+        "question_id": "knowledge-osdu-record-identity", "set_key": "records", "id_key": "record_id",
+        "value_keys": ["asset_id"], "int_keys": [], "text_keys": ["asset_id"],
+        "description": "Every OSDU well and facility record with the canonical well or facility it identifies.",
+    },
+}
+# A product's governed metric -> the rollup's current-month column, and its unit.
+_ROLLUP_COLUMN = {"actual_oil": ("oil_curr", "bbl"), "actual_gas": ("gas_curr", "Mscf"),
+                  "actual_water": ("water_curr", "bbl")}
+
 SYSTEM_PROMPT = """\
 You are the production-analytics agent for an oil & gas reference dataset on Microsoft Fabric.
 Answer each question by calling exactly ONE governed analysis tool. Never write queries or invent numbers.
@@ -103,6 +130,10 @@ def _tools() -> list[dict]:
         props = {"field_id": {"type": "integer"}} if name == "surveillance_below_expected" else {}
         tools.append({"type": "function", "name": name, "description": t["description"],
                       "parameters": {"type": "object", "properties": props, "required": []}})
+    for name, t in KNOWLEDGE.items():
+        props, required = ({"product": {"type": "string"}}, ["product"]) if name == "product_volume_by_field" else ({}, [])
+        tools.append({"type": "function", "name": name, "description": t["description"],
+                      "parameters": {"type": "object", "properties": props, "required": required}})
     return tools
 
 
@@ -131,6 +162,33 @@ class ProductionAgent:
             result[set_key] = dax(self.model_id, theme_query(theme))
         return result
 
+    def run_knowledge(self, tool: str, args: dict) -> tuple[dict[str, list[dict]], list[str]]:
+        """An asset-knowledge tool: its graded set, from the model's knowledge tables (no user text in DAX),
+        and the governed metrics it summed (for provenance)."""
+        t = KNOWLEDGE[tool]
+        if tool != "product_volume_by_field":
+            rows = dax(self.model_id, KNOWLEDGE_QUERIES[tool])
+            return {t["set_key"]: self._typed(rows, t["id_key"], t["value_keys"], t["int_keys"], t["text_keys"])}, []
+        # Resolve the phrase as the ontology's resolve_product does: exact synonym, else the longest one
+        # the phrase contains; then sum the current-month volumes of the metrics under the product.
+        phrase = " ".join(str(args.get("product", "")).lower().split())
+        synonyms = dax(self.model_id, KNOWLEDGE_QUERIES["product_synonym"])
+        matches = sorted((r for r in synonyms if r["synonym"] == phrase or r["synonym"] in phrase),
+                         key=lambda r: (r["synonym"] != phrase, -len(r["synonym"])))
+        if not phrase or not matches:
+            raise FabricError(f"{args.get('product')!r} is not a known product")
+        key = matches[0]["product_key"]
+        metrics = sorted(r["metric"] for r in dax(self.model_id, KNOWLEDGE_QUERIES["product_metric"])
+                         if r["product_key"] == key)
+        units = {_ROLLUP_COLUMN[m][1] if m in _ROLLUP_COLUMN else None for m in metrics}
+        if len(units) != 1 or None in units:
+            raise FabricError(f"{key!r} has no single governed volume (units {sorted(map(str, units))})")
+        value_key = f"{key}_{units.pop().lower()}"
+        rollup = dax(self.model_id, theme_query("rollups"))
+        return {t["set_key"]: sorted(({"field_id": int(r["field_id"]),
+                                       value_key: sum(float(r[_ROLLUP_COLUMN[m][0]] or 0) for m in metrics)}
+                                      for r in rollup), key=lambda r: r["field_id"])}, metrics
+
     # --- model ---------------------------------------------------------------------------------------
     def _respond(self, items: list[dict], previous: str | None) -> dict:
         body = {"model": MODEL, "instructions": SYSTEM_PROMPT, "input": items, "tools": _tools()}
@@ -144,6 +202,7 @@ class ProductionAgent:
         previous = None
         chosen: tuple[str, int | None, dict | None] | None = None   # (tool, field_id, rows or None if it failed)
         resolved: list[dict] = []
+        knowledge_metrics: list[str] = []
         narrative = ""
         for _ in range(MAX_TURNS):
             response = self._respond(items, previous)
@@ -168,6 +227,13 @@ class ProductionAgent:
                     except FabricError as exc:
                         result = {"field_id": None, "error": str(exc)}
                     resolved.append({"name": args.get("name"), **result})
+                elif name in KNOWLEDGE:
+                    try:
+                        result, metrics = self.run_knowledge(name, args)
+                        chosen = (name, None, result)
+                        knowledge_metrics = metrics
+                    except FabricError as exc:  # unknown product or a failed query: back to the model
+                        result = {"error": str(exc)}
                 elif name in THEMES:
                     try:
                         raw = args.get("field_id")
@@ -184,7 +250,7 @@ class ProductionAgent:
                 else:
                     result = {"error": f"unknown tool {name}"}
                 items.append({"type": "function_call_output", "call_id": call["call_id"], "output": json.dumps(result, default=str)})
-        return self._submission(chosen, resolved, narrative)
+        return self._submission(chosen, resolved, narrative, knowledge_metrics)
 
     # --- deterministic assembly ----------------------------------------------------------------------
     @staticmethod
@@ -193,30 +259,41 @@ class ProductionAgent:
             return None
         return int(round(float(v))) if as_int else float(v)
 
-    def _typed(self, rows: list[dict], id_key: str, value_keys: list[str], int_keys: list[str]) -> list[dict]:
-        """Graded rows: the id plus value_keys, typed; string ids (cause, operator) stay strings."""
-        id_is_int = id_key not in ("cause", "operator")
+    def _typed(self, rows: list[dict], id_key: str, value_keys: list[str], int_keys: list[str],
+               text_keys: list[str] = ()) -> list[dict]:
+        """Graded rows: the id plus value_keys, typed; string ids (cause, operator, asset and record ids)
+        and text_keys stay strings."""
+        id_is_int = id_key not in ("cause", "operator", "asset_id", "record_id")
         out = []
         for r in rows:
             row = {id_key: self._num(r.get(id_key), True) if id_is_int else r.get(id_key)}
             for vk in value_keys:
-                row[vk] = self._num(r.get(vk), vk in int_keys)
+                row[vk] = r.get(vk) if vk in text_keys else self._num(r.get(vk), vk in int_keys)
             out.append(row)
         return out
 
-    def _submission(self, chosen, resolved: list[dict], narrative: str) -> dict[str, Any]:
+    def _submission(self, chosen, resolved: list[dict], narrative: str,
+                    knowledge_metrics: list[str] = ()) -> dict[str, Any]:
         unresolved = [r for r in resolved if r.get("field_id") is None]
         # A named field that didn't resolve: ask rather than answer for the whole fleet (field_id 0 or
         # missing both mean "fleet").
         if chosen is None or (unresolved and not chosen[1]):
             return {
-                "question_id": THEMES[chosen[0]]["question_id"] if chosen else "unresolved",
+                "question_id": {**THEMES, **KNOWLEDGE}[chosen[0]]["question_id"] if chosen else "unresolved",
                 "answer": narrative or "Could not determine which governed analysis answers this question.",
                 "key_values": {}, "behavior": "clarification-requested",
                 "provenance": {"metrics": [], "dimensions": [], "filters": [], "entities": [
                     f"unresolved:{r['name']}" for r in unresolved]},
             }
         tool, field_id, result = chosen
+        if tool in KNOWLEDGE:
+            k = KNOWLEDGE[tool]
+            metrics = list(knowledge_metrics)
+            return {"question_id": k["question_id"],
+                    "answer": narrative or f"{len(result[k['set_key']])} rows returned for {k['question_id']}.",
+                    "key_values": result, "behavior": "answered",
+                    "provenance": {"metrics": metrics, "dimensions": [k["id_key"]], "filters": [],
+                                   "entities": ["Well", "Facility", "Field"]}}
         t = THEMES[tool]
         if result is None:
             return {
