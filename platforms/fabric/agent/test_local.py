@@ -51,7 +51,7 @@ knowledge = [g for g in score_submissions(submissions, dataset_dir, knowledge=Tr
              if g.question_id in knowledge_ids]
 for g in knowledge:
     print(f"  {g.summary()}")
-knowledge_ok = all(g.correct for g in knowledge)
+knowledge_ok = len(knowledge) == len(knowledge_ids) and all(g.correct for g in knowledge)  # none skipped
 print(f"asset knowledge: {sum(g.correct for g in knowledge)}/{len(knowledge)}")
 
 # Field-scoped question: resolution through the ontology, then the scoped DAX tool.
