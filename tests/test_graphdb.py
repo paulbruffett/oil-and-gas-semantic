@@ -62,17 +62,20 @@ def test_knowledge_answers_match_the_in_process_runtime(onto, remote):
     assert differ == []
 
 
-def test_graphdb_key_rule_needs_no_workaround(loaded, dataset_dir):
-    """owlrl's key rule merges every well (ADR 0042); GraphDB's links each well to its OSDU record only."""
-    n_wells = len(pq.read_table(canonical_table_paths(dataset_dir)["well"]))
-    to_records = graphdb.select(loaded["master"], f"""SELECT (COUNT(DISTINCT ?w) AS ?n) WHERE {{
-        ?w a oag:Well ; owl:sameAs ?r . FILTER(STRSTARTS(STR(?w), "{ID}well/")
-        && STRSTARTS(STR(?r), "https://example.org/oag/osdu-record/")) }}""")
-    between_wells = graphdb.select(loaded["master"], f"""SELECT (COUNT(*) AS ?n) WHERE {{
-        ?a owl:sameAs ?b . FILTER(?a != ?b && STRSTARTS(STR(?a), "{ID}well/")
-        && STRSTARTS(STR(?b), "{ID}well/")) }}""")
-    assert int(to_records[0]["n"]) == n_wells
-    assert int(between_wells[0]["n"]) == 0
+def test_every_asset_is_its_own_osdu_record_only(loaded, dataset_dir):
+    """The key rule, applied before upload (ADR 0051): each well (one-property key) and each facility
+    (two-property key) is owl:sameAs its own OSDU record, and no asset is the same as another asset.
+    GraphDB's own rule missed some facility links, differently on each load."""
+    tables = canonical_table_paths(dataset_dir)
+    for kind in ("well", "facility"):
+        n_assets = len(pq.read_table(tables[kind]))
+        linked = graphdb.select(loaded["master"], f"""SELECT (COUNT(DISTINCT ?a) AS ?n) WHERE {{
+            ?a owl:sameAs ?r . FILTER(STRSTARTS(STR(?a), "{ID}{kind}/")
+            && STRSTARTS(STR(?r), "https://example.org/oag/osdu-record/")) }}""")
+        assert int(linked[0]["n"]) == n_assets, kind
+    between_assets = graphdb.select(loaded["master"], f"""SELECT (COUNT(*) AS ?n) WHERE {{
+        ?a owl:sameAs ?b . FILTER(?a != ?b && STRSTARTS(STR(?a), "{ID}") && STRSTARTS(STR(?b), "{ID}")) }}""")
+    assert int(between_assets[0]["n"]) == 0
 
 
 @pytest.fixture(scope="module")
@@ -124,3 +127,41 @@ def test_hybrid_query_matches_the_governed_rollup(loaded, dataset_dir):
     want = {row["field_id"]: row["oil_curr"] for row in rollup.by_field}
     assert got.keys() == want.keys()
     assert all(got[f] == pytest.approx(want[f], rel=1e-9) for f in want)
+
+
+# --- the ontology agent over GraphDB (ADR 0051) ---------------------------------------------------
+
+
+def test_the_agent_over_graphdb_answers_to_gold(dataset_dir, remote):
+    """The ontology agent with GraphDB as its knowledge runtime: whichever metric or answer tool the
+    model picks, the graded answer matches gold, as it does in-process (the six + asset knowledge)."""
+    from test_ontology_agent import ScriptedModel
+
+    from oag_semantic.grading import score_submissions
+    from oag_semantic.ontology_agent import KNOWLEDGE_ANSWERS, THEMES, OntologyAgent
+
+    submissions = {}
+    for name in [*THEMES, *KNOWLEDGE_ANSWERS]:
+        args = {"product": "gross liquids"} if name == "product_volume_by_field" else {}
+        agent = OntologyAgent(dataset_dir, onto=remote, client=ScriptedModel([(name, args)], "Done."))
+        run = agent.ask(f"question for {name}")
+        submissions[run.submission["question_id"]] = run.submission
+    report = score_submissions(submissions, dataset_dir, knowledge=True)
+    assert report.n_graded == len(THEMES) + len(KNOWLEDGE_ANSWERS)
+    assert [g.summary() for g in report.grades if not g.correct] == []
+
+
+def test_free_sparql_over_graphdb_stays_on_the_master_graph(dataset_dir, onto, remote):
+    """Free SPARQL runs on GraphDB with the in-process answer, and the guards still refuse what could
+    reach the virtual facts (SERVICE <repository:...>) or other graphs (FROM)."""
+    from oag_semantic.ontology_agent import OntologyAgent, SparqlRejected
+
+    agent = OntologyAgent(dataset_dir, onto=remote, client=object())
+    local = OntologyAgent(dataset_dir, onto=onto, client=object())
+    query = "SELECT ?w WHERE { ?w a oag:Well } ORDER BY ?w"
+    assert agent.sparql_query(query) == local.sparql_query(query)
+    for rejected in (f"SELECT * WHERE {{ SERVICE <repository:{PREFIX}-facts> {{ ?s ?p ?o }} }}",
+                     "SELECT * FROM <http://www.ontotext.com/explicit> WHERE { ?s ?p ?o }",
+                     "INSERT DATA { <urn:a> <urn:b> <urn:c> }"):
+        with pytest.raises(SparqlRejected):
+            agent.sparql_query(rejected)

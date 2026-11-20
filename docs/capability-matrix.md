@@ -66,11 +66,11 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
 | Multi-level hierarchy | well → facility → field | roll up across levels | ◐ one level (well → field) | ● transitive `partOf` over well → facility → field | ◐ fixed joins; ◇ `part_of` closure view | ● recursive `KG_TRAVERSE`; ● `part_of` closure view, deployed and matches the ontology (ADR 0047) | ● `part_of` closure view, deployed and matches the ontology (ADR 0047); multi-hop over MCP not verified |
 | Inverse relationships | field has part well | ask from either end | ◐ coded both ways | ● `owl:inverseOf`, inferred | ◐ coded | ◐ coded | ? |
 | Class inheritance | Well, Facility and Field are Assets | "all assets in Volve" covers every subtype | ✗ | ● `rdfs:subClassOf`, OWL 2 RL | ◇ `asset` view over `entity` + `ontology_class` | ● `asset` view over `entity` + `ontology_class`, deployed and matches the ontology (ADR 0047) | ● `asset` view over `entity` + `ontology_class`, deployed and matches the ontology (ADR 0047) |
-| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (owlrl's key rule replaced, ADR 0042; GraphDB's is correct as is) | ◇ `same_as` view on the keys; needs the OSDU records staged | ● `same_as` view on the keys over the staged OSDU records, deployed and matches the ontology (ADR 0047) | ● `same_as` view on the keys over the staged OSDU records, deployed and matches the ontology (ADR 0047) |
+| Identity across systems | OSDU record id ≡ canonical id ≡ UWI | merge records from several sources | ✗ | ● `owl:hasKey` → inferred `owl:sameAs` with the OSDU records (the key rule is applied in code on both runtimes: owlrl's is wrong, ADR 0042, and GraphDB's misses some two-property-key links, ADR 0051) | ◇ `same_as` view on the keys; needs the OSDU records staged | ● `same_as` view on the keys over the staged OSDU records, deployed and matches the ontology (ADR 0047) | ● `same_as` view on the keys over the staged OSDU records, deployed and matches the ontology (ADR 0047) |
 | Derived classifications (rules) | below expected = efficiency < 90% over 7 days | flags | ● gold + compile | ● definition as data and a SHACL rule, both over governed metric values; dated flag records (ADR 0044). GraphDB doesn't run SHACL rules | ● SQL function | ● SQL function | ◐ natural-language rule |
 | Constraint validation | every well has exactly one field | catch bad data before answering | ● engineering tests | ● SHACL shapes, incl. a well's field = its facility's and no shared keys; pySHACL and GraphDB agree | ○ constraints, expectations | ○ data metric functions | ? |
 | Graph query language | SPARQL, GQL, SQL | how tools query the graph | ● Python API | ● SPARQL | ◐ SQL | ◐ recursive SQL | ◐ GQL graph stays empty via the API; `ask_ontology` takes natural language |
-| Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines, checked: in-process and GraphDB agree (ADR 0046) | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
+| Open standards, portable | W3C RDF / OWL / SKOS / SHACL | swap engines without rewriting | ◐ OSI YAML + LPG YAML | ● W3C, same files on two engines, checked: in-process and GraphDB agree, and the agent scores the same on both (ADRs 0046, 0051) | ✗ (○ OntoBricks add-on) | ✗ | ✗ TMDL ontology |
 
 ## 5. Agent layer
 
@@ -126,10 +126,11 @@ Cells marked ○ or ? are product knowledge, not tested results; treat them as l
   isn't the same as an agent being able to use it; generated knowledge plus a tool per question is
   enough for these, where the ontology agent reasons at query time and can also query freely.
 - **Portability holds where it was tested:** GraphDB gives the in-process answers on every knowledge
-  check, and the same validation results, SPARQL constraints included. It also gets the key rule
-  right without the workaround owlrl needs. The exception is SHACL rules (a W3C Note), which GraphDB
+  check, and the same validation results, SPARQL constraints included. Neither engine's key rule
+  can be relied on, so the links are applied in code before reasoning on both (ADRs 0042, 0051). The exception is SHACL rules (a W3C Note), which GraphDB
   doesn't run. Ontop serves the daily volumes live from DuckDB, so facts are queried in place
-  (ADR 0046).
+  (ADR 0046). The agent is portable too: run on GraphDB, with the same tools and prompt, it scores
+  6/6, 3/3 on asset knowledge and 5/5 on its reasoning checks, free SPARQL included (ADR 0051).
 - **What the platforms could bring to life** (slice 8): synonym and term tables they already have;
   inheritance as type tables with union views; the hierarchy as recursive SQL (done on Snowflake);
   validation as pipeline expectations (Databricks) or data metric functions (Snowflake); and generating

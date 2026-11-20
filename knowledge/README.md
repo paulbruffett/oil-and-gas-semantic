@@ -75,3 +75,7 @@ is the knowledge API over GraphDB; `validate` and `data_quality_findings` run th
 `oil_by_field` is a hybrid query. `tests/test_graphdb.py` checks it all against the in-process runtime
 and skips when GraphDB isn't running.
 
+The ontology agent runs on it too (ADR 0051): `uv run python -m oag_semantic.ontology_agent data/frozen
+--graphdb` loads the dataset into GraphDB and asks every question with GraphDB as the knowledge runtime
+(knowledge tools, answer tools and free SPARQL; the metric tools stay the governed compile).
+

@@ -329,7 +329,8 @@ def _apply_keys(g: Graph) -> None:
     owlrl's own prp-key (7.1.4, and its master branch) skips the last key property, so a one-property
     key such as (oag:uwi) makes every well the same as every other. This applies the rule correctly
     and removes the owl:hasKey triples so owlrl never applies its version (the TBox file keeps them,
-    for other engines). It reads asserted types and key values, which the mapping always asserts.
+    for other engines). GraphDB's load uses it too: its rule misses some two-property-key links (ADR
+    0051). It reads asserted types and key values, which the mapping always asserts.
     """
     for c, _, head in list(g.triples((None, OWL.hasKey, None))):
         props = list(Collection(g, head))
