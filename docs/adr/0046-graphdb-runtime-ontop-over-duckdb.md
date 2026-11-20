@@ -51,6 +51,9 @@ Two things surfaced while building:
   product resolution.
 - **GraphDB's key rule is correct.** Each well is `owl:sameAs` its OSDU record and no other well, with
   no workaround. The `_apply_keys` workaround is owlrl-specific.
+  - *Corrected by ADR 0051:* that held for the well's one-property key only. On the facility's
+    two-property key, GraphDB misses some links, differently on each load, so `graphdb.load` applies
+    `_apply_keys` too.
 - **SHACL agrees.** GraphDB runs SHACL-SPARQL constraints. It finds exactly pySHACL's results (shape,
   severity, focus, value) and exactly the findings gold, including the SPARQL-based flatline,
   unit-error and field-agreement shapes. It takes about 2 s, against about 10 s for pySHACL.

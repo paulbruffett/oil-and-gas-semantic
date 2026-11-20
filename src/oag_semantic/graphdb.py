@@ -4,8 +4,9 @@ The in-process runtime (``oag_semantic.ontology``: morph-kgc, owlrl, rdflib, pyS
 the same artifacts, and the engineering tests check they give the same answers:
 
 - **master graph**: the asserted graph (TBox, R2RML-mapped instances, SKOS vocabulary) is copied into
-  a GraphDB repository with its ``owl2-rl`` ruleset, which does the reasoning itself, key rule
-  included. :func:`master_graph` wraps the repository's SPARQL endpoint in the same
+  a GraphDB repository with its ``owl2-rl`` ruleset, which does the reasoning itself. The key rule is
+  applied before upload, as in-process (``_apply_keys``): GraphDB's misses some links on a
+  two-property key, differently on each load (ADR 0051). :func:`master_graph` wraps the repository's SPARQL endpoint in the same
   :class:`~oag_semantic.ontology.OntologyGraph`, so every knowledge question runs unchanged;
 - **SHACL**: ``shapes.ttl`` runs in GraphDB's SHACL engine (RDF4J) over the same data pySHACL checks,
   and the report goes through the same parser (:func:`validate`);
@@ -38,6 +39,7 @@ from oag_semantic.ontology import (
     VOLUMES_MAPPING_PATH,
     OntologyGraph,
     asserted_graph,
+    _apply_keys,
     _sql_path,
     create_views,
     map_volumes,
@@ -187,7 +189,9 @@ def load(dataset_dir: str | Path, prefix: str = "oag") -> dict[str, str]:
     _check_driver_matches()
     master, facts = f"{prefix}-master", f"{prefix}-facts"
     create_repository(master, ruleset="owl2-rl", disableSameAs="false")
-    upload(master, asserted_graph(dataset_dir))
+    asserted = asserted_graph(dataset_dir)
+    _apply_keys(asserted)  # GraphDB's own key rule is incomplete on two-property keys (ADR 0051)
+    upload(master, asserted)
     delete_repository(facts)  # drop Ontop's connection before the file is replaced
     export_duckdb(dataset_dir, DATA_DIR / f"{prefix}.duckdb")
     create_ontop_repository(facts, f"{CONTAINER_DATA_DIR}/{prefix}.duckdb", VOLUMES_MAPPING_PATH)

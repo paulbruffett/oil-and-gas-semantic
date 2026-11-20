@@ -507,9 +507,9 @@ def main(argv: list[str]) -> int:  # pragma: no cover -- needs a live model
     from oag_generator.questions import load_catalog
     from oag_semantic.grading import score_submissions
 
-    dataset_dir = Path(argv[0])
+    dataset_dir = Path(next(a for a in argv if not a.startswith("--")))
     onto = None
-    if "--graphdb" in argv[1:]:  # the same agent, its knowledge served by GraphDB (ADR 0051)
+    if "--graphdb" in argv:  # the same agent, its knowledge served by GraphDB (ADR 0051)
         from oag_semantic import graphdb
 
         onto = graphdb.master_graph(graphdb.load(dataset_dir)["master"])

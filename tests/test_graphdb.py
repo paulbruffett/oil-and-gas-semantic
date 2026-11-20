@@ -62,17 +62,20 @@ def test_knowledge_answers_match_the_in_process_runtime(onto, remote):
     assert differ == []
 
 
-def test_graphdb_key_rule_needs_no_workaround(loaded, dataset_dir):
-    """owlrl's key rule merges every well (ADR 0042); GraphDB's links each well to its OSDU record only."""
-    n_wells = len(pq.read_table(canonical_table_paths(dataset_dir)["well"]))
-    to_records = graphdb.select(loaded["master"], f"""SELECT (COUNT(DISTINCT ?w) AS ?n) WHERE {{
-        ?w a oag:Well ; owl:sameAs ?r . FILTER(STRSTARTS(STR(?w), "{ID}well/")
-        && STRSTARTS(STR(?r), "https://example.org/oag/osdu-record/")) }}""")
-    between_wells = graphdb.select(loaded["master"], f"""SELECT (COUNT(*) AS ?n) WHERE {{
-        ?a owl:sameAs ?b . FILTER(?a != ?b && STRSTARTS(STR(?a), "{ID}well/")
-        && STRSTARTS(STR(?b), "{ID}well/")) }}""")
-    assert int(to_records[0]["n"]) == n_wells
-    assert int(between_wells[0]["n"]) == 0
+def test_every_asset_is_its_own_osdu_record_only(loaded, dataset_dir):
+    """The key rule, applied before upload (ADR 0051): each well (one-property key) and each facility
+    (two-property key) is owl:sameAs its own OSDU record, and no asset is the same as another asset.
+    GraphDB's own rule missed some facility links, differently on each load."""
+    tables = canonical_table_paths(dataset_dir)
+    for kind in ("well", "facility"):
+        n_assets = len(pq.read_table(tables[kind]))
+        linked = graphdb.select(loaded["master"], f"""SELECT (COUNT(DISTINCT ?a) AS ?n) WHERE {{
+            ?a owl:sameAs ?r . FILTER(STRSTARTS(STR(?a), "{ID}{kind}/")
+            && STRSTARTS(STR(?r), "https://example.org/oag/osdu-record/")) }}""")
+        assert int(linked[0]["n"]) == n_assets, kind
+    between_assets = graphdb.select(loaded["master"], f"""SELECT (COUNT(*) AS ?n) WHERE {{
+        ?a owl:sameAs ?b . FILTER(?a != ?b && STRSTARTS(STR(?a), "{ID}") && STRSTARTS(STR(?b), "{ID}")) }}""")
+    assert int(between_assets[0]["n"]) == 0
 
 
 @pytest.fixture(scope="module")
