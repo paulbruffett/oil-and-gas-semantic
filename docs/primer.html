@@ -1,0 +1,476 @@
+<title>Oil and Gas Semantic Primer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  /* Layout: a sticky contents rail beside one reading column; each layer of the stack is a section,
+     colour-keyed to its tier. Same visual family as platforms/snowflake/docs/agentic-primer.html. */
+  :root{
+    --bg:#EDF2F4; --surface:#F7FAFB; --surface-2:#E1EAEE; --ink:#14232B; --ink-soft:#42565F; --ink-faint:#768A93;
+    --border:#D2DEE3; --border-strong:#B9CBD2;
+    --accent:#0F7F8C; --accent-soft:#2BA3B0; --accent-tint:#D6ECEE;
+    --good:#2F8A5F; --good-tint:#DCEFE4; --warn:#B07A16; --warn-tint:#F4E9D2; --crit:#B4492F;
+    --t-data:#6B7785; --t-metric:#3E6FB2; --t-onto:#7A5BC4; --t-rule:#A8622A; --t-plat:#0F7F8C; --t-agent:#B0436E;
+    --code-bg:#0D171C; --code-ink:#D9E5EA; --code-faint:#6E848D; --code-line:#1C2B32;
+    --shadow:0 1px 2px rgba(20,40,50,.06), 0 8px 26px -18px rgba(20,40,50,.32);
+    --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --display:"Space Grotesk","Inter",-apple-system,"Segoe UI",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --maxprose:68ch;
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+    --bg:#0B1418; --surface:#101C21; --surface-2:#16252B; --ink:#E4EEF1; --ink-soft:#A3B6BD; --ink-faint:#6C8189;
+    --border:#1F3038; --border-strong:#31464F;
+    --accent:#3CC0CC; --accent-soft:#62D1DB; --accent-tint:#10292D;
+    --good:#56B184; --good-tint:#12291E; --warn:#D3A043; --warn-tint:#2A2212; --crit:#D9715A;
+    --t-data:#8D98A4; --t-metric:#6C97D6; --t-onto:#A68CE8; --t-rule:#D08A4E; --t-plat:#3CC0CC; --t-agent:#DB6E98;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 40px -22px rgba(0,0,0,.75); color-scheme:dark }}
+  :root[data-theme="dark"]{
+    --bg:#0B1418; --surface:#101C21; --surface-2:#16252B; --ink:#E4EEF1; --ink-soft:#A3B6BD; --ink-faint:#6C8189;
+    --border:#1F3038; --border-strong:#31464F;
+    --accent:#3CC0CC; --accent-soft:#62D1DB; --accent-tint:#10292D;
+    --good:#56B184; --good-tint:#12291E; --warn:#D3A043; --warn-tint:#2A2212; --crit:#D9715A;
+    --t-data:#8D98A4; --t-metric:#6C97D6; --t-onto:#A68CE8; --t-rule:#D08A4E; --t-plat:#3CC0CC; --t-agent:#DB6E98;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 14px 40px -22px rgba(0,0,0,.75); color-scheme:dark }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.62;
+       -webkit-font-smoothing:antialiased}
+  a{color:var(--accent)}
+  a:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+
+  .shell{display:grid; grid-template-columns:270px minmax(0,1fr); max-width:1340px; margin:0 auto}
+  .rail{position:sticky; top:env(safe-area-inset-top,0px); align-self:start; height:100vh; overflow-y:auto;
+        padding:30px 18px 40px max(28px, env(safe-area-inset-left,0px)); border-right:1px solid var(--border)}
+  .brand{font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.02em; display:flex; gap:8px; align-items:center}
+  .brand::before{content:""; width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 3px var(--accent-tint)}
+  .rail .sub{font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); margin:4px 0 22px 17px}
+  nav.toc{display:flex; flex-direction:column; gap:1px}
+  .toc a{text-decoration:none; font-size:13.5px; color:var(--ink-soft); padding:5px 8px; border-radius:6px; display:flex; gap:9px; align-items:baseline}
+  .toc a:hover{background:var(--surface-2); color:var(--ink)}
+  .toc a .n{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--tc, var(--ink-faint)); width:16px; flex:none}
+  .rail .meta{margin-top:24px; padding-top:16px; border-top:1px solid var(--border); font-family:var(--mono); font-size:11px; color:var(--ink-faint); line-height:1.9}
+
+  main{padding-inline:max(16px, env(safe-area-inset-left,0px)) max(16px, env(safe-area-inset-right,0px)); padding-block:0 110px; min-width:0}
+  .col{max-width:920px; margin:0 auto; padding-inline:clamp(0px,3vw,40px)}
+  section{padding-top:58px; scroll-margin-top:16px}
+  .prose{max-width:var(--maxprose)}
+  p{margin:0 0 14px}
+  h1,h2,h3{font-family:var(--display); text-wrap:balance; line-height:1.14; letter-spacing:-.015em}
+  h2{font-size:clamp(24px,3vw,31px); margin:0 0 14px; font-weight:650}
+  h3{font-size:18.5px; margin:28px 0 10px; font-weight:620}
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:var(--tc, var(--accent));
+           margin:0 0 10px; display:flex; align-items:center; gap:10px}
+  .eyebrow::before{content:""; width:22px; height:2px; background:currentColor}
+  .lead{font-size:19px; line-height:1.55; color:var(--ink-soft); max-width:62ch}
+  strong{font-weight:650}
+  code{font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:.1em .36em; border-radius:5px}
+
+  .hero{padding-top:54px}
+  .hero h1{font-size:clamp(32px,5.2vw,54px); font-weight:680; margin:8px 0 18px; max-width:20ch}
+  .kicker{font-family:var(--mono); font-size:12px; color:var(--ink-faint)}
+
+  .stats{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; background:var(--border); border:1px solid var(--border);
+         border-radius:12px; overflow:hidden; margin:30px 0 6px}
+  @media(max-width:700px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .stat{background:var(--surface); padding:14px 15px}
+  .stat .v{font-family:var(--mono); font-size:22px; font-weight:700; font-variant-numeric:tabular-nums}
+  .stat .l{font-size:12px; color:var(--ink-faint); line-height:1.4}
+
+  /* the stack diagram */
+  .stack{display:flex; flex-direction:column; gap:6px; margin:24px 0 8px; max-width:780px}
+  .tier{display:grid; grid-template-columns:150px minmax(0,1fr); gap:14px; align-items:center; background:var(--surface);
+        border:1px solid var(--border); border-left:4px solid var(--tc); border-radius:8px; padding:10px 14px; text-decoration:none; color:inherit}
+  .tier:hover{border-color:var(--tc)}
+  .tier b{font-family:var(--display); font-size:15px; font-weight:620; color:var(--tc)}
+  .tier span{font-size:13.5px; color:var(--ink-soft)}
+  @media(max-width:560px){.tier{grid-template-columns:1fr; gap:2px}}
+
+  .howto{margin-top:26px; border-left:3px solid var(--accent); background:var(--accent-tint); padding:13px 18px; border-radius:0 10px 10px 0; max-width:var(--maxprose)}
+  .howto b{font-family:var(--mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent)}
+  .howto p{font-size:14px; margin:6px 0 0; color:var(--ink-soft)}
+
+  figure.code{margin:16px 0; border-radius:10px; overflow:hidden; background:var(--code-bg); border:1px solid var(--code-line); box-shadow:var(--shadow)}
+  figure.code figcaption{display:flex; gap:10px; padding:8px 14px; border-bottom:1px solid var(--code-line); font-family:var(--mono); font-size:11.5px; color:var(--code-faint)}
+  figure.code figcaption b{color:var(--accent-soft); font-weight:600}
+  figure.code figcaption .lang{margin-left:auto; font-size:10px; letter-spacing:.1em; text-transform:uppercase}
+  figure.code .scroll{overflow-x:auto}
+  pre{margin:0; padding:13px 16px; font-family:var(--mono); font-size:12.5px; line-height:1.62; color:var(--code-ink); white-space:pre}
+  pre .c{color:var(--code-faint); font-style:italic}
+  pre .k{color:#62C9D4}
+  pre .s{color:#8CC29A}
+  pre .o{color:#E0B26A}
+
+  .tbl{overflow-x:auto; margin:14px 0 18px; border:1px solid var(--border); border-radius:10px; background:var(--surface)}
+  table{border-collapse:collapse; width:100%; font-size:13.5px}
+  th,td{padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); vertical-align:top}
+  th{font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); font-weight:600; background:var(--surface-2)}
+  tr:last-child td{border-bottom:0}
+  td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap}
+  td.from{color:var(--ink-faint)} td.to{font-weight:700; color:var(--t-onto)}
+
+  .chip{display:inline-block; font-family:var(--mono); font-size:11px; font-weight:600; padding:1px 8px; border-radius:20px; white-space:nowrap}
+  .chip.ok{background:var(--good-tint); color:var(--good)}
+  .chip.part{background:var(--warn-tint); color:var(--warn)}
+  .chip.no{background:var(--surface-2); color:var(--ink-faint)}
+
+  .finding{border:1px solid var(--border); border-left:3px solid var(--tc, var(--accent)); background:var(--surface); border-radius:0 10px 10px 0; padding:12px 16px; margin:16px 0; max-width:var(--maxprose)}
+  .finding b{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--tc, var(--accent))}
+  .finding p{margin:5px 0 0; font-size:14.5px; color:var(--ink-soft)}
+
+  .grid2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin:14px 0}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .grid2 > *{min-width:0}
+  .grid2 figure.code{margin:0}
+
+  ul.tight{margin:0 0 14px; padding-left:20px} ul.tight li{margin:3px 0}
+
+  @media(max-width:900px){
+    .shell{grid-template-columns:1fr}
+    .rail{position:static; height:auto; border-right:0; border-bottom:1px solid var(--border); padding:18px max(16px, env(safe-area-inset-right,0px)) 16px max(16px, env(safe-area-inset-left,0px))}
+    nav.toc{flex-direction:row; flex-wrap:wrap; gap:4px}
+    .rail .meta{display:none}
+    .col{padding-inline:0}
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
+
+<div class="shell">
+<aside class="rail">
+  <div class="brand">oil-and-gas-semantic</div>
+  <div class="sub">Primer</div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#stack"><span class="n">·</span>The stack</a>
+    <a href="#tables" style="--tc:var(--t-data)"><span class="n">1</span>Canonical tables</a>
+    <a href="#metrics" style="--tc:var(--t-metric)"><span class="n">2</span>Governed metrics</a>
+    <a href="#ontology" style="--tc:var(--t-onto)"><span class="n">3</span>The ontology</a>
+    <a href="#reasoning" style="--tc:var(--t-onto)"><span class="n">3b</span>Reasoning in action</a>
+    <a href="#rules" style="--tc:var(--t-rule)"><span class="n">4</span>Rules</a>
+    <a href="#constraints" style="--tc:var(--t-rule)"><span class="n">5</span>Constraints</a>
+    <a href="#graphdb" style="--tc:var(--t-onto)"><span class="n">6</span>A second engine</a>
+    <a href="#generated" style="--tc:var(--t-plat)"><span class="n">7</span>Knowledge on platforms</a>
+    <a href="#models" style="--tc:var(--t-plat)"><span class="n">8</span>Platform semantic models</a>
+    <a href="#agents" style="--tc:var(--t-agent)"><span class="n">9</span>The agents</a>
+    <a href="#shows"><span class="n">·</span>What it shows</a>
+    <a href="#run"><span class="n">·</span>Run it</a>
+  </nav>
+  <div class="meta">dataset <code>12a110eecfe2</code><br>notebook <code>notebooks/primer.ipynb</code><br>decisions <code>docs/adr/</code></div>
+</aside>
+
+<main><div class="col">
+
+<header class="hero">
+  <p class="eyebrow">Primer · what's built, and what it shows</p>
+  <h1>Production data, given meaning an agent can use</h1>
+  <p class="lead">A reference build for oil and gas production surveillance: OSDU canonical tables, one governed
+  definition of each KPI, a standards-based ontology that reasons over the asset hierarchy, rules and
+  constraints written as data, and agents on Snowflake, Fabric and Claude that answer from all of it.
+  Every answer is graded against gold the data generator wrote.</p>
+  <p class="kicker">Each section below has a runnable twin in <code>notebooks/primer.ipynb</code>, executed live.</p>
+  <div class="stats">
+    <div class="stat"><div class="v">9</div><div class="l">OSDU canonical tables</div></div>
+    <div class="stat"><div class="v">6</div><div class="l">governed use cases, each graded</div></div>
+    <div class="stat"><div class="v">469 → 1,739</div><div class="l">triples, asserted → after reasoning</div></div>
+    <div class="stat"><div class="v">2</div><div class="l">reasoning engines that agree</div></div>
+    <div class="stat"><div class="v">2</div><div class="l">platforms deployed (Snowflake, Fabric)</div></div>
+    <div class="stat"><div class="v">3</div><div class="l">agents, asked live</div></div>
+    <div class="stat"><div class="v">6 · 6 · 4</div><div class="l">use cases right: ontology, Fabric, Snowflake agents</div></div>
+    <div class="stat"><div class="v">3 · 3 · 3</div><div class="l">asset-knowledge questions right, same order</div></div>
+  </div>
+</header>
+
+<section id="stack">
+  <p class="eyebrow">The stack</p>
+  <h2>Six layers, each with one job</h2>
+  <p class="prose">A question falls through the stack from the agent down. The agent never computes a number: it
+  picks a governed tool. Meaning (what a field is, what "below expected" means, which OSDU record is
+  which well) comes from the knowledge layer. Numbers come only from the metrics layer, over the
+  canonical tables.</p>
+  <div class="stack">
+    <a class="tier" href="#agents" style="--tc:var(--t-agent)"><b>Agents</b><span>Claude, Snowflake Cortex Agent, Fabric custom agent: pick governed tools, build graded answers in code</span></a>
+    <a class="tier" href="#generated" style="--tc:var(--t-plat)"><b>Platforms</b><span>Snowflake and Fabric: semantic models plus the ontology's knowledge, generated as views</span></a>
+    <a class="tier" href="#rules" style="--tc:var(--t-rule)"><b>Rules &amp; constraints</b><span>business terms as dated flags (SHACL rules); data-quality shapes (SHACL)</span></a>
+    <a class="tier" href="#ontology" style="--tc:var(--t-onto)"><b>Ontology</b><span>OWL 2 RL classes, keys and properties; SKOS vocabulary; R2RML mapping; reasoning in-process or on GraphDB</span></a>
+    <a class="tier" href="#metrics" style="--tc:var(--t-metric)"><b>Governed metrics</b><span>OSI-style YAML: each KPI defined once, compiled to SQL</span></a>
+    <a class="tier" href="#tables" style="--tc:var(--t-data)"><b>Canonical tables</b><span>OSDU Production Data Model, written deterministically with gold answers</span></a>
+  </div>
+</section>
+
+<section id="tables" style="--tc:var(--t-data)">
+  <p class="eyebrow">1 · Canonical tables</p>
+  <h2>One system of record, and the answers it should give</h2>
+  <p class="prose">The generator writes nine OSDU Production Data Model tables as Parquet: three fields (Volve,
+  Sleipner, Gullfaks), 18 wells, 6 facilities, three operators and over a year of daily volumes. It is
+  deterministic, so the same config gives the same bytes. Alongside the tables it writes
+  <strong>gold</strong>: the answer to every catalog question, from its own knowledge of what it generated
+  (for example, which wells it made under-perform). Every platform loads the same files.</p>
+  <div class="tbl"><table>
+    <tr><th>table</th><th>rows</th><th>holds</th></tr>
+    <tr><td><code>WELL_VOL_DAILY</code></td><td class="num">8,208</td><td>each well's reported oil, gas, water and hours on, per day</td></tr>
+    <tr><td><code>PRODUCT_VOLUME_SUMMARY</code></td><td class="num">8,208</td><td>the forecast: expected volumes from a decline curve</td></tr>
+    <tr><td><code>DOWN_TIME_EVENT</code>, <code>WELL_TEST</code></td><td class="num">282 · 251</td><td>downtime with causes; periodic well tests</td></tr>
+    <tr><td><code>WELL</code>, <code>FACILITY</code>, <code>FIELD</code></td><td class="num">18 · 6 · 3</td><td>master data: UWI, facility, field, operator. Facilities are keyed by <code>(FACILITY_ID, FACILITY_TYPE)</code></td></tr>
+    <tr><td><code>REPORTING_ENTITY</code>, <code>RPEN_ALLOCATION_FACTOR</code></td><td class="num">21 · 18</td><td>allocation from field to well</td></tr>
+  </table></div>
+</section>
+
+<section id="metrics" style="--tc:var(--t-metric)">
+  <p class="eyebrow">2 · Governed metrics</p>
+  <h2>Each KPI is defined once</h2>
+  <p class="prose">Metrics are YAML over the canonical tables: simple measures, ratios and derived metrics. The
+  reference compile turns them into SQL on DuckDB; each platform translates the same definitions into its
+  own semantic model. <em>Production efficiency</em> is a ratio of two governed metrics, and "below
+  expected" will be defined in terms of it.</p>
+  <figure class="code"><figcaption><b>semantic/metrics.yaml</b><span class="lang">yaml</span></figcaption><div class="scroll"><pre>metric:
+  name: production_efficiency
+  description: actual oil / expected oil; the surveillance signal
+  type: ratio
+  type_params:
+    numerator:   { name: actual_oil }     <span class="c"># simple: Σ measured oil</span>
+    denominator: { name: expected_oil }   <span class="c"># simple: Σ forecast oil</span></pre></div></figure>
+  <p class="prose">The hero question, <em>which wells produced below expected oil this week, and by how much?</em>,
+  compiled from those metrics over 25–31 March 2025: 12 wells flagged, <strong>equal to gold</strong>. Six
+  use cases are built this way: surveillance, deferment by cause, 12-month decline, well-test anomalies, a
+  watchlist, and the roll-up by field and operator.</p>
+</section>
+
+<section id="ontology" style="--tc:var(--t-onto)">
+  <p class="eyebrow">3 · The ontology</p>
+  <h2>Meaning the platforms don't carry</h2>
+  <p class="prose">The knowledge layer uses W3C standards, so it isn't tied to one engine: RDF, OWL 2 RL, SKOS,
+  R2RML and SHACL. It is four files plus a vocabulary.</p>
+  <div class="tbl"><table>
+    <tr><th>file</th><th>what it holds</th></tr>
+    <tr><td><code>oag.ttl</code></td><td>the schema: <code>Well</code>, <code>Facility</code> and <code>Field</code> are subclasses of <code>Asset</code>; <code>partOf</code> is transitive, with <code>inField</code> and <code>atFacility</code> beneath it; inverses (<code>hasPart</code>, <code>operates</code>); <strong>keys</strong>; each class aligned to its OSDU kind</td></tr>
+    <tr><td><code>mapping.r2rml.ttl</code></td><td>how canonical rows become instances, so the graph is built from the tables</td></tr>
+    <tr><td><code>vocabulary.yaml</code> → SKOS</td><td>field synonyms; business terms (metric, comparison, threshold); the product hierarchy</td></tr>
+    <tr><td><code>rules.ttl</code>, <code>shapes.ttl</code></td><td>SHACL rules (business terms) and SHACL constraints (data quality)</td></tr>
+  </table></div>
+  <figure class="code"><figcaption><b>knowledge/ontology/oag.ttl</b><span class="lang">turtle</span></figcaption><div class="scroll"><pre>oag:Well a owl:Class ;
+    rdfs:subClassOf oag:Asset ;
+    oag:osduKind "osdu:wks:master-data--Well:1.5.0" ;
+    owl:hasKey ( oag:uwi ) .                         <span class="c"># same UWI ⇒ same well</span>
+
+oag:Facility a owl:Class ;
+    rdfs:subClassOf oag:Asset ;
+    owl:hasKey ( oag:facilityId oag:facilityType ) . <span class="c"># the OSDU PDM key</span>
+
+oag:partOf  a owl:ObjectProperty, owl:TransitiveProperty .
+oag:inField rdfs:subPropertyOf oag:partOf .
+oag:hasPart owl:inverseOf oag:partOf .</pre></div></figure>
+  <p class="prose">After mapping, well 1 has only what its row says: type <code>Well</code>, its UWI, a link to
+  facility 1 and to field 1, and operator Equinor. Nothing says it's an asset, that it's part of the
+  field through its facility, or which OSDU record it is. Reasoning adds those.</p>
+</section>
+
+<section id="reasoning" style="--tc:var(--t-onto)">
+  <p class="eyebrow">3b · Reasoning in action</p>
+  <h2>Facts the graph derives, that no table states</h2>
+  <p class="prose">The OWL 2 RL closure grows the graph from 469 asserted triples to 1,739. Each row below counts
+  facts that are <strong>absent from the asserted graph and present after reasoning</strong>:</p>
+  <div class="tbl"><table>
+    <tr><th>inference</th><th>OWL feature</th><th>asserted</th><th>inferred</th></tr>
+    <tr><td>things that are an <code>Asset</code></td><td>subclass inheritance</td><td class="num from">0</td><td class="num to">27</td></tr>
+    <tr><td>well → field via <code>partOf</code></td><td>sub-property + transitivity, through the facility</td><td class="num from">0</td><td class="num to">18</td></tr>
+    <tr><td><code>hasPart</code> links</td><td>inverse property</td><td class="num from">0</td><td class="num to">120</td></tr>
+    <tr><td><code>operates</code> links</td><td>inverse property</td><td class="num from">0</td><td class="num to">48</td></tr>
+    <tr><td>canonical asset ≡ its OSDU record</td><td><code>owl:hasKey</code> → <code>owl:sameAs</code></td><td class="num from">0</td><td class="num to">24</td></tr>
+  </table></div>
+  <p class="prose">The knowledge API asks those derived facts directly, and the vocabulary maps business language
+  onto governed metrics:</p>
+  <figure class="code"><figcaption><b>oag_semantic.ontology</b> · OntologyGraph<span class="lang">python</span></figcaption><div class="scroll"><pre>onto = load_ontology(<span class="s">"data/frozen"</span>)
+onto.resolve_field(<span class="s">"the volve"</span>)          <span class="o">→ 1</span>                <span class="c"># SKOS synonym, any case</span>
+onto.assets_in_field(1)                <span class="o">→ facility/1, facility/2, well/1 … well/6</span>
+onto.osdu_record_ids(well_1)           <span class="o">→ ['oag:WELL:1']</span>   <span class="c"># from the key</span>
+onto.resolve_product(<span class="s">"total liquids"</span>)  <span class="o">→ ['actual_oil', 'actual_water']</span>  <span class="c"># skos:broader</span>
+onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→ {metric: production_efficiency,
+                                          comparison: less_than,
+                                          threshold_ref: surveillance_flag_threshold}</span></pre></div></figure>
+  <div class="finding" style="--tc:var(--crit)"><b>Finding · key rules</b><p>Neither engine's built-in key rule
+  could be relied on. owlrl's makes every well the same as every other (ADR 0042); GraphDB's misses some
+  facility links on the two-property key, differently on each load (ADR 0051). The key rule is applied in
+  code before reasoning, on both engines.</p></div>
+</section>
+
+<section id="rules" style="--tc:var(--t-rule)">
+  <p class="eyebrow">4 · Rules</p>
+  <h2>"Below expected", as data and as a rule</h2>
+  <p class="prose">A business term holds for a well <em>over a period</em>, so it's recorded as a dated flag, never
+  as class membership (ADR 0041). The numbers come from the governed metrics; the graph only compares
+  them. The term runs two ways, and both must equal gold:</p>
+  <ul class="tight prose">
+    <li><strong>Definition as data</strong>: read the term's SKOS definition (metric, comparison, threshold) from the graph, and apply it in code.</li>
+    <li><strong>SHACL rule</strong>: a <code>sh:SPARQLRule</code> constructs <code>oag:Flag</code> records over per-well period records.</li>
+  </ul>
+  <figure class="code"><figcaption><b>knowledge/ontology/rules.ttl</b> · BelowExpectedRule<span class="lang">sparql</span></figcaption><div class="scroll"><pre><span class="k">CONSTRUCT</span> { ?flag a oag:Flag ; oag:ofTerm term:below_expected ; oag:ofWell ?well ;
+                   oag:periodStart ?start ; oag:periodEnd ?end . }
+<span class="k">WHERE</span> {
+  $this oag:ofWell ?well ; oag:actualOil ?actual ; oag:expectedOil ?expected ;
+        oag:periodStart ?start ; oag:periodEnd ?end .
+  term:below_expected oag:thresholdRef ?ref .                    <span class="c"># threshold read from data</span>
+  ?p a oag:Parameter ; oag:parameterName ?ref ; oag:value ?threshold .
+  <span class="k">FILTER</span>(?actual &lt; ?threshold * ?expected)                        <span class="c"># compared as gold compares</span>
+}</pre></div></figure>
+  <p class="prose">Result: wells 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13 and 17, by definition, by rule and in gold.
+  <span class="chip ok">agree</span> Each flag is a record such as
+  <code>flag/below_expected/well/6/2025-03-25/2025-03-31</code>, efficiency 0.319.</p>
+</section>
+
+<section id="constraints" style="--tc:var(--t-rule)">
+  <p class="eyebrow">5 · Constraints</p>
+  <h2>SHACL catches bad data before it's answered</h2>
+  <p class="prose">Shapes state what must be true: every well in exactly one field, a well's field equal to its
+  facility's, no shared keys, and SPARQL checks over the daily records. The generator can plant faults and
+  record them as gold, so the shapes are graded too. On a dataset with planted faults, the shapes find
+  <strong>exactly the gold findings</strong>:</p>
+  <div class="tbl"><table>
+    <tr><th>shape</th><th>severity</th><th>catches</th></tr>
+    <tr><td><code>DuplicateRecordShape</code></td><td>Info</td><td>a well-day with two records of the same method</td></tr>
+    <tr><td><code>LateCorrectionShape</code></td><td>Info</td><td>a restated (Corrected) record beside the original</td></tr>
+    <tr><td><code>FlatlineShape</code></td><td>Warning</td><td>a meter reporting the same value day after day</td></tr>
+    <tr><td><code>UnitErrorShape</code></td><td>Warning</td><td>a volume off by a unit factor</td></tr>
+    <tr><td><code>WellFieldMatchesFacilityShape</code></td><td>Violation</td><td>a well in a different field from its facility</td></tr>
+  </table></div>
+</section>
+
+<section id="graphdb" style="--tc:var(--t-onto)">
+  <p class="eyebrow">6 · A second engine</p>
+  <h2>GraphDB, with the daily volumes served in place</h2>
+  <p class="prose">The same files run on GraphDB 10.8: its OWL 2 RL ruleset does the reasoning, its SHACL engine
+  runs the shapes, and an <strong>Ontop</strong> repository serves the daily volumes live from DuckDB through
+  an R2RML mapping, so they are never copied into the graph. The knowledge API wraps GraphDB's SPARQL
+  endpoint, so every question runs unchanged and gets the in-process answer.</p>
+  <figure class="code"><figcaption><b>oag_semantic.graphdb</b> · oil_by_field<span class="lang">sparql</span></figcaption><div class="scroll"><pre><span class="k">SELECT</span> ?fid (<span class="k">SUM</span>(?oil) <span class="k">AS</span> ?total) <span class="k">WHERE</span> {
+  ?f a oag:Field ; oag:fieldId ?fid ; oag:hasPart ?w . ?w a oag:Well .  <span class="c"># reasoned master graph</span>
+  <span class="k">SERVICE</span> &lt;repository:oag-facts&gt; {                                      <span class="c"># Ontop over DuckDB</span>
+    ?record oag:ofWell ?w ; oag:volumeDate ?day ; oag:oilVolume ?oil .
+    <span class="k">FILTER</span>(?day &gt;= <span class="s">"2025-03-01"</span>^^xsd:date &amp;&amp; ?day &lt;= <span class="s">"2025-03-31"</span>^^xsd:date)
+  }
+} <span class="k">GROUP BY</span> ?fid</pre></div></figure>
+  <p class="prose">Oil by field this month, hybrid query against the governed roll-up: Gullfaks 1,538,397 bbl,
+  Sleipner 1,057,821, Volve 326,809. <span class="chip ok">equal</span> The exception to portability is
+  SHACL rules (a W3C Note), which GraphDB doesn't run.</p>
+</section>
+
+<section id="generated" style="--tc:var(--t-plat)">
+  <p class="eyebrow">7 · Knowledge on the platforms</p>
+  <h2>The ontology's answers, generated as views</h2>
+  <p class="prose">Snowflake, Fabric and Databricks have no OWL reasoner. So the ontology's knowledge is
+  <strong>generated</strong> for them, from the same files: views for the class hierarchy
+  (<code>entity</code>, <code>asset</code>), the part-of closure (<code>part_of</code>), identity on the keys
+  (<code>same_as</code>), and tables for synonyms, terms and products. One generator, three SQL dialects.
+  Each deployed platform's views are then checked live against the in-process ontology.</p>
+  <figure class="code"><figcaption><b>platforms/snowflake/sql/11_ontology_knowledge.sql</b> · generated<span class="lang">sql</span></figcaption><div class="scroll"><pre><span class="c">-- oag:partOf is transitive: the closure, as joins up to the longest chain the mapping allows.</span>
+<span class="k">CREATE OR REPLACE VIEW</span> OAG_FABLE.KNOWLEDGE.part_of <span class="k">AS</span>
+<span class="k">SELECT DISTINCT</span> part, whole <span class="k">FROM</span> (
+  <span class="k">SELECT</span> e1.part, e1.whole <span class="k">FROM</span> KNOWLEDGE.part_of_edge e1
+  <span class="k">UNION ALL</span>
+  <span class="k">SELECT</span> e1.part, e2.whole <span class="k">FROM</span> KNOWLEDGE.part_of_edge e1
+    <span class="k">JOIN</span> KNOWLEDGE.part_of_edge e2 <span class="k">ON</span> e1.whole = e2.part
+) chains;</pre></div></figure>
+  <div class="tbl"><table>
+    <tr><th>platform</th><th>generated knowledge</th><th>checked against the ontology</th></tr>
+    <tr><td>Snowflake</td><td>views in <code>OAG_FABLE.KNOWLEDGE</code></td><td><span class="chip ok">no differences</span></td></tr>
+    <tr><td>Fabric</td><td>views in the Warehouse <code>knowledge</code> schema, copied into four <code>semantic.*</code> tables for the Direct Lake model</td><td><span class="chip ok">no differences</span></td></tr>
+    <tr><td>Databricks</td><td>written (<code>platforms/databricks/sql</code>)</td><td><span class="chip no">not deployed</span></td></tr>
+  </table></div>
+</section>
+
+<section id="models" style="--tc:var(--t-plat)">
+  <p class="eyebrow">8 · Platform semantic models</p>
+  <h2>The same metrics, in each platform's own model</h2>
+  <div class="grid2">
+    <figure class="code"><figcaption><b>Snowflake</b> · Semantic View<span class="lang">sql</span></figcaption><div class="scroll"><pre><span class="k">SELECT</span> * <span class="k">FROM SEMANTIC_VIEW</span>(
+  OAG_FABLE.SEMANTIC.SURVEILLANCE
+  <span class="k">DIMENSIONS</span> surv.well_id
+  <span class="k">METRICS</span> surv.actual_oil, surv.expected_oil,
+          surv.production_efficiency
+  <span class="k">WHERE</span> surv.volume_date <span class="k">BETWEEN</span>
+        <span class="s">'2025-03-25'</span> <span class="k">AND</span> <span class="s">'2025-03-31'</span>)
+<span class="k">WHERE</span> production_efficiency &lt; 0.9</pre></div></figure>
+    <figure class="code"><figcaption><b>Fabric</b> · Direct Lake model<span class="lang">dax</span></figcaption><div class="scroll"><pre><span class="k">EVALUATE</span>
+<span class="k">FILTER</span>(
+  <span class="k">ADDCOLUMNS</span>(<span class="k">VALUES</span>(well[well_id]),
+    <span class="s">"expected_oil_bbl"</span>, [Surveillance Expected Oil],
+    <span class="s">"actual_oil_bbl"</span>,   [Surveillance Actual Oil],
+    <span class="s">"efficiency"</span>,       [Surveillance Efficiency],
+    <span class="s">"flag"</span>,             [Is Below Expected]),
+  [flag] = 1)</pre></div></figure>
+  </div>
+  <p class="prose">Hero question through each: Snowflake Semantic View flags the 12 gold wells <span class="chip ok">= gold</span>; Fabric DAX flags the same 12 <span class="chip ok">= gold</span>.
+  Fabric also has its own <strong>Fabric IQ ontology</strong> item (entities, relationships, rules), queried
+  over MCP; its custom agent uses it to resolve names (<code>"the volve"</code> → field 1, Volve).</p>
+</section>
+
+<section id="agents" style="--tc:var(--t-agent)">
+  <p class="eyebrow">9 · The agents</p>
+  <h2>Three agents, the same questions, graded against gold</h2>
+  <p class="prose">Each agent answers through <strong>governed tools</strong>. The model chooses the tool; the
+  graded rows are built in code from the tool's result, never from the model's prose. So a wrong number
+  can only come from a wrong tool choice, which the grading catches.</p>
+  <div class="tbl"><table>
+    <tr><th>agent</th><th>model</th><th>knowledge it uses</th><th class="num">use cases</th><th class="num">asset knowledge</th></tr>
+    <tr><td>Ontology agent</td><td>Claude Sonnet 5.5</td><td>the OWL graph, reasoned at query time, plus read-only SPARQL</td><td class="num">6/6</td><td class="num">3/3</td></tr>
+    <tr><td>Fabric custom agent</td><td>gpt-6-luna on Foundry</td><td>Direct Lake model (copied knowledge tables) and the Fabric IQ ontology</td><td class="num">6/6</td><td class="num">3/3</td></tr>
+    <tr><td>Snowflake Cortex Agent</td><td>Cortex, over REST <code>:run</code></td><td>generated <code>KNOWLEDGE</code> views, through owner's-rights tools</td><td class="num">4/6</td><td class="num">3/3</td></tr>
+  </table></div>
+  <div class="finding" style="--tc:var(--warn)"><b>Finding · Snowflake 4/6</b><p>Asked in the catalog's own
+  words, the Cortex Agent misses two. The decline question names "Field X": the agent tried to resolve that
+  name, found no such field and didn't answer, where the other two agents answered for the top field. On
+  the roll-up it called both roll-up tools, but the REST adapter (<code>to_submission</code>) builds only the
+  by-field rows, so the by-operator rows the grader expects are missing. Its own harness asks a reworded
+  decline question and grades only the by-field set, which is why it reported 6/6.</p></div>
+  <p class="prose">The ontology agent is also asked questions only reasoning can answer, graded against answers
+  computed from the canonical tables directly: every asset in a field (inheritance and the part-of closure), wells by field and operator, facilities by operator, the products in total liquids, and which well an OSDU record is. <span class="chip ok">5/5</span></p>
+  <figure class="code"><figcaption><b>oag_semantic.ontology_agent</b> · tool choice<span class="lang">trace</span></figcaption><div class="scroll"><pre><span class="c"># the tools the ontology agent chose, per question (live run)</span>
+surveillance-below-expected-oil       <span class="o">surveillance_below_expected</span>
+decline-12-month-field-oil            <span class="o">decline_wells_faster</span>
+rollup-oil-gas-water-by-field-operator <span class="o">rollup_by_field_and_operator, sparql_query</span>   <span class="c"># checked its own work</span>
+knowledge-assets-by-field             <span class="o">asset_hierarchy</span>
+knowledge-gross-liquids-by-field      <span class="o">product_volume_by_field</span>
+knowledge-osdu-record-identity        <span class="o">osdu_crosswalk</span>
+<span class="c"># reasoning check: "List every asset in the Volve field, wells and facilities alike."</span>
+                                      <span class="o">resolve_field → assets_in_field → report_entities</span>   8/8</pre></div></figure>
+</section>
+
+<section id="shows">
+  <p class="eyebrow">What it shows</p>
+  <h2>What the build demonstrates</h2>
+  <div class="finding" style="--tc:var(--t-metric)"><b>Governed numbers</b><p>One definition of each metric
+  reproduces gold on every platform deployed. The governed layer decides the numbers, not the model.</p></div>
+  <div class="finding" style="--tc:var(--t-onto)"><b>Reasoning adds meaning</b><p>Inheritance, a transitive
+  roll-up, inverses, identity across systems from keys, and business language mapped to metrics: all
+  inferred from four standard files, none stated in any table.</p></div>
+  <div class="finding" style="--tc:var(--t-rule)"><b>Rules and constraints are data</b><p>"Below expected"
+  agrees as a definition and as a SHACL rule; the SHACL shapes find exactly the planted faults.</p></div>
+  <div class="finding" style="--tc:var(--t-onto)"><b>Standards are portable, with checks</b><p>GraphDB gives
+  the in-process answers and the agent scores the same on it. Where an engine's rule can't be relied
+  on, it's applied in code and tested.</p></div>
+  <div class="finding" style="--tc:var(--t-plat)"><b>Generated knowledge travels</b><p>The platforms get the
+  ontology's answers as views, checked against the ontology, and their agents answer the asset-knowledge
+  questions from them. What they don't get is reasoning at query time: the ontology agent can still write
+  its own SPARQL.</p></div>
+  <p class="prose">The cell-by-cell comparison is in <code>docs/capability-matrix.md</code>; every decision is an
+  ADR in <code>docs/adr/</code>.</p>
+</section>
+
+<section id="run">
+  <p class="eyebrow">Run it</p>
+  <h2>Reproduce</h2>
+  <figure class="code"><figcaption><b>shell</b><span class="lang">bash</span></figcaption><div class="scroll"><pre><span class="c"># local sections: canonical tables, metrics, ontology, rules, SHACL</span>
+uv sync
+<span class="c"># GraphDB + Ontop (optional; the section is skipped without it)</span>
+knowledge/graphdb/graphdb.sh up
+<span class="c"># cloud sections read: the snow connection "proton"; az login + FABRIC_* variables;</span>
+<span class="c"># ANTHROPIC_API_KEY and OAG_FOUNDRY_ENDPOINT for the agents. Nothing is stored in the repo.</span>
+uv run --with jupyterlab --with "snowflake-connector-python[pandas]" \
+  --with-requirements platforms/fabric/requirements.txt \
+  jupyter lab notebooks/primer.ipynb</pre></div></figure>
+  <p class="prose">A section whose runtime isn't available says so and is skipped. The committed notebook keeps
+  its executed outputs, so it reads as a walkthrough before you run it.</p>
+</section>
+
+</div></main>
+</div>
