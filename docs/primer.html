@@ -463,8 +463,9 @@ knowledge-osdu-record-identity        <span class="o">osdu_crosswalk</span>
 uv sync
 <span class="c"># GraphDB + Ontop (optional; the section is skipped without it)</span>
 knowledge/graphdb/graphdb.sh up
-<span class="c"># cloud sections read: the snow connection "proton"; az login + FABRIC_* variables;</span>
-<span class="c"># ANTHROPIC_API_KEY and OAG_FOUNDRY_ENDPOINT for the agents. Nothing is stored in the repo.</span>
+<span class="c"># cloud sections: names and sources are in .env.example; values stay in ~/.config/oag (chmod 600)</span>
+<span class="c"># plus the snow connection "proton" and az login. Nothing is stored in the repo.</span>
+set -a; source ~/.config/oag/anthropic.env; source ~/.config/oag/foundry.env; source ~/.config/oag/fabric.env; set +a
 uv run --with jupyterlab --with "snowflake-connector-python[pandas]" \
   --with-requirements platforms/fabric/requirements.txt \
   jupyter lab notebooks/primer.ipynb</pre></div></figure>

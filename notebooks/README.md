@@ -13,7 +13,8 @@ Interactive companions to the reference documentation.
   ontology and its reasoning, the *below expected* rule two ways, the SHACL shapes on planted faults,
   GraphDB with Ontop, the knowledge generated onto Snowflake and Fabric (checked against the ontology),
   their semantic models, and the three agents graded on the same nine questions. Launch it with the
-  command in the primer's "Run it" section; sections whose runtime isn't available skip themselves.
+  command in the primer's "Run it" section, after exporting the variables listed in
+  [`.env.example`](../.env.example); sections whose runtime isn't available skip themselves.
 
 ## Launch
 
