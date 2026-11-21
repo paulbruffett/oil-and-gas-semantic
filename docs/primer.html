@@ -399,8 +399,8 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
     <li><strong>The generator makes it true.</strong> Each well gets an Arps decline curve, the
     <em>expected</em> rate at full uptime, written as forecast rows. Its <em>actual</em> daily oil is
     expected × performance × uptime × breakthrough loss: performance from two populations (healthy around
-    1.0, an impaired 20% around 0.72), uptime cut by planted downtime, and oil falling away from the
-    forecast after breakthrough in 35% of wells.</li>
+    1.0, impaired around 0.72, each well with a 20% chance of being impaired), uptime cut by planted
+    downtime, and oil falling away from the forecast after breakthrough (a 35% chance per well).</li>
     <li><strong>The records carry it.</strong> For well 12, the worst: seven days of <code>WELL_VOL_DAILY</code>
     sum to 50,794.1 bbl actual; its reporting entity's seven forecast rows in
     <code>PRODUCT_VOLUME_SUMMARY</code> sum to 82,985.1 bbl expected.</li>
@@ -418,7 +418,7 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
     off on a shortfall fails, naming both.</li>
   </ol>
   <div class="tbl"><table>
-    <tr><th>well</th><th>efficiency</th><th>uptime</th><th>efficiency while on</th><th>why it is flagged</th></tr>
+    <tr><th>well</th><th>efficiency</th><th>uptime</th><th>efficiency while on ≈</th><th>reading</th></tr>
     <tr><td>6</td><td class="num">0.319</td><td class="num">1.000</td><td class="num">0.319</td><td>underperforms at full uptime</td></tr>
     <tr><td>12</td><td class="num">0.612</td><td class="num">1.000</td><td class="num">0.612</td><td>underperforms at full uptime</td></tr>
     <tr><td>8</td><td class="num">0.469</td><td class="num">0.831</td><td class="num">0.565</td><td>both</td></tr>
@@ -426,8 +426,10 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
     <tr><td>3</td><td class="num">1.075</td><td class="num">1.000</td><td class="num">1.075</td><td>not flagged</td></tr>
   </table></div>
   <p class="prose">So a well falls below expected because it was down, or because it produced less while on;
-  the notebook shows all 18. Part III asks this same question of GraphDB, the Snowflake and Fabric semantic
-  models, and all three agents, each graded by the same <code>score_submissions</code>.</p>
+  the notebook shows all 18 (<em>efficiency while on</em> is efficiency ÷ mean uptime, an approximation).
+  In Part III, the Snowflake and Fabric semantic models answer this same question and are compared with
+  gold, and all three agents are asked it in these words and graded by the same
+  <code>score_submissions</code>.</p>
 </section>
 
 <div class="partdiv" id="part3">
