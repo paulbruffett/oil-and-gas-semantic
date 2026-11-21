@@ -8,6 +8,14 @@ Interactive companions to the reference documentation.
   through the OSI→DuckDB compile, resolving business terms via the LPG, answering the hero question, and
   running the gold check every platform build is held to.
 
+- **[`primer.ipynb`](./primer.ipynb)**: the executable twin of the [project primer](../docs/primer.html).
+  It runs every layer that was built and deployed, live: the canonical tables, the governed metrics, the
+  ontology and its reasoning, the *below expected* rule two ways, the SHACL shapes on planted faults,
+  GraphDB with Ontop, the knowledge generated onto Snowflake and Fabric (checked against the ontology),
+  their semantic models, and the three agents graded on the same nine questions. Launch it with the
+  command in the primer's "Run it" section, after exporting the variables listed in
+  [`.env.example`](../.env.example); sections whose runtime isn't available skip themselves.
+
 ## Launch
 
 The kernel needs the three `oag_*` packages (from `uv sync`) plus `pandas`/`matplotlib` for display:

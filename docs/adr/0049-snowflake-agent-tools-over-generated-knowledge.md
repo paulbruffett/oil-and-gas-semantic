@@ -48,3 +48,13 @@ gap once an agent can reach it.
   isn't configured on the deploying machine.
 - Deploy order: `sql/13` comes after the generated `sql/11` and `sql/12`, and `sql/07` is rerun after
   `sql/13`, because the agent resolves every tool resource when it runs.
+- *Corrected 2026-11-20 (project primer):* asked in the catalog's own words and graded on every set the
+  catalog grades, the Cortex Agent scored **4/6**, not 6/6. `test_agent_rest.py` had asked a reworded
+  decline question ("…for the top field") and graded only each question's primary set. Two fixes:
+  - the agent's instructions (`sql/07`) now say that "Field X" in a decline question means the field
+    with the largest cumulative oil, which `decline_wells_faster` selects itself, as the ontology and
+    Fabric agents are told. Before, it tried to resolve "Field X" and didn't answer;
+  - the harness asks the catalog's text and grades the `also` sets too (the roll-up's by-operator rows,
+    read from the agent's own `rollup_by_operator` result). `tests/test_questions.py` pins both.
+
+  Rerun over REST after the fix: 6/6 and 3/3, every set passing.

@@ -161,6 +161,8 @@ instructions:
     - deferment_by_cause: deferred volume + top downtime causes this month (theme 2). Optionally
       also call deferment_summary for the fleet totals and uptime %.
     - decline_wells_faster: wells declining faster than forecast in the top field (theme 3).
+      "Field X" in a decline question is not a name: it means the field with the largest
+      cumulative oil, which this tool selects itself. Don't resolve "Field X"; call the tool.
     - welltest_flags: wells with a stale well test or anomalous allocation (theme 4).
     - watchlist_flags: wells down, watering out, or with a GOR change (theme 5).
     - rollup_by_field: oil/gas/water by field this month vs last with biggest movers (theme 6);
