@@ -38,30 +38,31 @@ TOL = 1e-6
 
 AGENT_URL = "https://{host}/api/v2/databases/OAG_FABLE/schemas/KNOWLEDGE/agents/PRODUCTION_AGENT:run"
 
-# theme -> grading contract (mirrors test_local.py / catalog.yaml): the question asked over REST,
-# the agent tool whose tool_result carries the graded rows, gold file, and the graded set shape.
+# theme -> grading contract, copied from catalog.yaml (tests/test_questions.py checks they match): the
+# catalog's question text, the agent tool whose tool_result carries the graded rows, the gold file, and
+# every graded set (the primary set, then any `also` sets).
 THEMES = {
     "surveillance": {
-        "question": "Which wells are producing below expected oil rate this week, and by how much?",
+        "question": "Which wells produced below expected oil rate this week, and by how much?",
         "tool": "surveillance_below_expected", "question_id": "surveillance-below-expected-oil",
         "gold": "surveillance", "set_key": "flagged", "id_key": "well_id", "id_int": True,
         "value_keys": ["expected_oil_bbl", "actual_oil_bbl", "shortfall_bbl", "efficiency"], "int_keys": [],
     },
     "deferment": {
-        "question": "What did we defer last month and what were the top downtime causes?",
+        "question": "What did we defer last month, and what were the top downtime causes?",
         "tool": "deferment_by_cause", "question_id": "deferment-top-downtime-causes",
         "gold": "deferment", "set_key": "causes", "id_key": "cause", "id_int": False,
         "value_keys": ["deferred_oil_bbl", "downtime_hours", "n_events"], "int_keys": ["n_events"],
     },
     "decline": {
-        "question": "Show the 12-month oil decline for the top field and flag wells declining faster than forecast.",
+        "question": "What is the 12-month oil decline for Field X, and which wells are declining faster than forecast?",
         "tool": "decline_wells_faster", "question_id": "decline-12-month-field-oil",
         "gold": "decline", "set_key": "wells_declining_faster", "id_key": "well_id", "id_int": True,
         "value_keys": ["actual_annual_decline", "forecast_annual_decline", "decline_gap", "cumulative_oil_bbl"],
         "int_keys": [],
     },
     "welltest": {
-        "question": "Which wells have stale well tests or anomalous allocation?",
+        "question": "Which wells have stale tests or anomalous allocation?",
         "tool": "welltest_flags", "question_id": "welltest-stale-or-anomalous-allocation",
         "gold": "welltest", "set_key": "flagged", "id_key": "well_id", "id_int": True,
         "value_keys": ["days_since_last_test", "allocation_factor", "measured_oil_bbl", "allocation_variance"],
@@ -74,11 +75,16 @@ THEMES = {
         "value_keys": ["days_down", "water_cut", "gor_change_pct"], "int_keys": ["days_down"],
     },
     "rollups": {
-        "question": "Oil, gas and water by field and operator this month vs last - who are the biggest movers?",
+        "question": "Oil/gas/water by field and operator this month vs last -- who are the biggest movers?",
         "tool": "rollup_by_field", "question_id": "rollup-oil-gas-water-by-field-operator",
         "gold": "rollups", "set_key": "by_field", "id_key": "field_id", "id_int": True,
         "value_keys": ["oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"],
         "int_keys": [],
+        # The question also asks "by operator": graded too (catalog `also:`, ADR 0038), from the
+        # agent's own rollup_by_operator result. If the agent doesn't call it, the set is empty.
+        "also": [{"tool": "rollup_by_operator", "set_key": "by_operator", "id_key": "operator", "id_int": False,
+                  "value_keys": ["oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta",
+                                 "oil_contribution_pct"]}],
     },
 }
 
@@ -176,12 +182,18 @@ def to_submission(response: dict, t: dict) -> dict:
         return {"question_id": t["question_id"], "answer": answer,
                 "key_values": {t["set_key"]: graded}, "behavior": "answered"}
     text_keys = t.get("text_keys", [])
-    graded = [{t["id_key"]: (_num(r[t["id_key"]], True) if t["id_int"] else r[t["id_key"]]),
-               **{vk: (r.get(vk) if vk in text_keys else _num(r.get(vk), vk in t["int_keys"]))
-                  for vk in t["value_keys"]}}
-              for r in (rows or [])]
+
+    def graded(spec, rows):
+        return [{spec["id_key"]: (_num(r[spec["id_key"]], True) if spec["id_int"] else r[spec["id_key"]]),
+                 **{vk: (r.get(vk) if vk in text_keys else _num(r.get(vk), vk in t["int_keys"]))
+                    for vk in spec["value_keys"]}}
+                for r in (rows or [])]
+
+    key_values = {t["set_key"]: graded(t, rows)}
+    for also in t.get("also", []):
+        key_values[also["set_key"]] = graded(also, tool_rows.get(also["tool"]))
     return {"question_id": t["question_id"], "answer": answer,
-            "key_values": {t["set_key"]: graded}, "behavior": "answered"}
+            "key_values": key_values, "behavior": "answered"}
 
 
 # --- Grading (mirrors test_local.py) ---------------------------------------------------------------
@@ -211,11 +223,15 @@ def main() -> int:
         t = THEMES.get(theme) or KNOWLEDGE[theme]
         sub = to_submission(run_agent(t["question"], jwt), t)
         gold = json.loads((GOLD_DIR / f"{t['gold']}.json").read_text())
-        ok, missing, extra, mism = grade(sub["key_values"], gold, t["set_key"], t["id_key"], t["value_keys"])
-        all_ok &= ok
-        n = len(sub["key_values"].get(t["set_key"], []))
-        print(f"{'PASS' if ok else 'FAIL'}  {theme:12s} qid={sub['question_id']:40s} {t['set_key']}={n}/{len(gold[t['set_key']])}"
-              + ("" if ok else f"  missing={missing} extra={extra} mism={mism[:4]}"))
+        answered = sub["question_id"] == t["question_id"] and sub["behavior"] == "answered"
+        print(f"{'PASS' if answered else 'FAIL'}  {theme:12s} qid={sub['question_id']:40s} behavior={sub['behavior']}")
+        all_ok &= answered
+        for spec in [t, *t.get("also", [])]:  # every graded set, as score_submissions grades them
+            ok, missing, extra, mism = grade(sub["key_values"], gold, spec["set_key"], spec["id_key"], spec["value_keys"])
+            all_ok &= ok
+            n = len(sub["key_values"].get(spec["set_key"], []))
+            print(f"{'PASS' if ok else 'FAIL'}    {spec['set_key']}={n}/{len(gold[spec['set_key']])}"
+                  + ("" if ok else f"  missing={missing[:4]} extra={extra[:4]} mism={mism[:4]}"))
     print("\nALL PASS" if all_ok else "\nSOME FAILED")
     return 0 if all_ok else 1
 

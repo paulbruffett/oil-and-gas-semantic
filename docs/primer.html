@@ -176,8 +176,8 @@
     <div class="stat"><div class="v">2</div><div class="l">reasoning engines that agree</div></div>
     <div class="stat"><div class="v">2</div><div class="l">platforms deployed (Snowflake, Fabric)</div></div>
     <div class="stat"><div class="v">3</div><div class="l">agents, asked live</div></div>
-    <div class="stat"><div class="v">6 · 6 · 4</div><div class="l">use cases right: ontology, Fabric, Snowflake agents</div></div>
-    <div class="stat"><div class="v">3 · 3 · 3</div><div class="l">asset-knowledge questions right, same order</div></div>
+    <div class="stat"><div class="v">6/6 × 3</div><div class="l">use cases right, for each of the three agents</div></div>
+    <div class="stat"><div class="v">3/3 × 3</div><div class="l">asset-knowledge questions right, for each agent</div></div>
   </div>
 </header>
 
@@ -414,14 +414,14 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
     <tr><th>agent</th><th>model</th><th>knowledge it uses</th><th class="num">use cases</th><th class="num">asset knowledge</th></tr>
     <tr><td>Ontology agent</td><td>Claude Sonnet 5.5</td><td>the OWL graph, reasoned at query time, plus read-only SPARQL</td><td class="num">6/6</td><td class="num">3/3</td></tr>
     <tr><td>Fabric custom agent</td><td>gpt-6-luna on Foundry</td><td>Direct Lake model (copied knowledge tables) and the Fabric IQ ontology</td><td class="num">6/6</td><td class="num">3/3</td></tr>
-    <tr><td>Snowflake Cortex Agent</td><td>Cortex, over REST <code>:run</code></td><td>generated <code>KNOWLEDGE</code> views, through owner's-rights tools</td><td class="num">4/6</td><td class="num">3/3</td></tr>
+    <tr><td>Snowflake Cortex Agent</td><td>Cortex, over REST <code>:run</code></td><td>generated <code>KNOWLEDGE</code> views, through owner's-rights tools</td><td class="num">6/6</td><td class="num">3/3</td></tr>
   </table></div>
-  <div class="finding" style="--tc:var(--warn)"><b>Finding · Snowflake 4/6</b><p>Asked in the catalog's own
-  words, the Cortex Agent misses two. The decline question names "Field X": the agent tried to resolve that
-  name, found no such field and didn't answer, where the other two agents answered for the top field. On
-  the roll-up it called both roll-up tools, but the REST adapter (<code>to_submission</code>) builds only the
-  by-field rows, so the by-operator rows the grader expects are missing. Its own harness asks a reworded
-  decline question and grades only the by-field set, which is why it reported 6/6.</p></div>
+  <div class="finding" style="--tc:var(--warn)"><b>Finding · a harness that was too kind</b><p>The first
+  run of this primer scored the Snowflake agent 4/6. Its own test harness had asked a reworded decline
+  question and graded only each question's first set, so it had reported 6/6. Asked the catalog's words,
+  the agent tried to resolve "Field X" as a name; and the by-operator roll-up rows were never graded. Its
+  instructions now say what "Field X" means, as the other agents' do, and the harness asks the catalog's
+  text and grades every set; a test pins both (ADR 0049). The rerun above scores 6/6.</p></div>
   <p class="prose">The ontology agent is also asked questions only reasoning can answer, graded against answers
   computed from the canonical tables directly: every asset in a field (inheritance and the part-of closure), wells by field and operator, facilities by operator, the products in total liquids, and which well an OSDU record is. <span class="chip ok">5/5</span></p>
   <figure class="code"><figcaption><b>oag_semantic.ontology_agent</b> · tool choice<span class="lang">trace</span></figcaption><div class="scroll"><pre><span class="c"># the tools the ontology agent chose, per question (live run)</span>

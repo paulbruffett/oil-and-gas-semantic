@@ -277,3 +277,25 @@ def test_snowflake_harness_asks_the_catalog_knowledge_questions(catalog):
     asked = {t["question_id"]: (t["question"], t["set_key"], t["id_key"], t["value_keys"])
              for t in ast.literal_eval(node).values()}
     assert asked == want
+
+
+def test_snowflake_rest_harness_asks_and_grades_the_catalog_use_cases(catalog):
+    """test_agent_rest.py copies the six use-case questions too: it must ask the catalog's own text and
+    grade every set the catalog grades (the `also` sets included), as score_submissions does. It once
+    asked a reworded decline question and graded only the primary sets, so it overstated the score."""
+    import ast
+    from pathlib import Path
+
+    rest = Path(__file__).resolve().parents[1] / "platforms" / "snowflake" / "agent" / "test_agent_rest.py"
+    (node,) = [n.value for n in ast.parse(rest.read_text()).body if isinstance(n, ast.Assign)
+               and any(getattr(t, "id", None) == "THEMES" for t in n.targets)]
+
+    def sets(spec):
+        return [(spec["set_key"], spec["id_key"], spec["value_keys"]), *(
+            (a["set_key"], a["id_key"], a["value_keys"]) for a in spec.get("also", []))]
+
+    asked = {t["question_id"]: (t["question"], sets(t)) for t in ast.literal_eval(node).values()}
+    want = {q.id: (" ".join(q.text.split()),
+                   [(s.set_key, s.id_key, list(s.value_keys)) for s in (q.grading, *q.grading.also)])
+            for t in catalog.themes if t.status == "implemented" for q in t.questions}
+    assert asked == want
