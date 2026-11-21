@@ -232,7 +232,9 @@
   <ul class="tight prose">
     <li><strong>Master data</strong>: fields, facilities and wells. A well belongs to a field and flows to a facility
     (a battery). A facility is keyed by the pair <code>(FACILITY_ID, FACILITY_TYPE)</code>, as in the PDM; a well's
-    <code>UWI</code> is an alternate key.</li>
+    <code>UWI</code> is an alternate key. These rows, and only these, are what the ontology is built from, and
+    their keys are its identity: two records with the same UWI are the same well. Nothing in them says a
+    well is an asset or part of its field; <a href="#reasoning">the reasoning</a> adds that.</li>
     <li><strong>Reporting entities</strong>: the PDM's indirection for anything volumes are reported against. Each
     row points at a well or a field. Allocation factors run from a field's reporting entity to its wells'.</li>
     <li><strong>Facts</strong>: daily measured volumes and well tests hang off the well. The forecast
