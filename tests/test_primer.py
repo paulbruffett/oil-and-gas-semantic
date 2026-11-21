@@ -10,13 +10,13 @@ REPO = Path(__file__).resolve().parents[1]
 def test_primer_embeds_the_current_data_model_diagram():
     nb = json.loads((REPO / "notebooks" / "primer.ipynb").read_text())
     embedded = [
-        cell["attachments"]["canonical-data-model.svg"]["image/svg+xml"]
+        cell["attachments"]["canonical-data-model.png"]["image/png"]
         for cell in nb["cells"]
-        if "canonical-data-model.svg" in cell.get("attachments", {})
+        if "canonical-data-model.png" in cell.get("attachments", {})
     ]
     assert len(embedded) == 1, "the primer should embed the data-model diagram once"
-    svg = (REPO / "docs" / "diagrams" / "canonical-data-model.svg").read_bytes()
-    assert base64.b64decode(embedded[0]) == svg, (
-        "notebooks/primer.ipynb embeds a stale copy of docs/diagrams/canonical-data-model.svg; "
+    png = (REPO / "docs" / "diagrams" / "canonical-data-model.png").read_bytes()
+    assert base64.b64decode(embedded[0]) == png, (
+        "notebooks/primer.ipynb embeds a stale copy of docs/diagrams/canonical-data-model.png; "
         "re-embed it (see docs/diagrams/README.md)"
     )
