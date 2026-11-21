@@ -299,3 +299,24 @@ def test_snowflake_rest_harness_asks_and_grades_the_catalog_use_cases(catalog):
                    [(s.set_key, s.id_key, list(s.value_keys)) for s in (q.grading, *q.grading.also)])
             for t in catalog.themes if t.status == "implemented" for q in t.questions}
     assert asked == want
+
+
+def test_snowflake_local_harness_asks_and_grades_the_catalog_use_cases(catalog):
+    """test_local.py (the local Cortex-routed agent) copies the six use-case questions as well: the
+    catalog's own text, and every graded set (its ALSO dict holds the `also` sets)."""
+    import ast
+    from pathlib import Path
+
+    local = Path(__file__).resolve().parents[1] / "platforms" / "snowflake" / "agent" / "test_local.py"
+    tree = ast.parse(local.read_text())
+
+    def assigned(name):
+        (node,) = [n.value for n in tree.body if isinstance(n, ast.Assign)
+                   and any(getattr(t, "id", None) == name for t in n.targets)]
+        return ast.literal_eval(node)
+
+    themes, also = assigned("THEMES"), assigned("ALSO")
+    asked = {text: [(sk, ik, vks), *also.get(k, [])] for k, (text, _, sk, ik, vks) in themes.items()}
+    want = {" ".join(q.text.split()): [(s.set_key, s.id_key, list(s.value_keys)) for s in (q.grading, *q.grading.also)]
+            for t in catalog.themes if t.status == "implemented" for q in t.questions}
+    assert asked == want

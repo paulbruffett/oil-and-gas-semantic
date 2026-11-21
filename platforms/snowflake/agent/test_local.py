@@ -27,24 +27,32 @@ REPO = Path(__file__).resolve().parents[3]
 GOLD_DIR = Path(os.environ.get("OAG_GOLD_DIR", REPO / "data" / "frozen" / "gold"))
 TOL = 1e-6
 
-# theme -> (question, gold file, set_key, id_key, value_keys)
+# theme -> (question, gold file, set_key, id_key, value_keys), copied from catalog.yaml with the
+# catalog's own question text (tests/test_questions.py checks they match).
 THEMES = {
-    "surveillance": ("Which wells are producing below expected oil rate this week, and by how much?",
+    "surveillance": ("Which wells produced below expected oil rate this week, and by how much?",
                      "surveillance", "flagged", "well_id",
                      ["expected_oil_bbl", "actual_oil_bbl", "shortfall_bbl", "efficiency"]),
-    "deferment": ("What did we defer last month and what were the top downtime causes?",
+    "deferment": ("What did we defer last month, and what were the top downtime causes?",
                   "deferment", "causes", "cause", ["deferred_oil_bbl", "downtime_hours", "n_events"]),
-    "decline": ("Show the 12-month oil decline for the top field and flag wells declining faster than forecast.",
+    "decline": ("What is the 12-month oil decline for Field X, and which wells are declining faster than forecast?",
                 "decline", "wells_declining_faster", "well_id",
                 ["actual_annual_decline", "forecast_annual_decline", "decline_gap", "cumulative_oil_bbl"]),
-    "welltest": ("Which wells have stale well tests or anomalous allocation?",
+    "welltest": ("Which wells have stale tests or anomalous allocation?",
                  "welltest", "flagged", "well_id",
                  ["days_since_last_test", "allocation_factor", "measured_oil_bbl", "allocation_variance"]),
     "watchlist": ("Which wells are down, watering out, or showing a GOR change?",
                   "watchlist", "flagged", "well_id", ["days_down", "water_cut", "gor_change_pct"]),
-    "rollups": ("Oil, gas and water by field and operator this month vs last - who are the biggest movers?",
+    "rollups": ("Oil/gas/water by field and operator this month vs last -- who are the biggest movers?",
                 "rollups", "by_field", "field_id",
                 ["oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"]),
+}
+
+# Further sets a use case is also graded on (catalog `also:`, ADR 0038): theme -> [(set_key, id_key,
+# value_keys)]. The roll-up question asks "by operator" too.
+ALSO = {
+    "rollups": [("by_operator", "operator",
+                 ["oil_curr", "gas_curr", "water_curr", "oil_prior", "oil_delta", "oil_contribution_pct"])],
 }
 
 # Asset-knowledge questions (catalog theme 8, ADR 0048): not use cases, asked as-is. The agent has no
@@ -90,12 +98,14 @@ def main() -> int:
             (q, goldfile, set_key, id_key, value_keys), qid = THEMES[theme], None
         sub = agent.answer(q)
         gold = json.loads((GOLD_DIR / f"{goldfile}.json").read_text())
-        ok, missing, extra, mism = grade(sub["key_values"], gold, set_key, id_key, value_keys)
-        ok &= qid is None or sub["question_id"] == qid
-        all_ok &= ok
-        n = len(sub["key_values"].get(set_key, []))
-        print(f"{'PASS' if ok else 'FAIL'}  {theme:12s} qid={sub['question_id']:40s} {set_key}={n}/{len(gold[set_key])}"
-              + ("" if ok else f"  missing={missing} extra={extra} mism={mism[:4]}"))
+        for i, (sk, ik, vks) in enumerate([(set_key, id_key, value_keys), *ALSO.get(theme, [])]):
+            ok, missing, extra, mism = grade(sub["key_values"], gold, sk, ik, vks)  # every graded set
+            ok &= qid is None or sub["question_id"] == qid
+            all_ok &= ok
+            n = len(sub["key_values"].get(sk, []))
+            label = f"{theme:12s} qid={sub['question_id']:40s}" if i == 0 else " " * 58
+            print(f"{'PASS' if ok else 'FAIL'}  {label} {sk}={n}/{len(gold[sk])}"
+                  + ("" if ok else f"  missing={missing[:4]} extra={extra[:4]} mism={mism[:4]}"))
     print("\nALL PASS" if all_ok else "\nSOME FAILED")
     return 0 if all_ok else 1
 

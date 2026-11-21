@@ -185,7 +185,7 @@ def to_submission(response: dict, t: dict) -> dict:
 
     def graded(spec, rows):
         return [{spec["id_key"]: (_num(r[spec["id_key"]], True) if spec["id_int"] else r[spec["id_key"]]),
-                 **{vk: (r.get(vk) if vk in text_keys else _num(r.get(vk), vk in t["int_keys"]))
+                 **{vk: (r.get(vk) if vk in text_keys else _num(r.get(vk), vk in spec.get("int_keys", [])))
                     for vk in spec["value_keys"]}}
                 for r in (rows or [])]
 

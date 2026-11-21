@@ -269,13 +269,14 @@ oag:hasPart owl:inverseOf oag:partOf .</pre></div></figure>
   <p class="eyebrow">3b · Reasoning in action</p>
   <h2>Facts the graph derives, that no table states</h2>
   <p class="prose">The OWL 2 RL closure grows the graph from 469 asserted triples to 1,739. Each row below counts
-  facts that are <strong>absent from the asserted graph and present after reasoning</strong>:</p>
+  facts that are <strong>absent from the asserted graph and present after reasoning</strong>, for canonical
+  entities only (<code>owl:sameAs</code> also copies each fact onto the asset's OSDU-record alias):</p>
   <div class="tbl"><table>
     <tr><th>inference</th><th>OWL feature</th><th>asserted</th><th>inferred</th></tr>
     <tr><td>things that are an <code>Asset</code></td><td>subclass inheritance</td><td class="num from">0</td><td class="num to">27</td></tr>
     <tr><td>well → field via <code>partOf</code></td><td>sub-property + transitivity, through the facility</td><td class="num from">0</td><td class="num to">18</td></tr>
-    <tr><td><code>hasPart</code> links</td><td>inverse property</td><td class="num from">0</td><td class="num to">120</td></tr>
-    <tr><td><code>operates</code> links</td><td>inverse property</td><td class="num from">0</td><td class="num to">48</td></tr>
+    <tr><td><code>hasPart</code> links</td><td>inverse property</td><td class="num from">0</td><td class="num to">42</td></tr>
+    <tr><td><code>operates</code> links</td><td>inverse property</td><td class="num from">0</td><td class="num to">24</td></tr>
     <tr><td>canonical asset ≡ its OSDU record</td><td><code>owl:hasKey</code> → <code>owl:sameAs</code></td><td class="num from">0</td><td class="num to">24</td></tr>
   </table></div>
   <p class="prose">The knowledge API asks those derived facts directly, and the vocabulary maps business language
