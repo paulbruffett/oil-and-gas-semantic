@@ -49,7 +49,7 @@
   nav.toc{display:flex; flex-direction:column; gap:1px}
   .toc a{text-decoration:none; font-size:13.5px; color:var(--ink-soft); padding:5px 8px; border-radius:6px; display:flex; gap:9px; align-items:baseline}
   .toc a:hover{background:var(--surface-2); color:var(--ink)}
-  .toc a .n{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--tc, var(--ink-faint)); width:16px; flex:none}
+  .toc a .n{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--tc, var(--ink-faint)); width:18px; flex:none}
   .rail .meta{margin-top:24px; padding-top:16px; border-top:1px solid var(--border); font-family:var(--mono); font-size:11px; color:var(--ink-faint); line-height:1.9}
 
   main{padding-inline:max(16px, env(safe-area-inset-left,0px)) max(16px, env(safe-area-inset-right,0px)); padding-block:0 110px; min-width:0}
@@ -115,6 +115,15 @@
   .chip.part{background:var(--warn-tint); color:var(--warn)}
   .chip.no{background:var(--surface-2); color:var(--ink-faint)}
 
+  .toc .grp{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-faint); padding:14px 8px 4px}
+  .partdiv{margin-top:64px; padding-top:30px; border-top:2px solid var(--border-strong); scroll-margin-top:16px}
+  .partdiv h2{font-size:clamp(28px,3.6vw,38px)}
+  figure.diagram{margin:18px 0; padding:14px; background:#fff; border:1px solid var(--border); border-radius:10px; overflow-x:auto}
+  figure.diagram img{display:block; width:100%; min-width:640px; height:auto}
+  figure.diagram figcaption{font-size:12.5px; color:#4b5b63; margin-top:8px}
+  figure.diagram figcaption code{background:#E9EFF2; color:#14232B}
+  ol.steps{max-width:var(--maxprose); padding-left:22px}
+  ol.steps li{margin-bottom:10px}
   .finding{border:1px solid var(--border); border-left:3px solid var(--tc, var(--accent)); background:var(--surface); border-radius:0 10px 10px 0; padding:12px 16px; margin:16px 0; max-width:var(--maxprose)}
   .finding b{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--tc, var(--accent))}
   .finding p{margin:5px 0 0; font-size:14.5px; color:var(--ink-soft)}
@@ -130,6 +139,7 @@
     .shell{grid-template-columns:1fr}
     .rail{position:static; height:auto; border-right:0; border-bottom:1px solid var(--border); padding:18px max(16px, env(safe-area-inset-right,0px)) 16px max(16px, env(safe-area-inset-left,0px))}
     nav.toc{flex-direction:row; flex-wrap:wrap; gap:4px}
+    .toc .grp{flex-basis:100%; padding:8px 8px 2px}
     .rail .meta{display:none}
     .col{padding-inline:0}
   }
@@ -143,16 +153,22 @@
   <div class="sub">Primer</div>
   <nav class="toc" aria-label="Contents">
     <a href="#stack"><span class="n">·</span>The stack</a>
-    <a href="#tables" style="--tc:var(--t-data)"><span class="n">1</span>Canonical tables</a>
-    <a href="#metrics" style="--tc:var(--t-metric)"><span class="n">2</span>Governed metrics</a>
-    <a href="#ontology" style="--tc:var(--t-onto)"><span class="n">3</span>The ontology</a>
-    <a href="#reasoning" style="--tc:var(--t-onto)"><span class="n">3b</span>Reasoning in action</a>
-    <a href="#rules" style="--tc:var(--t-rule)"><span class="n">4</span>Rules</a>
-    <a href="#constraints" style="--tc:var(--t-rule)"><span class="n">5</span>Constraints</a>
-    <a href="#graphdb" style="--tc:var(--t-onto)"><span class="n">6</span>A second engine</a>
-    <a href="#generated" style="--tc:var(--t-plat)"><span class="n">7</span>Knowledge on platforms</a>
-    <a href="#models" style="--tc:var(--t-plat)"><span class="n">8</span>Platform semantic models</a>
-    <a href="#agents" style="--tc:var(--t-agent)"><span class="n">9</span>The agents</a>
+    <div class="grp">Part I · What it contains</div>
+    <a href="#tables" style="--tc:var(--t-data)"><span class="n">1</span>The data model</a>
+    <a href="#records" style="--tc:var(--t-data)"><span class="n">2</span>The records and gold</a>
+    <a href="#metrics" style="--tc:var(--t-metric)"><span class="n">3</span>Governed metrics</a>
+    <a href="#ontology" style="--tc:var(--t-onto)"><span class="n">4</span>The ontology</a>
+    <a href="#reasoning" style="--tc:var(--t-onto)"><span class="n">4b</span>Reasoning in action</a>
+    <a href="#rules" style="--tc:var(--t-rule)"><span class="n">5</span>Rules</a>
+    <a href="#constraints" style="--tc:var(--t-rule)"><span class="n">6</span>Constraints</a>
+    <div class="grp">Part II · One question</div>
+    <a href="#question"><span class="n">7</span>End to end</a>
+    <div class="grp">Part III · Instantiated</div>
+    <a href="#graphdb" style="--tc:var(--t-onto)"><span class="n">8</span>A second engine</a>
+    <a href="#generated" style="--tc:var(--t-plat)"><span class="n">9</span>Knowledge on platforms</a>
+    <a href="#models" style="--tc:var(--t-plat)"><span class="n">10</span>Platform semantic models</a>
+    <a href="#agents" style="--tc:var(--t-agent)"><span class="n">11</span>The agents</a>
+    <div class="grp">Wrap-up</div>
     <a href="#shows"><span class="n">·</span>What it shows</a>
     <a href="#run"><span class="n">·</span>Run it</a>
   </nav>
@@ -198,26 +214,56 @@
   </div>
 </section>
 
+<div class="partdiv" id="part1">
+  <p class="eyebrow">Part I</p>
+  <h2>What the system contains</h2>
+  <p class="prose">The files in the repo and what the generator writes from them: the data model, the records
+  and their gold answers, the metric definitions, the ontology, its rules and its constraints. No platform
+  is involved; all of it runs locally.</p>
+</div>
+
 <section id="tables" style="--tc:var(--t-data)">
-  <p class="eyebrow">1 · Canonical tables</p>
-  <h2>One system of record, and the answers it should give</h2>
-  <p class="prose">The generator writes nine OSDU Production Data Model tables as Parquet: three fields (Volve,
-  Sleipner, Gullfaks), 18 wells, 6 facilities, three operators and over a year of daily volumes. It is
-  deterministic, so the same config gives the same bytes. Alongside the tables it writes
-  <strong>gold</strong>: the answer to every catalog question, from its own knowledge of what it generated
-  (for example, which wells it made under-perform). Every platform loads the same files.</p>
+  <p class="eyebrow">1 · The data model</p>
+  <h2>Nine canonical tables, and how they relate</h2>
+  <p class="prose">The system of record is nine tables from the OSDU Production Data Model, with OSDU's table and
+  column names. Every platform loads these same tables.</p>
+  <figure class="diagram"><img src="diagrams/canonical-data-model.svg" alt="Entity-relationship diagram of the nine canonical tables. FIELD, FACILITY and WELL are master data; a well belongs to a field and flows to a facility. REPORTING_ENTITY points at a well or a field, and RPEN_ALLOCATION_FACTOR runs from a field's reporting entity to its wells'. WELL_VOL_DAILY and WELL_TEST hang off WELL; PRODUCT_VOLUME_SUMMARY and DOWN_TIME_EVENT hang off REPORTING_ENTITY." width="1380" height="772">
+  <figcaption>Source: <code>docs/diagrams/canonical-data-model.drawio</code>. PK primary key, FK foreign key, AK alternate key; the crow's foot is the many end.</figcaption></figure>
+  <ul class="tight prose">
+    <li><strong>Master data</strong>: fields, facilities and wells. A well belongs to a field and flows to a facility
+    (a battery). A facility is keyed by the pair <code>(FACILITY_ID, FACILITY_TYPE)</code>, as in the PDM; a well's
+    <code>UWI</code> is an alternate key.</li>
+    <li><strong>Reporting entities</strong>: the PDM's indirection for anything volumes are reported against. Each
+    row points at a well or a field. Allocation factors run from a field's reporting entity to its wells'.</li>
+    <li><strong>Facts</strong>: daily measured volumes and well tests hang off the well. The forecast
+    (<code>PRODUCT_VOLUME_SUMMARY</code>, <code>QUANTITY_METHOD = 'Forecast'</code>) and downtime hang off the well's
+    reporting entity, so reaching them from a well goes through <code>REPORTING_ENTITY</code>.</li>
+  </ul>
   <div class="tbl"><table>
     <tr><th>table</th><th>rows</th><th>holds</th></tr>
     <tr><td><code>WELL_VOL_DAILY</code></td><td class="num">8,208</td><td>each well's reported oil, gas, water and hours on, per day</td></tr>
     <tr><td><code>PRODUCT_VOLUME_SUMMARY</code></td><td class="num">8,208</td><td>the forecast: expected volumes from a decline curve</td></tr>
     <tr><td><code>DOWN_TIME_EVENT</code>, <code>WELL_TEST</code></td><td class="num">282 · 251</td><td>downtime with causes; periodic well tests</td></tr>
-    <tr><td><code>WELL</code>, <code>FACILITY</code>, <code>FIELD</code></td><td class="num">18 · 6 · 3</td><td>master data: UWI, facility, field, operator. Facilities are keyed by <code>(FACILITY_ID, FACILITY_TYPE)</code></td></tr>
-    <tr><td><code>REPORTING_ENTITY</code>, <code>RPEN_ALLOCATION_FACTOR</code></td><td class="num">21 · 18</td><td>allocation from field to well</td></tr>
+    <tr><td><code>WELL</code>, <code>FACILITY</code>, <code>FIELD</code></td><td class="num">18 · 6 · 3</td><td>master data: UWI, facility, field, operator</td></tr>
+    <tr><td><code>REPORTING_ENTITY</code>, <code>RPEN_ALLOCATION_FACTOR</code></td><td class="num">21 · 18</td><td>what volumes are reported against; allocation from field to well</td></tr>
   </table></div>
 </section>
 
+<section id="records" style="--tc:var(--t-data)">
+  <p class="eyebrow">2 · The records and gold</p>
+  <h2>Generated, with the answers planted in</h2>
+  <p class="prose">The generator writes the records from a config: three fields (Volve, Sleipner, Gullfaks), 18
+  wells, three operators, daily from January 2024 to March 2025. It is deterministic, so the same config
+  gives the same bytes, stamped with a <code>config_hash</code>. The config is a set of scenario knobs: how
+  wells decline, how many are impaired, how often they go down and why, which break through, which tests go
+  stale.</p>
+  <p class="prose">Because the generator decides what is true, it also writes down the answer to every catalog
+  question as <strong>gold</strong>, one JSON file per question, next to the tables. Gold is what every
+  runtime here is graded against: the compile, the rules, the platforms and the agents.</p>
+</section>
+
 <section id="metrics" style="--tc:var(--t-metric)">
-  <p class="eyebrow">2 · Governed metrics</p>
+  <p class="eyebrow">3 · Governed metrics</p>
   <h2>Each KPI is defined once</h2>
   <p class="prose">Metrics are YAML over the canonical tables: simple measures, ratios and derived metrics. The
   reference compile turns them into SQL on DuckDB; each platform translates the same definitions into its
@@ -237,7 +283,7 @@
 </section>
 
 <section id="ontology" style="--tc:var(--t-onto)">
-  <p class="eyebrow">3 · The ontology</p>
+  <p class="eyebrow">4 · The ontology</p>
   <h2>Meaning the platforms don't carry</h2>
   <p class="prose">The knowledge layer uses W3C standards, so it isn't tied to one engine: RDF, OWL 2 RL, SKOS,
   R2RML and SHACL. It is four files plus a vocabulary.</p>
@@ -266,7 +312,7 @@ oag:hasPart owl:inverseOf oag:partOf .</pre></div></figure>
 </section>
 
 <section id="reasoning" style="--tc:var(--t-onto)">
-  <p class="eyebrow">3b · Reasoning in action</p>
+  <p class="eyebrow">4b · Reasoning in action</p>
   <h2>Facts the graph derives, that no table states</h2>
   <p class="prose">The OWL 2 RL closure grows the graph from 469 asserted triples to 1,739. Each row below counts
   facts that are <strong>absent from the asserted graph and present after reasoning</strong>, for canonical
@@ -296,7 +342,7 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
 </section>
 
 <section id="rules" style="--tc:var(--t-rule)">
-  <p class="eyebrow">4 · Rules</p>
+  <p class="eyebrow">5 · Rules</p>
   <h2>"Below expected", as data and as a rule</h2>
   <p class="prose">A business term holds for a well <em>over a period</em>, so it's recorded as a dated flag, never
   as class membership (ADR 0041). The numbers come from the governed metrics; the graph only compares
@@ -320,7 +366,7 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
 </section>
 
 <section id="constraints" style="--tc:var(--t-rule)">
-  <p class="eyebrow">5 · Constraints</p>
+  <p class="eyebrow">6 · Constraints</p>
   <h2>SHACL catches bad data before it's answered</h2>
   <p class="prose">Shapes state what must be true: every well in exactly one field, a well's field equal to its
   facility's, no shared keys, and SPARQL checks over the daily records. The generator can plant faults and
@@ -336,8 +382,64 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
   </table></div>
 </section>
 
+<div class="partdiv" id="part2">
+  <p class="eyebrow">Part II</p>
+  <h2>One question, end to end</h2>
+  <p class="prose">Part I showed each layer on its own. Here one question goes through all of them.</p>
+</div>
+
+<section id="question" style="--tc:var(--t-metric)">
+  <p class="eyebrow">7 · The hero question</p>
+  <h2>"Which wells produced below expected oil rate this week, and by how much?"</h2>
+  <ol class="steps">
+    <li><strong>The catalog</strong> (<code>spec/questions/catalog.yaml</code>) holds the question:
+    <code>surveillance-below-expected-oil</code>, expected behaviour <em>answered</em>, gold in
+    <code>gold/surveillance.json</code>, graded as the set <code>flagged</code> keyed by <code>well_id</code>, on
+    expected oil, actual oil, shortfall and efficiency.</li>
+    <li><strong>The generator makes it true.</strong> Each well gets an Arps decline curve, the
+    <em>expected</em> rate at full uptime, written as forecast rows. Its <em>actual</em> daily oil is
+    expected × performance × uptime × breakthrough loss: performance from two populations (healthy around
+    1.0, an impaired 20% around 0.72), uptime cut by planted downtime, and oil falling away from the
+    forecast after breakthrough in 35% of wells.</li>
+    <li><strong>The records carry it.</strong> For well 12, the worst: seven days of <code>WELL_VOL_DAILY</code>
+    sum to 50,794.1 bbl actual; its reporting entity's seven forecast rows in
+    <code>PRODUCT_VOLUME_SUMMARY</code> sum to 82,985.1 bbl expected.</li>
+    <li><strong>The governed metric</strong> computes the same: production efficiency 0.612, below the 0.9
+    threshold, shortfall 32,191.0 bbl.</li>
+    <li><strong>The rule</strong> records it as
+    <code>flag/below_expected/well/12/2025-03-25/2025-03-31</code>, an <code>oag:Flag</code> of the term with
+    that efficiency.</li>
+    <li><strong>Gold</strong> holds the same row, and the answer in words: <em>12 of 18 wells produced below
+    90% of expected oil during 2025-03-25..2025-03-31; NO 15/9-F-12 missed by the most (32191.0 bbl, 61.2% of
+    expected).</em></li>
+    <li><strong>An answer is graded.</strong> Every runtime submits the same JSON contract
+    (<code>answer_submission.schema.json</code>). <code>score_submissions</code> checks the set by well and each
+    value within a relative 10<sup>-6</sup>: the compile's answer passes 12/12; one that drops a well and is 1%
+    off on a shortfall fails, naming both.</li>
+  </ol>
+  <div class="tbl"><table>
+    <tr><th>well</th><th>efficiency</th><th>uptime</th><th>efficiency while on</th><th>why it is flagged</th></tr>
+    <tr><td>6</td><td class="num">0.319</td><td class="num">1.000</td><td class="num">0.319</td><td>underperforms at full uptime</td></tr>
+    <tr><td>12</td><td class="num">0.612</td><td class="num">1.000</td><td class="num">0.612</td><td>underperforms at full uptime</td></tr>
+    <tr><td>8</td><td class="num">0.469</td><td class="num">0.831</td><td class="num">0.565</td><td>both</td></tr>
+    <tr><td>5</td><td class="num">0.809</td><td class="num">0.857</td><td class="num">0.944</td><td>mostly downtime: healthy while on</td></tr>
+    <tr><td>3</td><td class="num">1.075</td><td class="num">1.000</td><td class="num">1.075</td><td>not flagged</td></tr>
+  </table></div>
+  <p class="prose">So a well falls below expected because it was down, or because it produced less while on;
+  the notebook shows all 18. Part III asks this same question of GraphDB, the Snowflake and Fabric semantic
+  models, and all three agents, each graded by the same <code>score_submissions</code>.</p>
+</section>
+
+<div class="partdiv" id="part3">
+  <p class="eyebrow">Part III</p>
+  <h2>How it's instantiated</h2>
+  <p class="prose">The same contents, deployed: a second RDF engine, the ontology's knowledge generated onto
+  Snowflake and Fabric, each platform's own semantic model, and three agents, all checked against the gold
+  from Part I.</p>
+</div>
+
 <section id="graphdb" style="--tc:var(--t-onto)">
-  <p class="eyebrow">6 · A second engine</p>
+  <p class="eyebrow">8 · A second engine</p>
   <h2>GraphDB, with the daily volumes served in place</h2>
   <p class="prose">The same files run on GraphDB 10.8: its OWL 2 RL ruleset does the reasoning, its SHACL engine
   runs the shapes, and an <strong>Ontop</strong> repository serves the daily volumes live from DuckDB through
@@ -356,7 +458,7 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
 </section>
 
 <section id="generated" style="--tc:var(--t-plat)">
-  <p class="eyebrow">7 · Knowledge on the platforms</p>
+  <p class="eyebrow">9 · Knowledge on the platforms</p>
   <h2>The ontology's answers, generated as views</h2>
   <p class="prose">Snowflake, Fabric and Databricks have no OWL reasoner. So the ontology's knowledge is
   <strong>generated</strong> for them, from the same files: views for the class hierarchy
@@ -380,7 +482,7 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
 </section>
 
 <section id="models" style="--tc:var(--t-plat)">
-  <p class="eyebrow">8 · Platform semantic models</p>
+  <p class="eyebrow">10 · Platform semantic models</p>
   <h2>The same metrics, in each platform's own model</h2>
   <div class="grid2">
     <figure class="code"><figcaption><b>Snowflake</b> · Semantic View<span class="lang">sql</span></figcaption><div class="scroll"><pre><span class="k">SELECT</span> * <span class="k">FROM SEMANTIC_VIEW</span>(
@@ -406,7 +508,7 @@ onto.resolve_term(<span class="s">"underperforming"</span>)  <span class="o">→
 </section>
 
 <section id="agents" style="--tc:var(--t-agent)">
-  <p class="eyebrow">9 · The agents</p>
+  <p class="eyebrow">11 · The agents</p>
   <h2>Three agents, the same questions, graded against gold</h2>
   <p class="prose">Each agent answers through <strong>governed tools</strong>. The model chooses the tool; the
   graded rows are built in code from the tool's result, never from the model's prose. So a wrong number
