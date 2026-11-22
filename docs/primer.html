@@ -124,6 +124,7 @@
   figure.diagram figcaption code{background:#E9EFF2; color:#14232B}
   ol.steps{max-width:var(--maxprose); padding-left:22px}
   ol.steps li{margin-bottom:10px}
+  .muted{color:var(--ink-faint)}
   .finding{border:1px solid var(--border); border-left:3px solid var(--tc, var(--accent)); background:var(--surface); border-radius:0 10px 10px 0; padding:12px 16px; margin:16px 0; max-width:var(--maxprose)}
   .finding b{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--tc, var(--accent))}
   .finding p{margin:5px 0 0; font-size:14.5px; color:var(--ink-soft)}
@@ -320,6 +321,11 @@
   </ul>
   <p class="prose">In short: the TBox says what things are, R2RML says which things exist, SKOS says what words mean,
   the shapes say what must hold, and the rules say what follows.</p>
+  <p class="prose">How the pieces run, in order: <strong>Parquet tables → DuckDB views → R2RML → ABox</strong>; then
+  <strong>ABox + TBox + SKOS → asserted graph → OWL 2 RL → reasoned master graph → knowledge API</strong>. Each part
+  below starts with its in → concept → out.</p>
+  <h3>The TBox: the schema, written by hand</h3>
+  <p class="prose"><strong>In:</strong> <code>oag.ttl</code>, written by hand · <strong>Concept:</strong> OWL axioms, the TBox · <strong>Out:</strong> classes, their parents, their keys and their OSDU kinds. Just the file: no data, and no reasoning yet.</p>
   <figure class="code"><figcaption><b>knowledge/ontology/oag.ttl</b><span class="lang">turtle</span></figcaption><div class="scroll"><pre>oag:Well a owl:Class ;
     rdfs:subClassOf oag:Asset ;
     oag:osduKind "osdu:wks:master-data--Well:1.5.0" ;
@@ -332,6 +338,15 @@ oag:Facility a owl:Class ;
 oag:partOf  a owl:ObjectProperty, owl:TransitiveProperty .
 oag:inField rdfs:subPropertyOf oag:partOf .
 oag:hasPart owl:inverseOf oag:partOf .</pre></div></figure>
+  <h3>R2RML builds the instances from the tables</h3>
+  <p class="prose"><strong>In:</strong> the master-data tables (Parquet) · <strong>Concept:</strong> R2RML mapping rules, producing the ABox · <strong>Out:</strong> one instance per row, with its facts.</p>
+  <ol class="steps">
+    <li>The generator writes the canonical tables as Parquet (<code>data/frozen/canonical/well.parquet</code>, …).</li>
+    <li><code>create_views</code> puts a DuckDB view over each file, plus views of the OSDU records. Nothing is copied.</li>
+    <li>morph-kgc turns each rule into SQL (<code>SELECT * FROM well</code>), fills in the rule's templates for each row,
+    and emits the triples. That is the ABox.</li>
+    <li><code>asserted_graph</code> adds the TBox and the SKOS vocabulary: the graph everything after this starts from.</li>
+  </ol>
   <p class="prose">The mapping has <strong>one rule per table</strong> (a <em>triples map</em>), not one entry per
   well. Each rule says which table to read, how to name each row, and which facts to state about it, each from a
   column or from a template that points at another entity:</p>
@@ -345,14 +360,25 @@ oag:hasPart owl:inverseOf oag:partOf .</pre></div></figure>
   Facility, Well, Organisation (a query for the distinct operators) and the two OSDU record views. The classes and
   properties a rule names (<code>oag:Well</code>, <code>oag:inField</code>) are defined in the TBox; the mapping only
   connects a table's columns to them.</p>
-  <p class="prose">After mapping, well 1 has only what its row says: type <code>Well</code>, its UWI, a link to
-  facility 1 and to field 1, and operator Equinor. Nothing says it's an asset, that it's part of the
-  field through its facility, or which OSDU record it is. Reasoning adds those.</p>
+  <p class="prose">Well 1's row in <code>WELL</code> (the input), then the triples its rule made from it (the output):</p>
+  <div class="tbl"><table>
+    <tr><th>WELL column</th><th>well 1</th><th></th><th>predicate</th><th>object</th></tr>
+    <tr><td><code>WELL_ID</code></td><td>1</td><td>→</td><td><code>rdf:type</code>, <code>oag:wellId</code></td><td><code>oag:Well</code>, 1 <span class="muted">(subject <code>id:well/1</code>)</span></td></tr>
+    <tr><td><code>UWI</code></td><td>NO 15/9-F-1</td><td>→</td><td><code>oag:uwi</code></td><td>NO 15/9-F-1</td></tr>
+    <tr><td><code>WELL_NAME</code></td><td>Volve-1</td><td>→</td><td><code>skos:prefLabel</code></td><td>Volve-1</td></tr>
+    <tr><td><code>FIELD_ID</code></td><td>1</td><td>→</td><td><code>oag:inField</code></td><td><code>id:field/1</code></td></tr>
+    <tr><td><code>FACILITY_ID</code></td><td>1</td><td>→</td><td><code>oag:atFacility</code></td><td><code>id:facility/1/Battery</code> <span class="muted">(type from a join)</span></td></tr>
+    <tr><td><code>OPERATOR</code></td><td>Equinor</td><td>→</td><td><code>oag:operatedBy</code></td><td><code>id:organisation/Equinor</code></td></tr>
+    <tr><td><code>FIELD_NAME</code>, <code>X_</code>/<code>Y_COORDINATE</code></td><td>Volve, 2.545, 60.729</td><td></td><td colspan="2"><span class="muted">not mapped</span></td></tr>
+  </table></div>
+  <p class="prose">Well 1 has only what its row says. Nothing says it's an asset, that it's part of the field through
+  its facility, or which OSDU record it is. Reasoning adds those.</p>
 </section>
 
 <section id="reasoning" style="--tc:var(--t-onto)">
   <p class="eyebrow">4b · Reasoning in action</p>
   <h2>Facts the graph derives, that no table states</h2>
+  <p class="prose"><strong>In:</strong> the asserted graph (TBox + ABox + SKOS) · <strong>Concept:</strong> the OWL 2 RL closure · <strong>Out:</strong> inferred facts: assets, part-of, inverses and identity (<code>owl:sameAs</code>).</p>
   <p class="prose">The OWL 2 RL closure grows the graph from 469 asserted triples to 1,739. Each row below counts
   facts that are <strong>absent from the asserted graph and present after reasoning</strong>, for canonical
   entities only (<code>owl:sameAs</code> also copies each fact onto the asset's OSDU-record alias):</p>
@@ -366,6 +392,13 @@ oag:hasPart owl:inverseOf oag:partOf .</pre></div></figure>
   </table></div>
   <p class="prose">The knowledge API asks those derived facts directly, and the vocabulary maps business language
   onto governed metrics:</p>
+  <ul class="prose tight">
+    <li><strong>Knowledge API.</strong> In: the reasoned graph · Concept: SPARQL behind <code>OntologyGraph</code> · Out:
+    answers to entity questions.</li>
+    <li><strong>Vocabulary.</strong> In: <code>knowledge/vocabulary.yaml</code>, turned into SKOS concepts · Concept: SKOS
+    labels and business terms · Out: a phrase resolved to its products and governed metrics, or to a term's
+    definition.</li>
+  </ul>
   <figure class="code"><figcaption><b>oag_semantic.ontology</b> · OntologyGraph<span class="lang">python</span></figcaption><div class="scroll"><pre>onto = load_ontology(<span class="s">"data/frozen"</span>)
 onto.resolve_field(<span class="s">"the volve"</span>)          <span class="o">→ 1</span>                <span class="c"># SKOS synonym, any case</span>
 onto.assets_in_field(1)                <span class="o">→ facility/1, facility/2, well/1 … well/6</span>
