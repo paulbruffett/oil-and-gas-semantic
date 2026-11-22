@@ -292,24 +292,34 @@
 <section id="ontology" style="--tc:var(--t-onto)">
   <p class="eyebrow">4 · The ontology</p>
   <h2>Meaning the platforms don't carry</h2>
-  <p class="prose">One ontology, built from W3C standards that each do a different job, so it isn't tied to one
-  engine:</p>
-  <ul class="prose tight">
-    <li><strong>RDF</strong> is the data model everything is written in: a graph of subject–predicate–object
-    triples. It has several file syntaxes; this repo uses Turtle (<code>.ttl</code>).</li>
-    <li><strong>OWL 2 RL</strong> states the schema a reasoner infers from: classes, the transitive part-of, and keys.</li>
-    <li><strong>SKOS</strong> holds the vocabulary: synonyms, business terms and the product hierarchy.</li>
-    <li><strong>R2RML</strong> maps the canonical tables to instances.</li>
-    <li><strong>SHACL</strong> states the constraints the data must meet.</li>
-  </ul>
-  <p class="prose">It is four files plus a vocabulary.</p>
+  <p class="prose"><strong>One graph, five jobs.</strong> Every file is written in <strong>RDF</strong>, the W3C data
+  model of subject–predicate–object triples (this repo uses its Turtle syntax, <code>.ttl</code>), so all of them combine
+  into one graph. RDF itself does no work. Each of the other standards does one job, and each file holds one job:</p>
   <div class="tbl"><table>
-    <tr><th>file</th><th>what it holds</th></tr>
-    <tr><td><code>oag.ttl</code></td><td>the schema: <code>Well</code>, <code>Facility</code> and <code>Field</code> are subclasses of <code>Asset</code>; <code>partOf</code> is transitive, with <code>inField</code> and <code>atFacility</code> beneath it; inverses (<code>hasPart</code>, <code>operates</code>); <strong>keys</strong>; each class aligned to its OSDU kind</td></tr>
-    <tr><td><code>mapping.r2rml.ttl</code></td><td>how canonical rows become instances, so the graph is built from the tables</td></tr>
-    <tr><td><code>vocabulary.yaml</code> → SKOS</td><td>field synonyms; business terms (metric, comparison, threshold); the product hierarchy</td></tr>
-    <tr><td><code>rules.ttl</code>, <code>shapes.ttl</code></td><td>SHACL rules (business terms) and SHACL constraints (data quality)</td></tr>
+    <tr><th>question</th><th>job</th><th>standard</th><th>file</th></tr>
+    <tr><td>What kinds of things exist, and how do they relate?</td><td>definitions, the <strong>TBox</strong>: <code>Well</code>, <code>Facility</code> and <code>Field</code> are subclasses of <code>Asset</code>; <code>partOf</code> is transitive, with <code>inField</code> and <code>atFacility</code> beneath it; inverses (<code>hasPart</code>, <code>operates</code>); <strong>keys</strong>; each class aligned to its OSDU kind</td><td>OWL 2 RL</td><td><code>oag.ttl</code>, written by hand</td></tr>
+    <tr><td>Which things exist?</td><td>instances, the <strong>ABox</strong>: built from the canonical tables, never typed in</td><td>R2RML</td><td><code>mapping.r2rml.ttl</code> (master data); <code>volumes.r2rml.ttl</code> (daily volumes, <a href="#graphdb">§8</a>)</td></tr>
+    <tr><td>What do people's words mean?</td><td>vocabulary: field synonyms; business terms (metric, comparison, threshold); the product hierarchy</td><td>SKOS</td><td>generated from <code>vocabulary.yaml</code></td></tr>
+    <tr><td>What must be true of the data?</td><td>constraints (<a href="#constraints">§6</a>)</td><td>SHACL shapes</td><td><code>shapes.ttl</code></td></tr>
+    <tr><td>What business facts follow?</td><td>derived flags, such as <em>below expected</em> (<a href="#rules">§5</a>)</td><td>SHACL rules</td><td><code>rules.ttl</code></td></tr>
   </table></div>
+  <p class="prose">Four distinctions do most of the work:</p>
+  <ul class="prose tight">
+    <li><strong>TBox vs ABox: definitions vs data.</strong> Roughly a schema and its rows. The TBox is written by hand;
+    the ABox is generated from the system of record, so the graph can't drift from it.</li>
+    <li><strong>Asserted vs inferred: what was loaded vs what reasoning added.</strong> The mapping says only that well
+    1 is a well at facility 1. With the TBox, the reasoner adds that it is an asset and part of field 1. That gap is
+    what the ontology contributes (<a href="#reasoning">below</a>).</li>
+    <li><strong>OWL infers; SHACL checks.</strong> OWL assumes an open world: a missing fact is unknown, so OWL only adds
+    facts. SHACL treats the data as complete: a missing fact is a violation. "Every well is in exactly one field" is
+    therefore a shape, not an OWL axiom. SHACL <em>rules</em> also derive facts, but a flag holds over a period rather
+    than being a class a well belongs to, so flags are kept out of OWL (ADR 0041).</li>
+    <li><strong>Materialized vs virtual: copied in vs read in place.</strong> The master data is copied into the graph.
+    The daily volumes are not: in GraphDB, <code>volumes.r2rml.ttl</code> serves them live from DuckDB through Ontop
+    (<a href="#graphdb">§8</a>).</li>
+  </ul>
+  <p class="prose">In short: the TBox says what things are, R2RML says which things exist, SKOS says what words mean,
+  the shapes say what must hold, and the rules say what follows.</p>
   <figure class="code"><figcaption><b>knowledge/ontology/oag.ttl</b><span class="lang">turtle</span></figcaption><div class="scroll"><pre>oag:Well a owl:Class ;
     rdfs:subClassOf oag:Asset ;
     oag:osduKind "osdu:wks:master-data--Well:1.5.0" ;
