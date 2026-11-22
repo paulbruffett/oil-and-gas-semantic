@@ -332,6 +332,19 @@ oag:Facility a owl:Class ;
 oag:partOf  a owl:ObjectProperty, owl:TransitiveProperty .
 oag:inField rdfs:subPropertyOf oag:partOf .
 oag:hasPart owl:inverseOf oag:partOf .</pre></div></figure>
+  <p class="prose">The mapping has <strong>one rule per table</strong> (a <em>triples map</em>), not one entry per
+  well. Each rule says which table to read, how to name each row, and which facts to state about it, each from a
+  column or from a template that points at another entity:</p>
+  <figure class="code"><figcaption><b>knowledge/ontology/mapping.r2rml.ttl</b> (abridged)<span class="lang">turtle</span></figcaption><div class="scroll"><pre>&lt;#Well&gt;
+    rr:logicalTable [ rr:tableName "well" ] ;                                     <span class="c"># read every row of WELL</span>
+    rr:subjectMap [ rr:template ".../id/well/{WELL_ID}" ; rr:class oag:Well ] ;   <span class="c"># name and type each row</span>
+    rr:predicateObjectMap [ rr:predicate oag:uwi ;     rr:objectMap [ rr:column "UWI" ] ] ;
+    rr:predicateObjectMap [ rr:predicate oag:inField ; rr:objectMap [ rr:template ".../id/field/{FIELD_ID}" ] ] .</pre></div></figure>
+  <p class="prose">A processor (morph-kgc here, Ontop in GraphDB) applies every rule to every row: 18 well rows
+  become 18 wells, and 500 rows would need no change to the file. The master mapping has six rules: Field,
+  Facility, Well, Organisation (a query for the distinct operators) and the two OSDU record views. The classes and
+  properties a rule names (<code>oag:Well</code>, <code>oag:inField</code>) are defined in the TBox; the mapping only
+  connects a table's columns to them.</p>
   <p class="prose">After mapping, well 1 has only what its row says: type <code>Well</code>, its UWI, a link to
   facility 1 and to field 1, and operator Equinor. Nothing says it's an asset, that it's part of the
   field through its facility, or which OSDU record it is. Reasoning adds those.</p>
