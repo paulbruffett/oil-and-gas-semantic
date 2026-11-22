@@ -179,3 +179,34 @@ def test_classes_carry_osdu_kinds(onto):
         "Organisation": "osdu:wks:master-data--Organisation:1.2.0",
     }
     assert not onto.graph.query("ASK { ?w a <https://w3id.org/osdu#Well> }").askAnswer
+
+
+def _mapped_tables(mapping_path) -> set[str]:
+    """The canonical tables an R2RML mapping reads: by table name, by SQL query, or via an OSDU view."""
+    import re
+
+    from rdflib import Graph, Namespace
+
+    from oag_semantic.ontology import _OSDU_VIEWS
+
+    rr = Namespace("http://www.w3.org/ns/r2rml#")
+    m = Graph().parse(mapping_path)
+    sources = {str(t) for t in m.objects(None, rr.tableName)}
+    for query in m.objects(None, rr.sqlQuery):
+        sources |= set(re.findall(r'\b(?:FROM|JOIN)\s+"?(\w+)', str(query), re.IGNORECASE))
+    osdu_source = {view: table for view, (table, _) in _OSDU_VIEWS.items()}
+    return {osdu_source.get(s, s) for s in sources}
+
+
+def test_the_master_mapping_reads_only_master_tier_tables():
+    """ADR 0041: the master graph holds master data; reporting-entity and fact tables stay in the warehouse."""
+    from oag_generator import schema
+    from oag_semantic.ontology import MAPPING_PATH, VOLUMES_MAPPING_PATH
+
+    tier = {spec.key: spec.tier for spec in schema.TABLES}
+    tables = _mapped_tables(MAPPING_PATH)
+    assert tables, "found no tables in the master mapping"
+    assert {t: tier[t] for t in tables if tier[t] != schema.TIER_MASTER} == {}
+    # The check can fail: the volumes mapping reads a fact table.
+    assert tier["well_vol_daily"] == schema.TIER_FACT
+    assert "well_vol_daily" in _mapped_tables(VOLUMES_MAPPING_PATH)
