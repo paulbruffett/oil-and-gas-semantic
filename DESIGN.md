@@ -100,6 +100,10 @@ for variance and deferment (ADR 0006). _Avoid_: "target", "budget", "type curve"
 
 ### Platform layers
 **Canonical layer**: the OSDU/PDM system-of-record data (Parquet primary; OSDU JSON secondary — ADR 0007).
+**Table tier**: each canonical table's role, declared on its `TableSpec`: **master** (fields, facilities,
+wells: the entities with identity), **reporting** (the PDM's reporting entities and allocation factors),
+**fact** (daily volumes, forecasts, downtime, well tests). Only master-tier tables are mapped into the master
+graph (ADR 0041).
 **Semantic / metrics layer**: governed measures, dimensions, grain, and KPIs over the canonical layer,
 authored in **OSI** (ADR 0008). _Avoid_: "the cube", "BI model".
 **OSI**: Open Semantic Interchange v1.0 — the neutral semantic-layer format. **MetricFlow**: its Apache-2.0

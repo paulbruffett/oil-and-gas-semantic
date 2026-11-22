@@ -19,14 +19,22 @@ Canonical subset (9 tables):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pyarrow as pa
 
 
+# Table tiers. Master: the entities with identity (fields, facilities, wells). Reporting: the PDM's
+# indirection that volumes and events are reported against. Fact: time series and events.
+TIER_MASTER = "master"
+TIER_REPORTING = "reporting"
+TIER_FACT = "fact"
+TIERS = (TIER_MASTER, TIER_REPORTING, TIER_FACT)
+
+
 @dataclass(frozen=True)
 class TableSpec:
-    """One canonical table: its OSDU PDM name, output filename, and typed columns."""
+    """One canonical table: its OSDU PDM name, output filename, typed columns and tier."""
 
     osdu_table: str  # canonical OSDU PDM table name (verbatim)
     key: str         # short key / parquet filename stem
@@ -36,6 +44,13 @@ class TableSpec:
     # composite (FACILITY) so the secondary OSDU export keys record ids off a stated contract rather
     # than the positional accident that the first column is unique (issue #15, ADR 0031).
     pk: tuple[str, ...] = ()
+    # Which tier the table is in (TIERS). Only master-tier tables become ontology instances in the
+    # master graph; reporting-entity and fact tables stay in the warehouse (ADR 0041).
+    tier: str = field(kw_only=True)
+
+    def __post_init__(self) -> None:
+        if self.tier not in TIERS:
+            raise ValueError(f"{self.osdu_table}: tier {self.tier!r} is not one of {TIERS}")
 
     @property
     def column_names(self) -> tuple[str, ...]:
@@ -57,7 +72,7 @@ FIELD = TableSpec("FIELD", "field", (
     ("FIELD_ID", pa.int64()),
     ("FIELD_NAME", pa.string()),
     ("FIELD_TYPE_NAME", pa.string()),
-))
+), tier=TIER_MASTER)
 
 WELL = TableSpec("WELL", "well", (
     ("WELL_ID", pa.int64()),
@@ -71,14 +86,14 @@ WELL = TableSpec("WELL", "well", (
     # FK into FACILITY (the well's battery); the Well -> Facility -> Field hierarchy for asset
     # rollups (#8). Appended last so the earlier columns keep their order.
     ("FACILITY_ID", pa.int64()),
-))
+), tier=TIER_MASTER)
 
 REPORTING_ENTITY = TableSpec("REPORTING_ENTITY", "reporting_entity", (
     ("REPORTING_ENTITY_ID", pa.int64()),
     ("REPORTING_ENTITY_KIND", pa.string()),
     ("ASSOCIATED_OBJECT_ID", pa.int64()),
     ("ASSOCIATED_OBJECT_NAME", pa.string()),
-))
+), tier=TIER_REPORTING)
 
 WELL_VOL_DAILY = TableSpec("WELL_VOL_DAILY", "well_vol_daily", (
     ("WELL_VOLUME_DAILY_ID", pa.int64()),
@@ -90,7 +105,7 @@ WELL_VOL_DAILY = TableSpec("WELL_VOL_DAILY", "well_vol_daily", (
     ("GAS_VOLUME", pa.float64()),
     ("WATER_VOLUME", pa.float64()),
     ("VOLUME_METHOD", pa.string()),
-))
+), tier=TIER_FACT)
 
 PRODUCT_VOLUME_SUMMARY = TableSpec("PRODUCT_VOLUME_SUMMARY", "product_volume_summary", (
     ("PRODUCT_VOLUME_SUMMARY_ID", pa.int64()),
@@ -104,7 +119,7 @@ PRODUCT_VOLUME_SUMMARY = TableSpec("PRODUCT_VOLUME_SUMMARY", "product_volume_sum
     ("QUANTITY_METHOD", pa.string()),
     ("VOLUME", pa.float64()),
     ("VOLUME_UOM", pa.string()),
-))
+), tier=TIER_FACT)
 
 DOWN_TIME_EVENT = TableSpec("DOWN_TIME_EVENT", "down_time_event", (
     ("DOWN_TIME_EVENT_ID", pa.int64()),
@@ -113,7 +128,7 @@ DOWN_TIME_EVENT = TableSpec("DOWN_TIME_EVENT", "down_time_event", (
     ("START_DATE", pa.string()),
     ("END_DATE", pa.string()),
     ("DURATION_HOURS", pa.float64()),
-))
+), tier=TIER_FACT)
 
 # Periodic well tests (well-test/allocation use case, #6). Keyed to the WELL directly (as PPDM
 # WELL_TEST is), carrying test rates with a per-value OUOM column each (ADR 0019).
@@ -130,7 +145,7 @@ WELL_TEST = TableSpec("WELL_TEST", "well_test", (
     ("GAS_RATE_OUOM", pa.string()),
     ("WATER_RATE", pa.float64()),
     ("WATER_RATE_OUOM", pa.string()),
-))
+), tier=TIER_FACT)
 
 # Facility / asset hierarchy (asset-rollups use case, #8). OSDU PDM FACILITY, whose primary key is
 # the pair (FACILITY_ID, FACILITY_TYPE) -- a battery is a FACILITY_TYPE *value*, not its own table
@@ -145,7 +160,7 @@ FACILITY = TableSpec("FACILITY", "facility", (
     ("LATITUDE_OUOM", pa.string()),
     ("LONGITUDE", pa.float64()),
     ("LONGITUDE_OUOM", pa.string()),
-), pk=("FACILITY_ID", "FACILITY_TYPE"))  # true PDM composite key (a battery is a FACILITY_TYPE value)
+), pk=("FACILITY_ID", "FACILITY_TYPE"), tier=TIER_MASTER)  # true PDM composite key (a battery is a FACILITY_TYPE value)
 
 # Production allocation factors (allocation use case, #6). A from-entity -> to-entity factor
 # (both REPORTING_ENTITY), NOT a stored allocated-volume table (ADR 0019). The factor value
@@ -159,7 +174,7 @@ RPEN_ALLOCATION_FACTOR = TableSpec("RPEN_ALLOCATION_FACTOR", "rpen_allocation_fa
     ("PRODUCT", pa.string()),
     ("ALLOCATION_FACTOR", pa.float64()),
     ("ALLOCATION_FACTOR_OUOM", pa.string()),
-))
+), tier=TIER_REPORTING)
 
 # Emission order.
 TABLES: tuple[TableSpec, ...] = (
