@@ -230,8 +230,13 @@
   <figure class="diagram"><img src="diagrams/canonical-data-model.svg" alt="Entity-relationship diagram of the nine canonical tables. FIELD, FACILITY and WELL are master data; a well belongs to a field and flows to a facility. REPORTING_ENTITY points at a well or a field, and RPEN_ALLOCATION_FACTOR runs from a field's reporting entity to its wells'. WELL_VOL_DAILY and WELL_TEST hang off WELL; PRODUCT_VOLUME_SUMMARY and DOWN_TIME_EVENT hang off REPORTING_ENTITY." width="1380" height="772">
   <figcaption>Source: <code>docs/diagrams/canonical-data-model.drawio</code>. PK primary key, FK foreign key, AK alternate key; the crow's foot is the many end.</figcaption></figure>
   <ul class="tight prose">
-    <li><strong>Master data</strong>: fields, facilities and wells. A well belongs to a field and flows to a facility
-    (a battery). A facility is keyed by the pair <code>(FACILITY_ID, FACILITY_TYPE)</code>, as in the PDM; a well's
+    <li><strong>Master data</strong>: fields, facilities and wells. A well belongs to a field and flows to a facility.
+    Every facility here is a <strong>tank battery</strong>: the surface site where a group of wells' production is
+    separated into oil, gas and water, measured and stored before sale. Each field has two (<em>Volve Battery 1</em>,
+    <em>Volve Battery 2</em>, …; <code>FACILITY_TYPE = 'Battery'</code>). The PDM has many other facility types, such as
+    compressor stations, gas plants, pipelines and platforms, which is why a facility is keyed by the pair
+    <code>(FACILITY_ID, FACILITY_TYPE)</code>. The generator makes only batteries because the roll-up question needs
+    no more. A well's
     <code>UWI</code> is an alternate key. These rows, and only these, are what the ontology is built from, and
     their keys are its identity: two records with the same UWI are the same well. Nothing in them says a
     well is an asset or part of its field; <a href="#reasoning">the reasoning</a> adds that.</li>
