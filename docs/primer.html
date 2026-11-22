@@ -292,8 +292,17 @@
 <section id="ontology" style="--tc:var(--t-onto)">
   <p class="eyebrow">4 · The ontology</p>
   <h2>Meaning the platforms don't carry</h2>
-  <p class="prose">The knowledge layer uses W3C standards, so it isn't tied to one engine: RDF, OWL 2 RL, SKOS,
-  R2RML and SHACL. It is four files plus a vocabulary.</p>
+  <p class="prose">One ontology, built from W3C standards that each do a different job, so it isn't tied to one
+  engine:</p>
+  <ul class="prose tight">
+    <li><strong>RDF</strong> is the data model everything is written in: a graph of subject–predicate–object
+    triples. It has several file syntaxes; this repo uses Turtle (<code>.ttl</code>).</li>
+    <li><strong>OWL 2 RL</strong> states the schema a reasoner infers from: classes, the transitive part-of, and keys.</li>
+    <li><strong>SKOS</strong> holds the vocabulary: synonyms, business terms and the product hierarchy.</li>
+    <li><strong>R2RML</strong> maps the canonical tables to instances.</li>
+    <li><strong>SHACL</strong> states the constraints the data must meet.</li>
+  </ul>
+  <p class="prose">It is four files plus a vocabulary.</p>
   <div class="tbl"><table>
     <tr><th>file</th><th>what it holds</th></tr>
     <tr><td><code>oag.ttl</code></td><td>the schema: <code>Well</code>, <code>Facility</code> and <code>Field</code> are subclasses of <code>Asset</code>; <code>partOf</code> is transitive, with <code>inField</code> and <code>atFacility</code> beneath it; inverses (<code>hasPart</code>, <code>operates</code>); <strong>keys</strong>; each class aligned to its OSDU kind</td></tr>
