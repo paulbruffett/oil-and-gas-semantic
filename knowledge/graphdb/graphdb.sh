@@ -12,6 +12,11 @@
 # Version: GraphDB 11 needs a Free licence, requested from Graphwise by email (the built-in Free
 # licence was removed in 11.0). Without one this runs 10.8.14, the last licence-free release. Put the
 # licence at knowledge/graphdb/graphdb.license (gitignored) and `up` runs 11.5.2 with it.
+#
+# Memory: a long-running server's free heap shrinks (after ~2 days of test runs, 2.9 of the 3 GB heap
+# was in use), and GraphDB then refuses GROUP BY / DISTINCT queries with HTTP 500
+# `NotEnoughMemoryForDistinctGroupBy` (it needs 250 MB free). Tests fail at random when this happens.
+# Fix: `docker restart oag-graphdb` (repositories are kept). Raising -Xmx is limited by Docker's memory.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
